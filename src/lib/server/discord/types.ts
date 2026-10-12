@@ -1,0 +1,47 @@
+export interface RoleInfo {
+  id: string;
+  name: string;
+  permissions: bigint;
+  /** RGB integer; 0 means the role has no color. */
+  color: number;
+  position: number;
+  /** Managed by an integration (bot roles, booster role). */
+  managed: boolean;
+}
+
+export interface UserInfo {
+  id: string;
+  username: string;
+  globalName: string | null;
+  /** Discord CDN URL; null for the default avatar. */
+  avatarUrl: string | null;
+}
+
+export interface GuildInfo {
+  id: string;
+  name: string;
+  ownerId: string;
+  roles: RoleInfo[];
+}
+
+export interface MemberInfo {
+  userId: string;
+  roles: string[];
+  nick: string | null;
+  username: string;
+  globalName: string | null;
+  /** Discord CDN URL (server avatar first); null for the default avatar. */
+  avatarUrl: string | null;
+}
+
+export const OverwriteType = {
+  Role: 0,
+  Member: 1,
+} as const;
+
+export interface PermissionOverwrite {
+  id: string;
+  type: (typeof OverwriteType)[keyof typeof OverwriteType];
+  allow: bigint;
+  deny: bigint;
+}
