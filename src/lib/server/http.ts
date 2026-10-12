@@ -23,6 +23,8 @@ const notFound = () => Response.json({ error: "not_found" }, { status: 404 });
  * Applied to every response, UI included: no framing, no referrer leaving this origin
  * (same-origin requests keep a real Origin header, which "no-referrer" would turn into
  * `Origin: null` and break CSRF checks), and no caching unless the handler chose a policy.
+ * Pages carry SvelteKit's full policy (`kit.csp` in svelte.config.js, which includes
+ * frame-ancestors); every other response gets the frame-ancestors policy here.
  */
 export function withSecurityHeaders(response: Response): Response {
   let target = response;

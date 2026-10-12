@@ -221,6 +221,40 @@ describe("discord_search_messages results", () => {
     expect(text).toContain(`https://discord.com/channels/${GUILD_ID}/${PUBLIC}/700000000000000001`);
   });
 
+  test("a guild-wide search derives neither totals nor the More hint from Discord's total", async () => {
+    const visible = [message("700000000000000001", PUBLIC, "first hello"), message("700000000000000002", PUBLIC, "second hello")];
+    const hidden = message("700000000000000003", PRIVATE_THREAD, "private hello");
+    const privateThread = api.threads[1]!;
+    const run = async (response: MessageSearchResponse, limit: number) => {
+      api.searchResponses.push(response);
+      return search({ query: "hello", limit }, [ROLE_STAFF]);
+    };
+
+    // A page that is not full: no More hint, whatever Discord counted.
+    const partial = await run(results(visible, [], 2), 3);
+    expect(partial).toContain("Search results — 2 shown (offset 0)\n");
+    expect(partial).not.toContain("More:");
+    expect(await run(results([...visible, hidden], [privateThread], 3), 3)).toBe(partial);
+    expect(await run(results(visible, [], 3), 3)).toBe(partial);
+    expect(await run(results(visible, [], 500), 3)).toBe(partial);
+
+    // A full page of readable results suggests the next one, with or without hidden hits elsewhere.
+    const full = await run(results(visible, [], 2), 2);
+    expect(full).toContain("Search results — 2 shown (offset 0)\nMore: offset=2");
+    expect(await run(results(visible, [], 3), 2)).toBe(full);
+    expect(full).not.toContain("private hello");
+  });
+
+  test("a page with dropped results shows no total and judges More by the readable page only", async () => {
+    api.searchResponses.push(
+      results([message("700000000000000001", PUBLIC, "visible hello"), message("700000000000000002", STAFF, "secret hello")], [], 40),
+    );
+    const text = await search({ query: "hello", limit: 2 });
+    expect(text).toContain("Search results — 1 shown (offset 0)\n");
+    expect(text).not.toContain("total");
+    expect(text).not.toContain("More:");
+  });
+
   test("waits while the index is being built, then returns results", async () => {
     api.searchResponses.push({ status: "indexing", retryAfterSeconds: 2 }, results([message("700000000000000001", PUBLIC, "hello")]));
     const text = await search({ query: "hello" });

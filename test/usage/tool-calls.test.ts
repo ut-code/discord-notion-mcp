@@ -6,7 +6,7 @@ import { ToolError } from "../../src/lib/server/lib/errors";
 import type { ErrorEntry, EventEntry, ToolCallLogEntry } from "../../src/lib/server/lib/log";
 import { TokenBucketLimiter } from "../../src/lib/server/lib/rate-limit";
 import { defineTool, type Principal } from "../../src/lib/server/mcp/registry";
-import { runTool, type McpServerDeps } from "../../src/lib/server/mcp/server";
+import { runTool, TOOL_CRASH_ERROR, TOOL_RESULT_ERROR, type McpServerDeps } from "../../src/lib/server/mcp/server";
 import type { Permission } from "../../src/lib/server/permissions/permissions";
 import { startToolCallRetention, TOOL_CALL_RETENTION_MS, ToolCallStore } from "../../src/lib/server/usage/tool-calls";
 import { FakeClock, makeGuild, makeMember } from "../support/fakes";
@@ -30,10 +30,11 @@ const echo = defineTool({
   title: "Echo",
   description: "Echoes or fails on request",
   permission: "discord:read",
-  inputSchema: z.object({ mode: z.enum(["ok", "tool-error", "crash"]) }),
+  inputSchema: z.object({ mode: z.enum(["ok", "tool-error", "error-result", "crash"]) }),
   handler: async ({ mode }) => {
     if (mode === "tool-error") throw new ToolError("Channel not found or not accessible.");
-    if (mode === "crash") throw new Error("x".repeat(800));
+    if (mode === "error-result") return { content: [{ type: "text" as const, text: "quoted page content" }], isError: true };
+    if (mode === "crash") throw new Error("database path /secret/app.db is locked");
     return "done";
   },
 });
@@ -53,27 +54,34 @@ function serverDeps(store: ToolCallStore, extra: Partial<McpServerDeps> = {}) {
 }
 
 describe("tool call recording", () => {
-  test("successes, failures and crashes are stored without arguments; errors are truncated", async () => {
+  test("successes, failures and crashes are stored without arguments or tool output", async () => {
     const { store, rows } = newStore();
-    const { deps, logs } = serverDeps(store);
-    for (const mode of ["ok", "tool-error", "crash"] as const) await runTool(echo, { mode }, principal, deps);
+    const { deps, logs, errors } = serverDeps(store);
+    for (const mode of ["ok", "tool-error", "error-result", "crash"] as const) await runTool(echo, { mode }, principal, deps);
 
-    expect(rows().map((row) => [row.discordUserId, row.tool, row.ok, row.errorKind])).toEqual([
-      [USER, "test_echo", true, null],
-      [USER, "test_echo", false, "error"],
-      [USER, "test_echo", false, "error"],
+    expect(rows().map((row) => [row.discordUserId, row.tool, row.ok, row.errorKind, row.error])).toEqual([
+      [USER, "test_echo", true, null, null],
+      [USER, "test_echo", false, "error", "Channel not found or not accessible."],
+      [USER, "test_echo", false, "error", TOOL_RESULT_ERROR],
+      [USER, "test_echo", false, "error", TOOL_CRASH_ERROR],
     ]);
-    expect(rows()[0]!.error).toBeNull();
-    expect(rows()[1]!.error).toBe("Channel not found or not accessible.");
-    expect(rows()[2]!.error).toHaveLength(500);
     expect(rows().every((row) => row.durationMs >= 0 && row.createdAt instanceof Date)).toBe(true);
     expect(Object.keys(rows()[0]!).sort()).toEqual(["createdAt", "discordUserId", "durationMs", "error", "errorKind", "id", "ok", "tool"]);
-    // The stdout JSON line is kept.
-    expect(logs.map((entry) => [entry.event, entry.ok, entry.errorKind])).toEqual([
-      ["tool_call", true, undefined],
-      ["tool_call", false, "error"],
-      ["tool_call", false, "error"],
+    // The stdout JSON line carries the same fixed strings; crash details go to the error log only.
+    expect(logs.map((entry) => [entry.event, entry.ok, entry.errorKind, entry.error])).toEqual([
+      ["tool_call", true, undefined, undefined],
+      ["tool_call", false, "error", "Channel not found or not accessible."],
+      ["tool_call", false, "error", TOOL_RESULT_ERROR],
+      ["tool_call", false, "error", TOOL_CRASH_ERROR],
     ]);
+    expect(errors).toEqual([{ event: "tool_crash", tool: "test_echo", error: "database path /secret/app.db is locked" }]);
+    expect(JSON.stringify([rows(), logs])).not.toContain("quoted page content");
+  });
+
+  test("long error messages are truncated", () => {
+    const { store, rows } = newStore();
+    store.record({ discordUserId: USER, tool: "test_echo", ok: false, durationMs: 1, error: "x".repeat(800) });
+    expect(rows()[0]!.error).toHaveLength(500);
   });
 
   test("rate-limited calls are recorded as rate_limited and never reach the tool", async () => {

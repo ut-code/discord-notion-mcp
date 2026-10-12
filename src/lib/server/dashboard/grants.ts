@@ -6,7 +6,7 @@ import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
-import type { AdminDeps } from "./deps";
+import type { DashboardDeps } from "./deps";
 import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle } from "./format";
 import { formString, type ActionResult } from "./shared";
 import { grantableRoles, heldRoles, subjectFromMember, type UserSubject } from "./subjects";
@@ -168,7 +168,7 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
 }
 
 /** Member search for the grant form: a Discord id resolves directly, anything else is a name prefix. */
-async function searchCandidates(deps: AdminDeps, query: string): Promise<{ candidates: UserSubject[]; error: string | null }> {
+async function searchCandidates(deps: DashboardDeps, query: string): Promise<{ candidates: UserSubject[]; error: string | null }> {
   const needle = query.replace(/^@/, "");
   if (isSnowflake(needle)) {
     const subject = await deps.subjects.resolveUser(needle);
@@ -184,7 +184,7 @@ async function searchCandidates(deps: AdminDeps, query: string): Promise<{ candi
 }
 
 /** Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId` (admins only). */
-export async function grantsPage(deps: AdminDeps, params: URLSearchParams, viewer: Viewer): Promise<GrantsPageData> {
+export async function grantsPage(deps: DashboardDeps, params: URLSearchParams, viewer: Viewer): Promise<GrantsPageData> {
   const [guild, grants] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants()]);
   const filterParam = params.get("filter") ?? "";
   const filter = isPermission(filterParam) ? filterParam : null;
@@ -267,7 +267,7 @@ type GrantForm = { permission: Permission; subjectType: SubjectType; subjectId: 
 type ParsedGrantForm = { ok: true; form: GrantForm } | { ok: false; message: string };
 
 /** `subjectId` is sent by delete buttons; the grant form sends `roleId` or `userId` per `subjectType`. */
-async function parseGrantForm(deps: AdminDeps, body: FormData): Promise<ParsedGrantForm> {
+async function parseGrantForm(deps: DashboardDeps, body: FormData): Promise<ParsedGrantForm> {
   const permission = formString(body, "permission");
   const subjectType = formString(body, "subjectType");
   if (!isPermission(permission)) return { ok: false, message: "不明な権限です。" };
@@ -284,7 +284,7 @@ async function parseGrantForm(deps: AdminDeps, body: FormData): Promise<ParsedGr
   return { ok: true, form: { permission, subjectType, subjectId, role, label: role ? `ロール「${role.name}」` : `ロール ${subjectId}` } };
 }
 
-export async function createGrant(deps: AdminDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
+export async function createGrant(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
   if (!actor.isAdmin) return ADMIN_ONLY;
   const parsed = await parseGrantForm(deps, body);
   if (!parsed.ok) return { kind: "error", message: parsed.message };
@@ -299,7 +299,7 @@ export async function createGrant(deps: AdminDeps, body: FormData, actor: Viewer
   return { kind: "ok", message: `${form.label}に「${PERMISSION_LABELS[form.permission]}」を付与しました。` };
 }
 
-export async function deleteGrant(deps: AdminDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
+export async function deleteGrant(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
   if (!actor.isAdmin) return ADMIN_ONLY;
   const parsed = await parseGrantForm(deps, body);
   if (!parsed.ok) return { kind: "error", message: parsed.message };

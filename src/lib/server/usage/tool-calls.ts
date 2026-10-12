@@ -3,6 +3,7 @@ import type { AppDatabase } from "../db/client";
 import { toolCall, type ToolCallErrorKind } from "../db/schema";
 import { errorMessage } from "../lib/errors";
 import type { ErrorSink, EventSink } from "../lib/log";
+import { runPeriodically } from "../lib/periodic";
 
 const ERROR_MAX_LENGTH = 500;
 export const TOOL_CALL_RETENTION_MS = 90 * 24 * 60 * 60_000;
@@ -54,16 +55,12 @@ export interface RetentionOptions {
 
 /** Deletes tool calls older than 90 days now and then every 24 hours; returns a stop function. */
 export function startToolCallRetention({ store, now = Date.now, intervalMs = RETENTION_INTERVAL_MS, log, logError }: RetentionOptions): () => void {
-  const prune = () => {
+  return runPeriodically(() => {
     try {
       const deleted = store.deleteBefore(new Date(now() - TOOL_CALL_RETENTION_MS));
       if (deleted > 0) log({ event: "tool_calls_pruned", deleted });
     } catch (error) {
       logError({ event: "tool_call_prune_failed", error: errorMessage(error) });
     }
-  };
-  prune();
-  const timer = setInterval(prune, intervalMs);
-  timer.unref?.();
-  return () => clearInterval(timer);
+  }, intervalMs);
 }

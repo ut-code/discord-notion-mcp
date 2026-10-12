@@ -1,11 +1,11 @@
-import type { AdminDeps } from "./admin/deps";
-import { UsageStats } from "./admin/stats";
-import { SubjectResolver } from "./admin/subjects";
 import { createAuth, type Auth } from "./auth/auth";
+import { startClientCleanup } from "./auth/client-cleanup";
 import { DiscordIdentityStore } from "./auth/identity";
 import { TokenRevocationService } from "./auth/revocation";
 import { LoginUserStore } from "./auth/users";
 import type { Config } from "./config";
+import type { DashboardDeps } from "./dashboard/deps";
+import { SubjectResolver } from "./dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "./db/client";
 import { ChannelAccess, ChannelDirectory } from "./discord/access";
 import { RestDiscordApi, type DiscordApi } from "./discord/api";
@@ -24,6 +24,7 @@ import { createNotionChangeTools, createNotionTools } from "./notion/tools";
 import { GrantStore } from "./permissions/grants";
 import { PermissionResolver } from "./permissions/resolver";
 import { startToolCallRetention, ToolCallStore } from "./usage/tool-calls";
+import { UsageStats } from "./usage/usage-stats";
 
 export interface ComposeOptions {
   discordApi?: DiscordApi;
@@ -45,7 +46,7 @@ export interface ComposedServer {
   /** Non-UI routes: /mcp, /api/auth/*, /.well-known/*, /healthz. */
   http: HttpHandler;
   /** Data and actions of the browser pages. */
-  admin: AdminDeps;
+  dashboard: DashboardDeps;
   auth: Auth;
   database: DatabaseHandle;
   grants: GrantStore;
@@ -105,7 +106,8 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   const revocation = new TokenRevocationService(database.db);
   const toolCalls = new ToolCallStore(database.db);
   startToolCallRetention({ store: toolCalls, log: reportEvent, logError: reportError });
-  const admin: AdminDeps = {
+  startClientCleanup({ db: database.db, log: reportEvent, logError: reportError });
+  const dashboard: DashboardDeps = {
     auth,
     mcpUrl: config.mcpResource,
     identity,
@@ -144,7 +146,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
 
   return {
     http,
-    admin,
+    dashboard,
     auth,
     database,
     grants,

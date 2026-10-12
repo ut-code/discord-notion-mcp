@@ -6,11 +6,11 @@ import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
 import { PERMISSIONS, type Permission } from "../permissions/permissions";
 import type { EffectiveAccess } from "../permissions/resolver";
-import { safeNextPath } from "../web/next-path";
-import { extractSignedOAuthQuery } from "../web/oauth-query";
-import type { AdminDeps } from "./deps";
+import type { DashboardDeps } from "./deps";
+import { safeNextPath } from "./next-path";
+import { extractSignedOAuthQuery, signedOAuthParam } from "./oauth-query";
 
-export const PRODUCT_NAME = "Discord × Notion MCP";
+const PRODUCT_NAME = "Discord × Notion MCP";
 const RESTART = "MCP クライアントで接続し直してください。";
 
 async function orNull<T>(load: () => Promise<T>): Promise<T | null> {
@@ -40,9 +40,9 @@ export interface SignInPageData {
   clientName: string | null;
 }
 
-export async function signInPage(deps: AdminDeps, url: URL): Promise<SignInPageData> {
+export async function signInPage(deps: DashboardDeps, url: URL): Promise<SignInPageData> {
   const oauthQuery = extractSignedOAuthQuery(url.search) ?? null;
-  const clientId = oauthQuery ? new URLSearchParams(oauthQuery).get("client_id") : null;
+  const clientId = oauthQuery ? signedOAuthParam(oauthQuery, "client_id") : null;
   const [guildName, clientName] = await Promise.all([
     orNull(async () => (await deps.directory.fetchGuild()).name),
     oauthQuery && clientId ? clientLabel(clientId, () => clientNameBeforeSignIn(deps.auth, clientId, oauthQuery)) : Promise.resolve(null),
@@ -87,8 +87,8 @@ const FEATURES: Record<Permission, Omit<ConsentFeature, "permission">> = {
   admin: { title: "管理画面", description: "権限とユーザーの管理" },
 };
 
-/** Permissions shown on the consent page; admins get everything including the admin UI. */
-export function consentPermissions(access: EffectiveAccess): Permission[] {
+/** Permissions shown on the consent page; admins get everything including the dashboard's admin actions. */
+function consentPermissions(access: EffectiveAccess): Permission[] {
   if (access.isAdmin) return [...PERMISSIONS];
   return PERMISSIONS.filter((permission) => permission !== "admin" && access.permissions.has(permission));
 }
@@ -97,6 +97,8 @@ export interface ConsentPageData {
   endpoint: string;
   oauthQuery: string;
   clientName: string;
+  /** Where the client receives the authorization code; null when the request names none. */
+  redirectOrigin: string | null;
   account: { name: string; username: string; avatarUrl: string | null };
   guildName: string;
   /** Effective permissions in display order; empty when nothing is granted. */
@@ -109,9 +111,20 @@ export type ConsentResult =
   | { kind: "ok"; data: ConsentPageData }
   | { kind: "error"; status: 400 | 401 | 403; title: string; message: string };
 
-export async function consentPage(deps: AdminDeps, url: URL, headers: Headers): Promise<ConsentResult> {
+/**
+ * Origin of a redirect URI, so the consent page can tell a CLI's loopback callback from a
+ * website; custom schemes (opaque origins) show their scheme and host.
+ */
+function redirectOrigin(redirectUri: string | null): string | null {
+  const url = redirectUri ? URL.parse(redirectUri) : null;
+  if (!url) return null;
+  if (url.origin !== "null") return url.origin;
+  return url.host ? `${url.protocol}//${url.host}` : url.protocol;
+}
+
+export async function consentPage(deps: DashboardDeps, url: URL, headers: Headers): Promise<ConsentResult> {
   const oauthQuery = extractSignedOAuthQuery(url.search);
-  const clientId = url.searchParams.get("client_id");
+  const clientId = oauthQuery ? signedOAuthParam(oauthQuery, "client_id") : null;
   if (!oauthQuery || !clientId) {
     return { kind: "error", status: 400, title: "無効なリクエスト", message: "このページは MCP クライアントの認可フローから開いてください。" };
   }
@@ -130,6 +143,7 @@ export async function consentPage(deps: AdminDeps, url: URL, headers: Headers): 
       endpoint: `${AUTH_BASE_PATH}/oauth2/consent`,
       oauthQuery,
       clientName: await clientLabel(clientId, () => clientNameForSession(deps.auth, clientId, headers)),
+      redirectOrigin: redirectOrigin(signedOAuthParam(oauthQuery, "redirect_uri")),
       account: { name: displayName(access.member), username: access.member.username, avatarUrl: access.member.avatarUrl },
       guildName: access.guild.name,
       features: consentPermissions(access).map((permission) => ({ permission, ...FEATURES[permission] })),
@@ -142,7 +156,7 @@ export async function consentPage(deps: AdminDeps, url: URL, headers: Headers): 
  * Ends the browser session. `next` may only return to the sign-in page (the consent
  * page uses it to resume the OAuth flow); anything else goes to the dashboard sign-in.
  */
-export async function signOut(deps: AdminDeps, headers: Headers, next: string): Promise<{ cookies: ResponseCookie[]; location: string }> {
+export async function signOut(deps: DashboardDeps, headers: Headers, next: string): Promise<{ cookies: ResponseCookie[]; location: string }> {
   let cookies: ResponseCookie[] = [];
   try {
     const response = await deps.auth.api.signOut({ headers, asResponse: true });

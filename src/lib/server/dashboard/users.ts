@@ -5,16 +5,21 @@ import { createLimiter } from "../lib/limiter";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import { auditListHref } from "./audit";
 import type { BadgeView } from "./badges";
-import type { AdminDeps } from "./deps";
+import type { DashboardDeps } from "./deps";
 import { formatJst, formatShortJst, PERMISSION_LABELS } from "./format";
 import { GRANTS_PATH } from "./grants";
 import { pageParam, type ActionResult } from "./shared";
 import { buildUserRow, matchesUserQuery, type UserRowView } from "./views";
 
-export const USERS_PAGE_SIZE = 50;
+const USERS_PAGE_SIZE = 50;
 const USERS_PATH = `${DASHBOARD_PATH}/users`;
-/** Searching users filters resolved rows in memory; logins beyond this are not searched. */
-const USER_SEARCH_SCAN_LIMIT = 1000;
+/**
+ * A search matches resolved names (Discord display name, @username), so it loads and
+ * resolves the newest logins up to this many and filters them in memory. Older logins
+ * are never matched, and the reported total counts only the scanned ones. Each scanned
+ * login costs a cached member lookup.
+ */
+export const USER_SEARCH_SCAN_LIMIT = 1000;
 const VISIBLE_ROLES = 2;
 
 export interface UserTableRow {
@@ -82,7 +87,7 @@ function wasRevokedSinceLogin(user: LoginUser): boolean {
   return user.revokedAt !== null && (user.lastLoginAt === null || user.revokedAt >= user.lastLoginAt);
 }
 
-export function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">): UserTableRow {
+function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">): UserTableRow {
   const discordUserId = row.user.discordUserId;
   return {
     userId: row.user.userId,
@@ -99,7 +104,11 @@ export function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | 
   };
 }
 
-export async function usersPage(deps: AdminDeps, params: URLSearchParams, viewer: Viewer): Promise<UsersPageData> {
+export async function usersPage(
+  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver">,
+  params: URLSearchParams,
+  viewer: Viewer,
+): Promise<UsersPageData> {
   const query = params.get("q")?.trim() ?? "";
   const page = pageParam(params.get("page"));
   const offset = (page - 1) * USERS_PAGE_SIZE;
@@ -139,7 +148,7 @@ export async function usersPage(deps: AdminDeps, params: URLSearchParams, viewer
   };
 }
 
-export async function revokeTokens(deps: AdminDeps, userId: string, actor: Viewer): Promise<ActionResult> {
+export async function revokeTokens(deps: DashboardDeps, userId: string, actor: Viewer): Promise<ActionResult> {
   if (!actor.isAdmin) return ADMIN_ONLY;
   const user = userId ? await deps.users.find(userId) : null;
   if (!user) return { kind: "error", message: "ユーザーが見つかりません。" };

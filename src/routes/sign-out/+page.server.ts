@@ -1,7 +1,7 @@
 import { redirect } from "@sveltejs/kit";
 import { SIGN_IN_PATH } from "$lib/paths";
-import { signOut } from "$lib/server/admin/session";
-import { formString } from "$lib/server/admin/shared";
+import { signOut } from "$lib/server/dashboard/session";
+import { formString } from "$lib/server/dashboard/shared";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = () => {

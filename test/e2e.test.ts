@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { consentPage } from "../src/lib/server/admin/session";
+import { consentPage } from "../src/lib/server/dashboard/session";
 import { toolCall } from "../src/lib/server/db/schema";
 import { NO_PERMISSIONS_INSTRUCTIONS } from "../src/lib/server/mcp/server";
-import { extractSignedOAuthQuery } from "../src/lib/server/web/oauth-query";
+import { extractSignedOAuthQuery } from "../src/lib/server/dashboard/oauth-query";
 import { GUILD_ID, makeGuild, makeMember, message, textChannel } from "./support/fakes";
 import {
   authorize,
@@ -67,7 +67,7 @@ describe("OAuth + MCP end to end", () => {
     const consentUrl = new URL(first.headers.get("location")!, base);
     expect(consentUrl.pathname).toBe("/consent");
 
-    const page = await consentPage(h.composed.admin, consentUrl, new Headers({ cookie }));
+    const page = await consentPage(h.composed.dashboard,consentUrl, new Headers({ cookie }));
     if (page.kind !== "ok") throw new Error(`consent page: ${page.kind}`);
     expect(page.data.clientName).toBe("E2E CLI");
     expect(page.data.account.name).toBe("Ali");

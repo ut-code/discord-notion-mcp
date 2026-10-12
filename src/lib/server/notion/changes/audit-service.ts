@@ -25,7 +25,7 @@ export interface RevertOptions {
   actorDiscordUserId: string;
   actorDisplayName: string;
   actorUsername?: string | null;
-  /** Revert even when the page changed after the original write (admin UI only). */
+  /** Revert even when the page changed after the original write (dashboard only). */
   force?: boolean;
 }
 
@@ -117,7 +117,7 @@ async function checkContent(api: NotionApi, row: NotionAuditRow, snapshot: Conte
   };
 }
 
-/** Audit log queries and revert, used by the admin UI and the change tools. */
+/** Audit log queries and revert, used by the dashboard and the change tools. */
 export class NotionAuditService {
   private readonly inFlight = new Set<number>();
 

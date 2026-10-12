@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
-  import type { BadgeView } from "$lib/server/admin/badges";
+  import type { BadgeView } from "$lib/server/dashboard/badges";
   import { cn } from "$lib/utils";
 
   let { badge, children }: { badge: BadgeView; children?: Snippet } = $props();

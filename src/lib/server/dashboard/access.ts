@@ -2,7 +2,7 @@ import { DASHBOARD_PATH, SIGN_IN_PATH } from "../../paths";
 import type { EffectiveAccess } from "../permissions/resolver";
 import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
-import type { AdminDeps } from "./deps";
+import type { DashboardDeps } from "./deps";
 import { NOT_MEMBER } from "./session";
 import type { ActionResult } from "./shared";
 
@@ -26,7 +26,7 @@ export type ViewerGate =
   | { kind: "viewer"; viewer: Viewer };
 
 /** Every dashboard page requires a guild member's browser session. */
-export async function checkViewer(deps: AdminDeps, headers: Headers): Promise<ViewerGate> {
+export async function checkViewer(deps: DashboardDeps, headers: Headers): Promise<ViewerGate> {
   const session = await deps.auth.api.getSession({ headers });
   if (!session) return { kind: "signed-out" };
   const discordUserId = await deps.identity.discordUserIdForUser(session.user.id);

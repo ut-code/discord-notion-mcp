@@ -38,7 +38,7 @@ export function heldRoles(guild: GuildInfo, member: MemberInfo | null): RoleInfo
   return guild.roles.filter((role) => held.has(role.id) && role.id !== guild.id).sort((a, b) => b.position - a.position);
 }
 
-/** Resolves Discord user ids to names and avatars for the admin UI, through the cached directory. */
+/** Resolves Discord user ids to names and avatars for the dashboard, through the cached directory. */
 export class SubjectResolver {
   private readonly limit = createLimiter(4);
 

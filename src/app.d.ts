@@ -1,5 +1,5 @@
-import type { AdminDeps } from "$lib/server/admin/deps";
-import type { ViewerGate } from "$lib/server/admin/access";
+import type { ViewerGate } from "$lib/server/dashboard/access";
+import type { DashboardDeps } from "$lib/server/dashboard/deps";
 import type { Preview } from "$lib/server/preview";
 
 declare global {
@@ -12,7 +12,7 @@ declare global {
       signedIn?: boolean;
     }
     interface Locals {
-      deps: AdminDeps;
+      deps: DashboardDeps;
       /** Dashboard access of the browser session, resolved once per request. */
       viewer: () => Promise<ViewerGate>;
       /** Only under `bun run preview`. */

@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { actionUrl } from "../../src/lib/action-url";
 import { grantSubmitLabel } from "../../src/lib/grant-label";
-import { diffLines } from "../../src/lib/server/admin/audit";
-import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue } from "../../src/lib/server/admin/format";
+import { diffLines } from "../../src/lib/server/dashboard/audit";
+import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue } from "../../src/lib/server/dashboard/format";
+import { safeNextPath } from "../../src/lib/server/dashboard/next-path";
 import { memberAvatarUrl, userAvatarUrl } from "../../src/lib/server/discord/avatar";
 import { initialOf } from "../../src/lib/initial";
-import { safeNextPath } from "../../src/lib/server/web/next-path";
 
 describe("safeNextPath", () => {
   test("keeps same-origin paths", () => {

@@ -1,21 +1,20 @@
 <script lang="ts">
   import { BarChart } from "layerchart";
-  import { onMount } from "svelte";
   import * as Chart from "$lib/components/ui/chart";
-  import type { ChartSeries } from "$lib/server/admin/stats";
+  import { useHydrated } from "$lib/hydrated.svelte";
+  import type { ChartSeries } from "$lib/server/dashboard/stats";
 
   let { rows, series, label }: { rows: Array<Record<string, string | number>>; series: ChartSeries[]; label: string } = $props();
 
   // The server renders a fixed-size SVG that scales with its box (no JavaScript needed);
-  // after hydration the chart measures its container instead.
+  // after hydration the chart measures its container instead. The SSR handling (here and
+  // the `.stacked-bars` rules in app.css) was written against layerchart 2.7.0.
   const SSR_WIDTH = 720;
   const HEIGHT = 200;
 
-  let hydrated = $state(false);
+  const hydration = useHydrated();
+  const hydrated = $derived(hydration.current);
   let width = $state(SSR_WIDTH);
-  onMount(() => {
-    hydrated = true;
-  });
 
   const config = $derived(Object.fromEntries(series.map((entry) => [entry.key, { label: entry.label, color: entry.color }])));
   const ticks = $derived.by(() => {

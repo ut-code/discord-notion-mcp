@@ -7,7 +7,7 @@
     "prepare": "svelte-kit sync || echo ''",
     "dev": "bun --bun vite dev",
     "build": "bun --bun vite build",
-    "start": "BODY_SIZE_LIMIT=4M bun build/index.js",
+    "start": "NODE_ENV=production BODY_SIZE_LIMIT=4M bun build/index.js",
     "preview": "PREVIEW=1 PORT=3920 bun --bun vite dev",
     "test": "bun test",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { consentPage } from "$lib/server/admin/session";
+import { consentPage } from "$lib/server/dashboard/session";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async ({ locals, url, request }) => {

@@ -1,5 +1,5 @@
-import { requireViewer } from "$lib/server/admin/guard";
-import { statsPage } from "$lib/server/admin/stats";
+import { requireViewer } from "$lib/server/dashboard/guard";
+import { statsPage } from "$lib/server/dashboard/stats";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {

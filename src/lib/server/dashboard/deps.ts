@@ -8,11 +8,11 @@ import type { ErrorSink, EventSink } from "../lib/log";
 import type { NotionAuditService } from "../notion/changes/audit-service";
 import type { GrantStore } from "../permissions/grants";
 import type { PermissionResolver } from "../permissions/resolver";
-import type { UsageStats } from "./stats";
+import type { UsageStats } from "../usage/usage-stats";
 import type { SubjectResolver } from "./subjects";
 
-/** Everything the browser-facing pages (admin UI, sign-in, consent) read or change. */
-export interface AdminDeps {
+/** Everything the browser-facing pages (dashboard, sign-in, consent) read or change. */
+export interface DashboardDeps {
   auth: Auth;
   /** Shown on the connection page for registering MCP clients. */
   mcpUrl: string;

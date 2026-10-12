@@ -34,6 +34,13 @@ function errorResult(message: string): CallToolResult {
   return { content: [{ type: "text", text: message }], isError: true };
 }
 
+/**
+ * Logged and stored instead of the text of an error result a tool returns (which may
+ * quote content) and of an unexpected crash (whose details go to the error log only).
+ */
+export const TOOL_RESULT_ERROR = "tool returned an error";
+export const TOOL_CRASH_ERROR = "internal error";
+
 export async function runTool(tool: AnyToolDefinition, args: unknown, principal: Principal, deps: McpServerDeps): Promise<CallToolResult> {
   const started = performance.now();
   const reportError = deps.logError ?? logError;
@@ -68,22 +75,17 @@ export async function runTool(tool: AnyToolDefinition, args: unknown, principal:
     const result = toCallToolResult(
       await tool.handler(args as never, { principal: { ...principal, access: current } }),
     );
-    finish(!result.isError, result.isError ? { kind: "error", message: resultText(result) } : undefined);
+    finish(!result.isError, result.isError ? { kind: "error", message: TOOL_RESULT_ERROR } : undefined);
     return result;
   } catch (error) {
     if (error instanceof ToolError) {
       finish(false, { kind: "error", message: error.message });
       return errorResult(error.message);
     }
-    const message = errorMessage(error);
-    reportError({ event: "tool_crash", tool: tool.name, error: message });
-    finish(false, { kind: "error", message });
+    reportError({ event: "tool_crash", tool: tool.name, error: errorMessage(error) });
+    finish(false, { kind: "error", message: TOOL_CRASH_ERROR });
     return errorResult("Internal error while running the tool. Please try again later.");
   }
-}
-
-function resultText(result: CallToolResult): string {
-  return result.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n");
 }
 
 /** Builds a server exposing only the tools the principal may use. */

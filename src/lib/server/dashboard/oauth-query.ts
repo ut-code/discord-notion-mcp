@@ -17,3 +17,12 @@ export function extractSignedOAuthQuery(search: string): string | undefined {
   }
   return signed.toString();
 }
+
+/**
+ * A parameter of the extracted signed query; null unless it occurs exactly once (a
+ * repeated value could not match the signature, so it is not shown to the user).
+ */
+export function signedOAuthParam(oauthQuery: string, name: string): string | null {
+  const values = new URLSearchParams(oauthQuery).getAll(name);
+  return values.length === 1 ? values[0]! : null;
+}

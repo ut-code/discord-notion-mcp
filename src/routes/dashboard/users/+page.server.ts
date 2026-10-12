@@ -1,6 +1,6 @@
-import { requireViewer, respond } from "$lib/server/admin/guard";
-import { formString } from "$lib/server/admin/shared";
-import { revokeTokens, usersPage } from "$lib/server/admin/users";
+import { requireViewer, respond } from "$lib/server/dashboard/guard";
+import { formString } from "$lib/server/dashboard/shared";
+import { revokeTokens, usersPage } from "$lib/server/dashboard/users";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => usersPage(event.locals.deps, event.url.searchParams, await requireViewer(event));

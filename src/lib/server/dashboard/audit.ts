@@ -13,7 +13,7 @@ import type { ContentHunk } from "../notion/content/content-diff";
 import { renderPropertyValue } from "../notion/content/properties";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
-import type { AdminDeps } from "./deps";
+import type { DashboardDeps } from "./deps";
 import {
   AUDIT_OPERATION_LABELS,
   AUDIT_STATUS_FILTERS,
@@ -25,12 +25,19 @@ import {
 } from "./format";
 import { formString, pageParam, type ActionResult, type Option } from "./shared";
 
-export const AUDIT_PAGE_SIZE = 50;
+const AUDIT_PAGE_SIZE = 50;
+
+/** 404 page of an unknown write-history entry. */
+export const AUDIT_NOT_FOUND = { title: "見つかりません", message: "指定された履歴はありません。" };
 
 export interface AuditFilters {
   user?: string;
-  operation?: string;
+  operation?: NotionAuditOperation;
   status?: AuditStatusFilter;
+}
+
+function isAuditOperation(value: string | null): value is NotionAuditOperation {
+  return value !== null && (NOTION_AUDIT_OPERATIONS as readonly string[]).includes(value);
 }
 
 export function auditListHref(filters: AuditFilters, page = 1): string {
@@ -42,14 +49,14 @@ export function auditListHref(filters: AuditFilters, page = 1): string {
 }
 
 /** Title recorded with the write; older rows fall back to the requested title or a generic label. */
-export function auditTitle(row: NotionAuditRow): string {
+function auditTitle(row: NotionAuditRow): string {
   if (row.targetTitle) return row.targetTitle;
   const requested = row.operation === "create_page" ? row.request.title : undefined;
   return typeof requested === "string" && requested ? requested : "Notion ページ";
 }
 
 /** `compact` shows one badge (a reverted write reads 取り消し済み); otherwise 成功 + 取り消し済み. */
-export function statusBadges(row: NotionAuditRow, compact = false): BadgeView[] {
+function statusBadges(row: NotionAuditRow, compact = false): BadgeView[] {
   if (row.status === "failed") return [{ label: "失敗", tone: "destructive" }];
   if (row.status === "pending") return [{ label: "処理中", tone: "secondary" }];
   if (!row.revertedAt) return [{ label: "成功", tone: "success" }];
@@ -104,7 +111,7 @@ export interface AuditListData {
   error: string | null;
 }
 
-export async function auditList(deps: AdminDeps, params: URLSearchParams): Promise<AuditListData> {
+export async function auditList(deps: DashboardDeps, params: URLSearchParams): Promise<AuditListData> {
   const filters: AuditFilters = {};
   let error: string | null = null;
   const user = params.get("user")?.trim();
@@ -113,7 +120,7 @@ export async function auditList(deps: AdminDeps, params: URLSearchParams): Promi
     else error = "ユーザー ID は Discord の数値 ID で指定してください。";
   }
   const operation = params.get("operation");
-  if (operation && (NOTION_AUDIT_OPERATIONS as readonly string[]).includes(operation)) filters.operation = operation;
+  if (isAuditOperation(operation)) filters.operation = operation;
   const status = params.get("status") ?? undefined;
   if (isAuditStatusFilter(status)) filters.status = status;
 
@@ -123,7 +130,7 @@ export async function auditList(deps: AdminDeps, params: URLSearchParams): Promi
       limit: AUDIT_PAGE_SIZE,
       offset: (page - 1) * AUDIT_PAGE_SIZE,
       discordUserId: filters.user,
-      operation: filters.operation as NotionAuditOperation | undefined,
+      operation: filters.operation,
       status: filters.status === "ok" || filters.status === "failed" ? filters.status : undefined,
       reverted: filters.status === "reverted" ? true : undefined,
     }),
@@ -169,7 +176,7 @@ const FAILED: Record<NotionAuditOperation, (title: string, row: NotionAuditRow) 
   revert: (t, row) => `「${t}」への #${row.revertOfAuditId ?? "?"} の変更の取り消しに失敗しました`,
 };
 
-export function summarySentence(row: NotionAuditRow): string {
+function summarySentence(row: NotionAuditRow): string {
   const title = auditTitle(row);
   const action =
     row.status === "ok"
@@ -274,11 +281,11 @@ export interface AuditDetailData {
   revert: RevertView | null;
 }
 
-export function parseAuditId(raw: string): number | null {
+function parseAuditId(raw: string): number | null {
   return /^\d{1,15}$/.test(raw) ? Number(raw) : null;
 }
 
-export async function auditDetail(deps: AdminDeps, idParam: string, viewer: Pick<Viewer, "isAdmin">): Promise<AuditDetailData | null> {
+export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: Pick<Viewer, "isAdmin">): Promise<AuditDetailData | null> {
   const id = parseAuditId(idParam);
   const row = id === null ? null : await deps.audit.getAudit(id);
   if (!row) return null;
@@ -317,19 +324,23 @@ export async function auditDetail(deps: AdminDeps, idParam: string, viewer: Pick
 }
 
 /** `conflict` asks the page to offer a forced revert (the page changed after the write). */
-export type RevertActionResult = { kind: "not-found" } | (ActionResult & { conflict: boolean });
+export interface RevertActionResult {
+  result: ActionResult;
+  conflict: boolean;
+}
 
-export async function revertAudit(deps: AdminDeps, idParam: string, form: FormData, actor: Viewer): Promise<RevertActionResult> {
-  if (!actor.isAdmin) return { ...ADMIN_ONLY, conflict: false };
+/** Null when the entry does not exist. */
+export async function revertAudit(deps: DashboardDeps, idParam: string, form: FormData, actor: Viewer): Promise<RevertActionResult | null> {
+  if (!actor.isAdmin) return { result: ADMIN_ONLY, conflict: false };
   const id = parseAuditId(idParam);
-  if (id === null || !(await deps.audit.getAudit(id))) return { kind: "not-found" };
+  if (id === null || !(await deps.audit.getAudit(id))) return null;
   const force = formString(form, "force") === "true";
   if (formString(form, "confirm") !== "yes") {
-    return { kind: "error", message: "確認のチェックを入れてから取り消してください。", conflict: force };
+    return { result: { kind: "error", message: "確認のチェックを入れてから取り消してください。" }, conflict: force };
   }
-  let result;
+  let outcome;
   try {
-    result = await deps.audit.revert(id, {
+    outcome = await deps.audit.revert(id, {
       actorDiscordUserId: actor.discordUserId,
       actorDisplayName: actor.displayName,
       actorUsername: actor.username,
@@ -337,14 +348,14 @@ export async function revertAudit(deps: AdminDeps, idParam: string, form: FormDa
     });
   } catch (error) {
     deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: false, error: errorMessage(error) });
-    return { kind: "error", message: `取り消しに失敗しました: ${errorMessage(error)}`, conflict: false };
+    return { result: { kind: "error", message: `取り消しに失敗しました: ${errorMessage(error)}` }, conflict: false };
   }
-  deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: result.ok, revertAuditId: result.revertAuditId });
-  if (result.ok) {
-    const prefix = result.partial ? "一部のみ取り消しました。" : "取り消しました。";
-    return { kind: result.partial ? "warn" : "ok", message: `${prefix}${result.message}`, conflict: false };
+  deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: outcome.ok, revertAuditId: outcome.revertAuditId });
+  if (outcome.ok) {
+    const prefix = outcome.partial ? "一部のみ取り消しました。" : "取り消しました。";
+    return { result: { kind: outcome.partial ? "warn" : "ok", message: `${prefix}${outcome.message}` }, conflict: false };
   }
   // The page explains the conflict and offers a forced revert instead of a message.
-  if (result.conflict) return { kind: "warn", message: null, conflict: true };
-  return { kind: "error", message: `取り消せませんでした: ${result.message}`, conflict: false };
+  if (outcome.conflict) return { result: { kind: "warn", message: null }, conflict: true };
+  return { result: { kind: "error", message: `取り消せませんでした: ${outcome.message}` }, conflict: false };
 }

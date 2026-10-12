@@ -21,6 +21,7 @@ export type EventEntry =
   | { event: "notion_disabled"; reason: string }
   | { event: "audit_pending_marked_failed"; count: number }
   | { event: "tool_calls_pruned"; deleted: number }
+  | { event: "oauth_clients_pruned"; deleted: number }
   | ToolCallLogEntry
   | ({ event: "grant_added" } & GrantChange)
   | ({ event: "grant_removed" } & GrantChange)
@@ -35,6 +36,7 @@ export type ErrorEntry =
   | { event: "tool_crash"; tool: string; error: string }
   | { event: "tool_call_record_failed"; tool: string; error: string }
   | { event: "tool_call_prune_failed"; error: string }
+  | { event: "oauth_client_prune_failed"; error: string }
   | { event: "access_resolution_failed"; source: "mcp" | "dashboard"; discordUserId: string; error: string }
   | { event: "membership_check_failed"; error: string }
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }

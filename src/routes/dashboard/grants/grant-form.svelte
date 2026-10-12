@@ -11,7 +11,7 @@
   import * as NativeSelect from "$lib/components/ui/native-select";
   import { grantSubmitLabel } from "$lib/grant-label";
   import { DASHBOARD_PATH } from "$lib/paths";
-  import type { GrantFormView } from "$lib/server/admin/grants";
+  import type { GrantFormView } from "$lib/server/dashboard/grants";
 
   let { form, filter }: { form: GrantFormView; filter: string | null } = $props();
 

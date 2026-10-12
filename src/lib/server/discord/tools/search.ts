@@ -70,10 +70,12 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
       const names = new Map(ctx.channelNames);
       for (const thread of outcome.threads) if (thread.name) names.set(thread.id, thread.name);
 
-      const total = outcome.droppedCount === 0 ? `, ${outcome.totalResults} total` : "";
-      const header = `Search results — ${outcome.messages.length} shown (offset ${args.offset}${total})`;
+      const total = outcome.readableTotal;
+      const header = `Search results — ${outcome.messages.length} shown (offset ${args.offset}${total !== null ? `, ${total} total` : ""})`;
       const nextOffset = args.offset + args.limit;
-      const more = nextOffset < outcome.totalResults && nextOffset <= 9975 ? `\nMore: offset=${nextOffset}` : "";
+      // Without a trustworthy total only a full page of readable results suggests another page.
+      const hasMore = total !== null ? nextOffset < total : outcome.messages.length === args.limit;
+      const more = hasMore && nextOffset <= 9975 ? `\nMore: offset=${nextOffset}` : "";
       if (outcome.messages.length === 0) return `${header}${more}\n\nNo messages found.`;
       const blocks = outcome.messages.map(
         (message) => `#${names.get(message.channel_id) ?? message.channel_id}\n${formatMessage(message, ctx)}`,

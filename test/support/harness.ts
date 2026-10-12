@@ -4,7 +4,7 @@ import { composeServer, type ComposedServer, type ComposeOptions } from "../../s
 import { loadConfig } from "../../src/lib/server/config";
 import { openDatabase } from "../../src/lib/server/db/client";
 import type { ErrorEntry, EventEntry, ToolCallLogEntry } from "../../src/lib/server/lib/log";
-import { extractSignedOAuthQuery } from "../../src/lib/server/web/oauth-query";
+import { extractSignedOAuthQuery } from "../../src/lib/server/dashboard/oauth-query";
 import { FakeDiscordApi, GUILD_ID } from "./fakes";
 import { FakeNotionApi } from "./notion-fakes";
 

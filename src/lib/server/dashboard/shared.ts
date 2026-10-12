@@ -3,7 +3,7 @@ export interface Option {
   label: string;
 }
 
-/** Outcome of an admin action, shown as a toast (or a banner without JavaScript). */
+/** Outcome of a dashboard action, shown as a toast (or a banner without JavaScript). */
 export interface ActionResult {
   kind: "ok" | "warn" | "error";
   /** Null when the page itself explains the outcome. */

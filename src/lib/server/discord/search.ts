@@ -24,7 +24,16 @@ export interface SearchScope {
 }
 
 export type SearchOutcome =
-  | { status: "ok"; messages: SearchMessage[]; threads: APIThreadChannel[]; totalResults: number; droppedCount: number }
+  | {
+      status: "ok";
+      messages: SearchMessage[];
+      threads: APIThreadChannel[];
+      /**
+       * Discord's total, or null when it may count messages the viewer cannot read: a
+       * guild-wide search, or a page from which unreadable results were dropped.
+       */
+      readableTotal: number | null;
+    }
   | { status: "indexing"; retryAfterSeconds: number };
 
 export interface SearchDeps {
@@ -37,8 +46,9 @@ export interface SearchDeps {
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * Restricts the search to what the viewer can read. When the viewer can read every
- * channel, the guild-wide search is used (results are still filtered afterwards).
+ * Restricts the search to what the viewer can read (channels and visible threads are
+ * listed explicitly). When the viewer can read every channel, or the list is too long,
+ * the guild-wide search is used: results are still filtered and no total is reported.
  */
 export async function buildSearchScope(deps: SearchDeps, viewer: Viewer, channelId?: string): Promise<SearchScope> {
   if (channelId) {
@@ -103,12 +113,13 @@ export async function searchReadableMessages(
     const response = await deps.api.searchMessages(query);
     if (response.status === "ok") {
       const messages = await filterReadableResults(deps, viewer, response.result);
+      const dropped = response.result.messages.flat().length - messages.length;
+      const scoped = query.channel_id !== undefined;
       return {
         status: "ok",
         messages,
         threads: response.result.threads ?? [],
-        totalResults: response.result.total_results,
-        droppedCount: response.result.messages.flat().length - messages.length,
+        readableTotal: scoped && dropped === 0 ? response.result.total_results : null,
       };
     }
     if (attempt >= MAX_INDEX_ATTEMPTS) return response;

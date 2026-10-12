@@ -25,7 +25,17 @@ export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
   return viewer;
 }
 
-/** Action response: the result on success, otherwise a failure with its status (403 for non-admins, else 400). */
-export function respond<T extends ActionResult>(result: T) {
-  return result.kind === "ok" ? { result } : fail(result.status ?? 400, { result });
+/** Renders the 404 page when the requested entity does not exist (null). */
+export function orNotFound<T>(value: T | null, page: { title: string; message: string }): T {
+  if (value === null) error(404, { ...page, signedIn: true });
+  return value;
+}
+
+/**
+ * Action response: the result on success, otherwise a failure with its status (403 for
+ * non-admins, else 400). `extra` fields are sent next to the result either way.
+ */
+export function respond<T extends ActionResult, E extends object = Record<never, never>>(result: T, extra?: E) {
+  const body = { ...extra, result } as E & { result: T };
+  return result.kind === "ok" ? body : fail(result.status ?? 400, body);
 }

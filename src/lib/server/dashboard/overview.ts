@@ -1,6 +1,6 @@
 import type { Viewer } from "./access";
 import { auditListHref, auditRowView, type AuditRowView } from "./audit";
-import type { AdminDeps } from "./deps";
+import type { DashboardDeps } from "./deps";
 
 const RECENT_WRITES = 5;
 const RECENT_FAILURE_WINDOW_MS = 7 * 24 * 60 * 60_000;
@@ -15,7 +15,7 @@ export interface OverviewData {
   canGrant: boolean;
 }
 
-export async function overview(deps: AdminDeps, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">, now = Date.now()): Promise<OverviewData> {
+export async function overview(deps: DashboardDeps, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">, now = Date.now()): Promise<OverviewData> {
   const base = { failuresHref: auditListHref({ status: "failed" }), canGrant: viewer.isAdmin };
   if (!viewer.canViewAudit) return { ...base, recentFailures: 0, recent: null };
   const since = new Date(now - RECENT_FAILURE_WINDOW_MS);

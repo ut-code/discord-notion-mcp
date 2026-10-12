@@ -12,7 +12,7 @@ import { idOrUrl, withNotionErrors, type NotionToolDeps } from "./shared";
 const MARKDOWN_SYNTAX =
   'Content uses Notion-flavored Markdown: standard Markdown plus user mentions <mention-user url="user://USER_ID">Name</mention-user>, page mentions <mention-page url="PAGE_URL"/>, dates <mention-date start="2026-10-20"/>, toggles <details><summary>Title</summary> followed by tab-indented children and </details>, callouts <callout icon="💡">text</callout>, inline colors <span color="red">text</span> (block colors: {color="blue_bg"} at the end of a block line), and columns <columns><column>…</column></columns>.';
 
-function parentLabel(parent: Record<string, any>): string {
+function parentLabel(parent: SearchResult["parent"]): string {
   switch (parent.type) {
     case "page_id":
       return `page ${parent.page_id}`;
@@ -48,18 +48,15 @@ function propertyLines(page: NotionPage, options: { skipTitle: boolean; skipEmpt
 }
 
 function schemaLines(dataSource: NotionDataSource): string[] {
-  return Object.entries(dataSource.properties).map(([name, config]) => {
-    const c = config as Record<string, any>;
+  return Object.entries(dataSource.properties).map(([name, c]) => {
     const details: string[] = [];
     if (c.type === "select" || c.type === "multi_select" || c.type === "status") {
-      const options = (c[c.type].options as Array<{ name: string }>).map((o) => o.name);
-      details.push(`options: ${options.length ? options.join(", ") : "(none)"}`);
+      const { options } = c.type === "select" ? c.select : c.type === "multi_select" ? c.multi_select : c.status;
+      details.push(`options: ${options.length ? options.map((o) => o.name).join(", ") : "(none)"}`);
     }
     if (c.type === "status") {
-      const byId = new Map((c.status.options as Array<{ id: string; name: string }>).map((o) => [o.id, o.name]));
-      const groups = (c.status.groups as Array<{ name: string; option_ids: string[] }>).map(
-        (g) => `${g.name} [${g.option_ids.map((id) => byId.get(id) ?? id).join(", ")}]`,
-      );
+      const byId = new Map(c.status.options.map((o) => [o.id, o.name]));
+      const groups = c.status.groups.map((g) => `${g.name} [${g.option_ids.map((id) => byId.get(id) ?? id).join(", ")}]`);
       details.push(`groups: ${groups.join("; ")}`);
     }
     if (c.type === "relation") details.push(`related data source: ${c.relation.data_source_id}`);

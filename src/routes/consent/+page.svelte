@@ -44,6 +44,7 @@
     <div class="stack gap-2">
       <h1><span>{data.clientName}</span> がアクセスを求めています</h1>
       <p class="lead">許可すると、このアプリがあなたの権限の範囲で MCP ツールを使えるようになります。</p>
+      {#if data.redirectOrigin}<p class="mono break-all">戻り先: {data.redirectOrigin}</p>{/if}
     </div>
 
     <div class="flex items-center gap-3 rounded-[10px] border p-3">

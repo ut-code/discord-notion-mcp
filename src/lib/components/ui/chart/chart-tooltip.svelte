@@ -154,7 +154,7 @@
 						{/if}
 						<div
 							class={cn(
-								"flex flex-1 shrink-0 justify-between leading-none",
+								"flex flex-1 shrink-0 justify-between gap-4 leading-none",
 								nestLabel ? "items-end" : "items-center"
 							)}
 						>

@@ -5,7 +5,7 @@
   import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
   import * as Alert from "$lib/components/ui/alert";
-  import type { ActionResult } from "$lib/server/admin/shared";
+  import type { ActionResult } from "$lib/server/dashboard/shared";
   import { cn } from "$lib/utils";
 
   let { result }: { result: ActionResult | null | undefined } = $props();

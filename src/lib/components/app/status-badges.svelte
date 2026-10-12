@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { BadgeView } from "$lib/server/admin/badges";
+  import type { BadgeView } from "$lib/server/dashboard/badges";
   import ToneBadge from "./tone-badge.svelte";
 
   let { badges }: { badges: BadgeView[] } = $props();

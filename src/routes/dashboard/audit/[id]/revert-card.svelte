@@ -1,25 +1,20 @@
 <script lang="ts">
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import Undo2Icon from "@lucide/svelte/icons/undo-2";
-  import { onMount } from "svelte";
   import { enhance } from "$app/forms";
   import { page } from "$app/state";
   import { actionUrl } from "$lib/action-url";
+  import ConfirmDialog from "$lib/components/app/confirm-dialog.svelte";
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import * as Alert from "$lib/components/ui/alert";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
-  import type { RevertView } from "$lib/server/admin/audit";
+  import { useHydrated } from "$lib/hydrated.svelte";
+  import type { RevertView } from "$lib/server/dashboard/audit";
 
   let { revert, conflict, targetUrl }: { revert: RevertView; conflict: boolean; targetUrl: string | null } = $props();
 
-  // Before hydration (or without JavaScript) the confirmation is a native popover.
-  let hydrated = $state(false);
+  const hydrated = useHydrated();
   let confirming = $state(false);
-  onMount(() => {
-    hydrated = true;
-  });
-
   const action = $derived(actionUrl(page.url, "revert"));
 </script>
 
@@ -51,7 +46,7 @@
           <span>後からの編集を確認した上で取り消す</span>
         </label>
         <div class="stack gap-2">
-          <Button type="submit" class="bg-bad-strong hover:bg-bad-fg w-full text-white">
+          <Button type="submit" variant="destructive" class="w-full">
             <Undo2Icon />
             強制的に取り消す
           </Button>
@@ -60,46 +55,17 @@
           {/if}
         </div>
       </form>
-    {:else if hydrated}
-      <Button variant="outline" class="w-full" onclick={() => (confirming = true)}>
-        <Undo2Icon />
-        取り消す
-      </Button>
-      <AlertDialog.Root bind:open={confirming}>
-        <AlertDialog.Content>
-          <AlertDialog.Header>
-            <AlertDialog.Title>この変更を取り消しますか？</AlertDialog.Title>
-          </AlertDialog.Header>
-          <form
-            method="post"
-            {action}
-            use:enhance={() =>
-              async ({ update }) => {
-                confirming = false;
-                await update();
-              }}
-          >
-            <input type="hidden" name="confirm" value="yes" />
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel type="button">キャンセル</AlertDialog.Cancel>
-              <Button type="submit">取り消す</Button>
-            </AlertDialog.Footer>
-          </form>
-        </AlertDialog.Content>
-      </AlertDialog.Root>
     {:else}
-      <Button variant="outline" class="w-full" popovertarget="revert-confirm">
+      <!-- Before hydration the button opens the dialog's native popover. -->
+      <Button variant="outline" class="w-full" popovertarget={hydrated.current ? undefined : "revert-confirm"} onclick={() => (confirming = true)}>
         <Undo2Icon />
         取り消す
       </Button>
-      <div class="native-dialog" id="revert-confirm" popover="auto" role="dialog" aria-labelledby="revert-confirm-title">
-        <p class="text-base font-semibold" id="revert-confirm-title">この変更を取り消しますか？</p>
-        <form method="post" {action} class="mt-4 flex justify-end gap-2">
+      <ConfirmDialog id="revert-confirm" bind:open={confirming} title="この変更を取り消しますか？" action="revert" submitLabel="取り消す">
+        {#snippet fields()}
           <input type="hidden" name="confirm" value="yes" />
-          <Button variant="outline" popovertarget="revert-confirm" popovertargetaction="hide">キャンセル</Button>
-          <Button type="submit">取り消す</Button>
-        </form>
-      </div>
+        {/snippet}
+      </ConfirmDialog>
     {/if}
   </section>
 </aside>

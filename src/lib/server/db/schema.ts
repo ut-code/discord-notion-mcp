@@ -86,6 +86,10 @@ export const toolCall = sqliteTable(
     ok: integer("ok", { mode: "boolean" }).notNull(),
     durationMs: integer("duration_ms").notNull(),
     errorKind: text("error_kind", { enum: TOOL_CALL_ERROR_KINDS }),
+    /**
+     * Server-composed text only: a ToolError message, the rate limit notice, or a fixed
+     * string for error results returned by a tool and for crashes (never the tool output).
+     */
     error: text("error"),
   },
   (table) => [

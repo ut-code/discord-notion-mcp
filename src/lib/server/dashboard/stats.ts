@@ -1,97 +1,23 @@
-import { and, count, desc, eq, gte, sql } from "drizzle-orm";
 import { DASHBOARD_PATH } from "../../paths";
-import type { AppDatabase } from "../db/client";
-import { notionAudit, toolCall } from "../db/schema";
-import type { AdminDeps } from "./deps";
+import { DAY_MS, JST_OFFSET_MS, jstDay } from "../usage/usage-stats";
+import type { DashboardDeps } from "./deps";
 import { formatShortJst } from "./format";
 
-export const STATS_PATH = `${DASHBOARD_PATH}/stats`;
-export const STATS_RANGES = [7, 30, 90] as const;
+const STATS_PATH = `${DASHBOARD_PATH}/stats`;
+const STATS_RANGES = [7, 30, 90] as const;
 export type StatsRange = (typeof STATS_RANGES)[number];
 const DEFAULT_RANGE: StatsRange = 30;
 
-const DAY_MS = 24 * 60 * 60_000;
-const JST_OFFSET_MS = 9 * 60 * 60_000;
 /** Tools stacked individually in the chart; the rest are summed as その他. */
 const CHART_TOOLS = 5;
 /** Categorical order (validated for adjacent stacked segments); その他 stays neutral. */
 const SERIES_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"];
 const OTHER_COLOR = "#a1a1aa";
-export const NOTION_SERIES = [
+const NOTION_SERIES = [
   { key: "writes", label: "書き込み", color: "#2a78d6" },
   { key: "reverts", label: "取り消し", color: "#eda100" },
   { key: "failures", label: "失敗", color: "#e34948" },
 ] as const;
-
-/** Japan-time day number (days since the epoch in JST). */
-export function jstDay(ms: number): number {
-  return Math.floor((ms + JST_OFFSET_MS) / DAY_MS);
-}
-
-const jstDayExpr = (column: typeof toolCall.createdAt | typeof notionAudit.createdAt) =>
-  sql<number>`cast((${column} + ${sql.raw(String(JST_OFFSET_MS))}) / ${sql.raw(String(DAY_MS))} as integer)`;
-const failed = sql<number>`coalesce(sum(case when ${toolCall.ok} = 0 then 1 else 0 end), 0)`;
-
-/** Aggregates over the tool call log and the Notion audit log since a point in time. */
-export class UsageStats {
-  constructor(private readonly db: AppDatabase) {}
-
-  dailyByTool(since: Date): Array<{ day: number; tool: string; calls: number }> {
-    const day = jstDayExpr(toolCall.createdAt);
-    return this.db
-      .select({ day, tool: toolCall.tool, calls: count() })
-      .from(toolCall)
-      .where(gte(toolCall.createdAt, since))
-      .groupBy(day, toolCall.tool)
-      .all();
-  }
-
-  byUser(since: Date): Array<{ discordUserId: string; calls: number; failures: number; lastUsed: Date }> {
-    const rows = this.db
-      .select({ discordUserId: toolCall.discordUserId, calls: count(), failures: failed, lastUsed: sql<number>`max(${toolCall.createdAt})` })
-      .from(toolCall)
-      .where(gte(toolCall.createdAt, since))
-      .groupBy(toolCall.discordUserId)
-      .orderBy(desc(count()), toolCall.discordUserId)
-      .all();
-    return rows.map((row) => ({ ...row, lastUsed: new Date(row.lastUsed) }));
-  }
-
-  byTool(since: Date): Array<{ tool: string; calls: number; failures: number; avgDurationMs: number }> {
-    return this.db
-      .select({ tool: toolCall.tool, calls: count(), failures: failed, avgDurationMs: sql<number>`avg(${toolCall.durationMs})` })
-      .from(toolCall)
-      .where(gte(toolCall.createdAt, since))
-      .groupBy(toolCall.tool)
-      .orderBy(desc(count()), toolCall.tool)
-      .all();
-  }
-
-  rateLimited(since: Date): number {
-    const [row] = this.db
-      .select({ total: count() })
-      .from(toolCall)
-      .where(and(gte(toolCall.createdAt, since), eq(toolCall.errorKind, "rate_limited")))
-      .all();
-    return row?.total ?? 0;
-  }
-
-  notionDaily(since: Date): Array<{ day: number; writes: number; reverts: number; failures: number }> {
-    const day = jstDayExpr(notionAudit.createdAt);
-    const tally = (condition: ReturnType<typeof sql>) => sql<number>`coalesce(sum(case when ${condition} then 1 else 0 end), 0)`;
-    return this.db
-      .select({
-        day,
-        writes: tally(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} != 'revert'`),
-        reverts: tally(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} = 'revert'`),
-        failures: tally(sql`${notionAudit.status} = 'failed'`),
-      })
-      .from(notionAudit)
-      .where(gte(notionAudit.createdAt, since))
-      .groupBy(day)
-      .all();
-  }
-}
 
 export interface ChartSeries {
   key: string;
@@ -146,11 +72,11 @@ function rangeHref(range: StatsRange): string {
 
 const PERCENT = new Intl.NumberFormat("ja-JP", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
-export function formatRate(failures: number, calls: number): string {
+function formatRate(failures: number, calls: number): string {
   return calls === 0 ? "—" : PERCENT.format(failures / calls);
 }
 
-export function formatDuration(ms: number): string {
+function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
@@ -161,7 +87,7 @@ function dayLabel(day: number): string {
 }
 
 /** Query: `range` (7, 30 or 90 days, ending today in Japan time). */
-export async function statsPage(deps: Pick<AdminDeps, "usage" | "subjects">, params: URLSearchParams, now = Date.now()): Promise<StatsPageData> {
+export async function statsPage(deps: Pick<DashboardDeps, "usage" | "subjects">, params: URLSearchParams, now = Date.now()): Promise<StatsPageData> {
   const range = rangeParam(params.get("range"));
   const firstDay = jstDay(now) - (range - 1);
   const since = new Date(firstDay * DAY_MS - JST_OFFSET_MS);

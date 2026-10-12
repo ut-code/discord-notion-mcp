@@ -1,3 +1,7 @@
+/*
+ * Global sheet: theme tokens, the layout shell and patterns shared across pages only.
+ * New styles go in component-scoped <style> blocks or Tailwind utilities.
+ */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
@@ -18,7 +22,8 @@
 	--muted-foreground: oklch(0.552 0.016 285.938);
 	--accent: oklch(0.967 0.001 286.375);
 	--accent-foreground: oklch(0.21 0.006 285.885);
-	--destructive: oklch(0.577 0.245 27.325);
+	/* One red for destructive menu items and confirm buttons. */
+	--destructive: var(--bad-strong);
 	--border: oklch(0.92 0.004 286.32);
 	--input: oklch(0.92 0.004 286.32);
 	--ring: oklch(0.705 0.015 286.067);
@@ -274,9 +279,6 @@
 		flex-wrap: wrap;
 		gap: 24px;
 		align-items: flex-start;
-	}
-	.columns-tight {
-		gap: 16px;
 	}
 	.col-main {
 		flex: 999 1 520px;
@@ -586,7 +588,7 @@
 		background: var(--muted);
 	}
 	.native-menu-item.danger {
-		color: var(--bad-fg);
+		color: var(--destructive);
 	}
 	.native-dialog {
 		width: min(400px, calc(100vw - 32px));
@@ -815,6 +817,7 @@
 	width: 100%;
 	padding-left: 34px;
 }
+/* Written against layerchart 2.7.0; recheck the server-rendered stats chart after upgrading. */
 /* LayerChart's server output drops the container's `position: relative`. */
 .stacked-bars .lc-root-container {
 	position: relative;

@@ -1,17 +1,29 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { ADMIN_ONLY, checkViewer, signInRedirect, type Viewer } from "../../src/lib/server/admin/access";
-import { auditDetail, auditList, revertAudit } from "../../src/lib/server/admin/audit";
-import type { AdminDeps } from "../../src/lib/server/admin/deps";
-import { createGrant, deleteGrant, grantsPage } from "../../src/lib/server/admin/grants";
-import { overview } from "../../src/lib/server/admin/overview";
-import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/admin/session";
-import { revokeTokens, usersPage, type UserTableRow } from "../../src/lib/server/admin/users";
+import { ADMIN_ONLY, checkViewer, signInRedirect, type Viewer } from "../../src/lib/server/dashboard/access";
+import { auditDetail, auditList, revertAudit } from "../../src/lib/server/dashboard/audit";
+import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
+import { createGrant, deleteGrant, grantsPage } from "../../src/lib/server/dashboard/grants";
+import { overview } from "../../src/lib/server/dashboard/overview";
+import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/dashboard/session";
+import { revokeTokens, USER_SEARCH_SCAN_LIMIT, usersPage, type UserTableRow } from "../../src/lib/server/dashboard/users";
+import type { LoginUser } from "../../src/lib/server/auth/users";
 import { ADMINISTRATOR } from "../../src/lib/server/discord/permissions";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { FakeDiscordApi, makeGuild, makeMember, OWNER_ID } from "../support/fakes";
-import { authorize, issueTokens, mcpCall, newSessionCookie, refreshTokens, registerClient, signIn, startHarness, type Harness } from "../support/harness";
+import {
+  authorize,
+  issueTokens,
+  mcpCall,
+  newSessionCookie,
+  REDIRECT_URI,
+  refreshTokens,
+  registerClient,
+  signIn,
+  startHarness,
+  type Harness,
+} from "../support/harness";
 
 const ROLE_ADMIN = "200000000000000001";
 const ROLE_MOD = "200000000000000002";
@@ -27,7 +39,7 @@ const NEWCOMER = "300000000000000017";
 const OWNER_AVATAR = "https://cdn.discordapp.com/avatars/100000000000000001/0123456789abcdef0123456789abcdef.png?size=64";
 
 let h: Harness;
-let deps: AdminDeps;
+let deps: DashboardDeps;
 let owner: Viewer;
 let ownerUserId = "";
 let writes: NotionWriteService;
@@ -89,7 +101,7 @@ beforeAll(async () => {
   discord.users.set(STRANGER, { id: STRANGER, username: "stranger", globalName: "Stranger", avatarUrl: null });
   discord.failingMembers.add(FLAKY);
   h = await startHarness({ discord });
-  deps = h.composed.admin;
+  deps = h.composed.dashboard;
   ownerUserId = (await signIn(h, OWNER_ID)).userId;
   owner = await adminFor(OWNER_ID);
   store = new NotionAuditStore(h.composed.database.db);
@@ -370,7 +382,7 @@ describe("read-only members", () => {
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Protected", request: {} });
     const attempts: Array<Record<string, string>> = [{ confirm: "yes" }, { confirm: "yes", force: "true" }];
     for (const fields of attempts) {
-      expect(await revertAudit(deps, String(created.auditId), form(fields), member)).toEqual({ ...ADMIN_ONLY, conflict: false });
+      expect(await revertAudit(deps, String(created.auditId), form(fields), member)).toEqual({ result: ADMIN_ONLY, conflict: false });
     }
     expect((await h.composed.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
     expect(h.notion.pages.get(created.pageId)!.in_trash).toBeFalsy();
@@ -439,6 +451,7 @@ describe("consent", () => {
     await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
     const page = await consentFor(READER);
     expect(page.clientName).toBe("E2E CLI");
+    expect(page.redirectOrigin).toBe(new URL(REDIRECT_URI).origin);
     expect(page.account).toMatchObject({ name: "Reader", username: "reader" });
     expect(page.guildName).toBe("Test Guild");
     expect(page.switchNext.startsWith("/sign-in?")).toBe(true);
@@ -460,6 +473,19 @@ describe("consent", () => {
     expect(await consentPage(deps, signed, new Headers())).toMatchObject({ kind: "error", status: 401 });
     const outsider = await signIn(h, OUTSIDER);
     expect(await consentPage(deps, signed, new Headers({ cookie: outsider.cookie }))).toMatchObject({ kind: "error", status: 403, title: "アクセスできません" });
+  });
+
+  test("the client id comes from the signed query only", async () => {
+    const { cookie } = await signIn(h, READER);
+    const headers = new Headers({ cookie });
+    const unsigned = new URL("http://x/consent?client_id=evil&state=s&ba_param=state&sig=abc");
+    expect(await consentPage(deps, unsigned, headers)).toMatchObject({ kind: "error", status: 400 });
+
+    const clientId = await registerClient(h);
+    const location = new URL((await authorize(h, clientId, cookie)).headers.get("location")!, h.base);
+    expect((await consentPage(deps, location, headers)).kind).toBe("ok");
+    const duplicated = new URL(`${location.pathname}?client_id=evil&${location.search.slice(1)}`, h.base);
+    expect(await consentPage(deps, duplicated, headers)).toMatchObject({ kind: "error", status: 400 });
   });
 });
 
@@ -504,6 +530,45 @@ describe("users", () => {
     const none = await usersPage(deps, params("q=nobody-matches"), owner);
     expect(none.rows).toEqual([]);
     expect(none.empty).toBe("「nobody-matches」に一致するユーザーはいません。");
+  });
+});
+
+describe("user search scan cap", () => {
+  test(`a search only scans the newest ${USER_SEARCH_SCAN_LIMIT} logins`, async () => {
+    const login = (index: number, name: string): LoginUser => ({
+      userId: `login-${index}`,
+      name,
+      discordUserId: null,
+      createdAt: new Date(0),
+      lastLoginAt: null,
+      revokedAt: null,
+    });
+    // Newest first, as LoginUserStore.list returns them.
+    const logins = Array.from({ length: USER_SEARCH_SCAN_LIMIT + 5 }, (_, index) => login(index, `user ${index}`));
+    logins[3] = login(3, "needle recent");
+    logins[USER_SEARCH_SCAN_LIMIT + 2] = login(USER_SEARCH_SCAN_LIMIT + 2, "needle old");
+    const queries: Array<{ limit: number; offset: number }> = [];
+    const fakeDeps = {
+      directory: { fetchGuild: async () => makeGuild() },
+      grants: { listGrants: async () => [] },
+      users: {
+        count: async () => logins.length,
+        list: async (query: { limit: number; offset: number }) => {
+          queries.push(query);
+          return logins.slice(query.offset, query.offset + query.limit);
+        },
+      },
+      resolver: { resolve: async () => Promise.reject(new Error("unlinked logins are not resolved")) },
+    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver">;
+
+    const found = await usersPage(fakeDeps, params("q=needle"), owner);
+    expect(queries).toEqual([{ limit: USER_SEARCH_SCAN_LIMIT, offset: 0 }]);
+    expect(found.rows.map((row) => row.displayName)).toEqual(["needle recent"]);
+    expect(found.total).toBe(1);
+
+    const all = await usersPage(fakeDeps, params("q=user"), owner);
+    expect(all.total).toBe(USER_SEARCH_SCAN_LIMIT - 1);
+    expect(all.nextHref).toBe("/dashboard/users?q=user&page=2");
   });
 });
 
@@ -605,12 +670,14 @@ describe("audit log", () => {
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Undo me", request: {} });
     const id = String(created.auditId);
 
-    expect(await revertAudit(deps, id, form({}), owner)).toEqual({ kind: "error", message: "確認のチェックを入れてから取り消してください。", conflict: false });
+    expect(await revertAudit(deps, id, form({}), owner)).toEqual({
+      result: { kind: "error", message: "確認のチェックを入れてから取り消してください。" },
+      conflict: false,
+    });
     expect((await h.composed.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
 
     expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({
-      kind: "ok",
-      message: `取り消しました。Reverted audit #${created.auditId}.`,
+      result: { kind: "ok", message: `取り消しました。Reverted audit #${created.auditId}.` },
       conflict: false,
     });
     const row = (await h.composed.notionAudit.getAudit(created.auditId))!;
@@ -626,7 +693,7 @@ describe("audit log", () => {
     expect(revertRow.change).toEqual({ kind: "revert", of: { id: created.auditId, href: `/dashboard/audit/${created.auditId}` } });
     expect(revertRow.revert).toBeNull();
     expect((await auditList(deps, params("status=reverted"))).rows.some((candidate) => candidate.id === created.auditId)).toBe(true);
-    expect(await revertAudit(deps, "99999", form({ confirm: "yes" }), owner)).toEqual({ kind: "not-found" });
+    expect(await revertAudit(deps, "99999", form({ confirm: "yes" }), owner)).toBeNull();
   });
 
   test("a conflicting revert offers a forced revert", async () => {
@@ -635,13 +702,13 @@ describe("audit log", () => {
     h.notion.setMarkdown(parent.id, "Intro\nmine\nlater edit");
     const id = String(appended.auditId);
 
-    expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({ kind: "warn", message: null, conflict: true });
-    expect(await revertAudit(deps, id, form({ force: "true" }), owner)).toMatchObject({ kind: "error", conflict: true });
+    expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({ result: { kind: "warn", message: null }, conflict: true });
+    expect(await revertAudit(deps, id, form({ force: "true" }), owner)).toMatchObject({ result: { kind: "error" }, conflict: true });
     expect((await auditDetail(deps, id, owner))!.details.targetUrl).toBeString();
 
     const forced = await revertAudit(deps, id, form({ confirm: "yes", force: "true" }), owner);
-    expect(forced.kind).toBe("ok");
-    expect((forced as { message: string }).message).toContain("forced despite later edits");
+    expect(forced?.result.kind).toBe("ok");
+    expect(forced?.result.message).toContain("forced despite later edits");
     expect((await h.composed.notionAudit.getAudit(appended.auditId))!.revertedAt).not.toBeNull();
   });
 

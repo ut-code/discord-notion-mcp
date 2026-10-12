@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, test } from "bun:test";
-import { jstDay, rangeParam, statsPage, UsageStats } from "../../src/lib/server/admin/stats";
-import { SubjectResolver } from "../../src/lib/server/admin/subjects";
+import { rangeParam, statsPage } from "../../src/lib/server/dashboard/stats";
+import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import { ToolCallStore } from "../../src/lib/server/usage/tool-calls";
+import { jstDay, UsageStats } from "../../src/lib/server/usage/usage-stats";
 import { FakeDiscordApi, makeMember } from "../support/fakes";
 
 const U1 = "300000000000000001";
