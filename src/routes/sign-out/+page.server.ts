@@ -2,7 +2,6 @@ import { redirect } from "@sveltejs/kit";
 import { SIGN_IN_PATH } from "$lib/paths";
 import { signOut } from "$lib/server/admin/session";
 import { formString } from "$lib/server/admin/shared";
-import { parseSetCookie } from "$lib/server/web/set-cookie";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = () => {
@@ -14,10 +13,7 @@ export const actions: Actions = {
   default: async ({ locals, request, cookies }) => {
     const form = await request.formData();
     const result = await signOut(locals.deps, request.headers, formString(form, "next"));
-    for (const header of result.cookies) {
-      const cookie = parseSetCookie(header);
-      if (cookie) cookies.set(cookie.name, cookie.value, { ...cookie.options, encode: (value) => value });
-    }
+    for (const cookie of result.cookies) cookies.set(cookie.name, cookie.value, cookie.options);
     redirect(303, result.location);
   },
 };

@@ -1,5 +1,5 @@
 import { DASHBOARD_PATH, SIGN_IN_PATH } from "../../paths";
-import type { EffectiveAccess } from "../authz/resolver";
+import type { EffectiveAccess } from "../permissions/resolver";
 import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
 import type { AdminDeps } from "./deps";
@@ -37,7 +37,7 @@ export async function checkViewer(deps: AdminDeps, headers: Headers): Promise<Vi
   try {
     access = await deps.resolver.resolve(discordUserId);
   } catch (error) {
-    deps.log({ event: "dashboard_access_resolution_failed", discordUserId, error: errorMessage(error) });
+    deps.logError({ event: "access_resolution_failed", source: "dashboard", discordUserId, error: errorMessage(error) });
     return {
       kind: "denied",
       status: 503,

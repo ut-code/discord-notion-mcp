@@ -1,5 +1,5 @@
-import { PermissionFlagsBits, type APIOverwrite } from "discord-api-types/v10";
-import { OverwriteType, type GuildInfo, type MemberInfo, type PermissionOverwrite } from "./types";
+import { OverwriteType, PermissionFlagsBits, type APIOverwrite } from "discord-api-types/v10";
+import type { GuildInfo, MemberInfo, PermissionOverwrite } from "./types";
 
 export const ADMINISTRATOR = PermissionFlagsBits.Administrator;
 export const VIEW_CHANNEL = PermissionFlagsBits.ViewChannel;
@@ -23,7 +23,7 @@ export function canReadMessages(permissions: bigint): boolean {
 export function toOverwrite(raw: APIOverwrite): PermissionOverwrite {
   return {
     id: raw.id,
-    type: raw.type === 1 ? OverwriteType.Member : OverwriteType.Role,
+    type: raw.type,
     allow: BigInt(raw.allow),
     deny: BigInt(raw.deny),
   };

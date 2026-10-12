@@ -1,9 +1,11 @@
 import { DASHBOARD_PATH, SIGN_IN_ERROR_PATH, SIGN_IN_PATH } from "../../paths";
+import { parseSetCookieHeader, toCookieOptions } from "better-auth/cookies";
 import { AUTH_BASE_PATH } from "../auth/auth";
-import { PERMISSIONS, type Permission } from "../authz/permissions";
-import type { EffectiveAccess } from "../authz/resolver";
+import { clientNameBeforeSignIn, clientNameForSession } from "../auth/clients";
 import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
+import { PERMISSIONS, type Permission } from "../permissions/permissions";
+import type { EffectiveAccess } from "../permissions/resolver";
 import { safeNextPath } from "../web/next-path";
 import { extractSignedOAuthQuery } from "../web/oauth-query";
 import type { AdminDeps } from "./deps";
@@ -19,8 +21,9 @@ async function orNull<T>(load: () => Promise<T>): Promise<T | null> {
   }
 }
 
-async function clientLabel(deps: AdminDeps, clientId: string): Promise<string> {
-  return (await orNull(() => deps.clientNames.nameFor(clientId))) ?? clientId;
+/** The client's registered name, else its id. */
+async function clientLabel(clientId: string, lookup: () => Promise<string | null>): Promise<string> {
+  return (await orNull(lookup)) ?? clientId;
 }
 
 export interface SignInPageData {
@@ -42,7 +45,7 @@ export async function signInPage(deps: AdminDeps, url: URL): Promise<SignInPageD
   const clientId = oauthQuery ? new URLSearchParams(oauthQuery).get("client_id") : null;
   const [guildName, clientName] = await Promise.all([
     orNull(async () => (await deps.directory.fetchGuild()).name),
-    clientId ? clientLabel(deps, clientId) : Promise.resolve(null),
+    oauthQuery && clientId ? clientLabel(clientId, () => clientNameBeforeSignIn(deps.auth, clientId, oauthQuery)) : Promise.resolve(null),
   ]);
   return {
     heading: guildName ? `${guildName} の MCP` : PRODUCT_NAME,
@@ -126,7 +129,7 @@ export async function consentPage(deps: AdminDeps, url: URL, headers: Headers): 
     data: {
       endpoint: `${AUTH_BASE_PATH}/oauth2/consent`,
       oauthQuery,
-      clientName: await clientLabel(deps, clientId),
+      clientName: await clientLabel(clientId, () => clientNameForSession(deps.auth, clientId, headers)),
       account: { name: displayName(access.member), username: access.member.username, avatarUrl: access.member.avatarUrl },
       guildName: access.guild.name,
       features: consentPermissions(access).map((permission) => ({ permission, ...FEATURES[permission] })),
@@ -139,14 +142,29 @@ export async function consentPage(deps: AdminDeps, url: URL, headers: Headers): 
  * Ends the browser session. `next` may only return to the sign-in page (the consent
  * page uses it to resume the OAuth flow); anything else goes to the dashboard sign-in.
  */
-export async function signOut(deps: AdminDeps, headers: Headers, next: string): Promise<{ cookies: string[]; location: string }> {
-  let cookies: string[] = [];
+export async function signOut(deps: AdminDeps, headers: Headers, next: string): Promise<{ cookies: ResponseCookie[]; location: string }> {
+  let cookies: ResponseCookie[] = [];
   try {
     const response = await deps.auth.api.signOut({ headers, asResponse: true });
-    cookies = response.headers.getSetCookie();
+    cookies = response.headers.getSetCookie().flatMap(responseCookies);
   } catch (error) {
-    deps.log({ event: "sign_out_failed", error: errorMessage(error) });
+    deps.logError({ event: "sign_out_failed", error: errorMessage(error) });
   }
   const location = next.startsWith(`${SIGN_IN_PATH}?`) ? safeNextPath(next) : `${SIGN_IN_PATH}?next=${encodeURIComponent(DASHBOARD_PATH)}`;
   return { cookies, location };
+}
+
+/** A Set-Cookie of Better Auth in the shape of SvelteKit's `cookies.set` (which encodes the decoded value again). */
+export interface ResponseCookie {
+  name: string;
+  value: string;
+  options: ReturnType<typeof toCookieOptions> & { path: string; httpOnly: boolean; secure: boolean };
+}
+
+function responseCookies(header: string): ResponseCookie[] {
+  return [...parseSetCookieHeader(header)].map(([name, attributes]) => {
+    const options = toCookieOptions(attributes);
+    // Explicit values, or SvelteKit's defaults would add attributes Better Auth did not send.
+    return { name, value: attributes.value, options: { ...options, path: options.path ?? "/", httpOnly: options.httpOnly ?? false, secure: options.secure ?? false } };
+  });
 }

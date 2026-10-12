@@ -20,6 +20,7 @@ const STAFF_THREAD = "500000000000000003";
 let api: FakeDiscordApi;
 let tool: AnyToolDefinition;
 let findMember: AnyToolDefinition;
+let listThreads: AnyToolDefinition;
 let slept: number[];
 
 function principal(roles: string[] = []): Principal {
@@ -79,6 +80,27 @@ beforeEach(() => {
   });
   tool = tools.find((t) => t.name === "discord_search_messages")!;
   findMember = tools.find((t) => t.name === "discord_find_member")!;
+  listThreads = tools.find((t) => t.name === "discord_list_threads")!;
+});
+
+describe("discord_list_threads", () => {
+  const list = async (args: Record<string, unknown>) => listThreads.handler(listThreads.inputSchema.parse(args) as never, { principal: principal() });
+
+  test("passes a valid `before` to Discord as an ISO timestamp", async () => {
+    await list({ channel_id: PUBLIC, before: "2026-10-01T12:34:56.789000+00:00" });
+    await list({ channel_id: PUBLIC, before: "2026-10-01T09:00:00+09:00", limit: 5 });
+    expect(api.archivedQueries).toEqual([
+      { channelId: PUBLIC, before: "2026-10-01T12:34:56.789Z", limit: 50 },
+      { channelId: PUBLIC, before: "2026-10-01T00:00:00.000Z", limit: 5 },
+    ]);
+  });
+
+  test("rejects a `before` that is not an ISO datetime with a time zone", async () => {
+    for (const before of ["yesterday", "2026-10-01", "2026-10-01T00:00:00"]) {
+      await expect(list({ channel_id: PUBLIC, before })).rejects.toThrow('Invalid "before": expected an ISO 8601 datetime with a time zone');
+    }
+    expect(api.archivedQueries).toEqual([]);
+  });
 });
 
 describe("discord_find_member", () => {

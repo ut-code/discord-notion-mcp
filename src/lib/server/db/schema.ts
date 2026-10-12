@@ -1,5 +1,5 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
-import { PERMISSIONS, SUBJECT_TYPES } from "../authz/permissions";
+import { PERMISSIONS, SUBJECT_TYPES } from "../permissions/permissions";
 
 export const grants = sqliteTable(
   "grants",

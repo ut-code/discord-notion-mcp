@@ -1,5 +1,6 @@
 // Local UI preview backed by fake Discord/Notion APIs and an in-memory database.
 // Loaded only by the dev server with PREVIEW=1 (`bun run preview`); production builds drop it.
+import { makeSignature } from "better-auth/crypto";
 import { FakeDiscordApi, GUILD_ID, makeGuild, OWNER_ID, textChannel } from "../../../test/support/fakes";
 import { FakeNotionApi } from "../../../test/support/notion-fakes";
 import { composeServer } from "./compose";
@@ -204,10 +205,8 @@ export async function startPreview(): Promise<Runtime> {
     const userId = authUserIds.get(discordUserId);
     if (!userId) return null;
     const session = await authContext.internalAdapter.createSession(userId);
-    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(session.token)));
-    const value = encodeURIComponent(`${session.token}.${btoa(String.fromCharCode(...signature))}`);
-    return `better-auth.session_token=${value}; Path=/; HttpOnly; SameSite=Lax`;
+    const value = encodeURIComponent(`${session.token}.${await makeSignature(session.token, SECRET)}`);
+    return `${authContext.authCookies.sessionToken.name}=${value}; Path=/; HttpOnly; SameSite=Lax`;
   };
 
   console.log(`preview ready: ${config.publicUrl}/dev`);

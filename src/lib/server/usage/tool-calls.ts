@@ -2,7 +2,7 @@ import { lt } from "drizzle-orm";
 import type { AppDatabase } from "../db/client";
 import { toolCall, type ToolCallErrorKind } from "../db/schema";
 import { errorMessage } from "../lib/errors";
-import type { LogSink } from "../lib/log";
+import type { ErrorSink, EventSink } from "../lib/log";
 
 const ERROR_MAX_LENGTH = 500;
 export const TOOL_CALL_RETENTION_MS = 90 * 24 * 60 * 60_000;
@@ -48,8 +48,8 @@ export interface RetentionOptions {
   store: Pick<ToolCallStore, "deleteBefore">;
   now?: () => number;
   intervalMs?: number;
-  log: LogSink;
-  logError: LogSink;
+  log: EventSink;
+  logError: ErrorSink;
 }
 
 /** Deletes tool calls older than 90 days now and then every 24 hours; returns a stop function. */

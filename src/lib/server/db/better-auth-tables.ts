@@ -27,12 +27,6 @@ export const authSession = sqliteTable("session", {
   createdAt: text("createdAt").notNull(),
 });
 
-export const oauthClient = sqliteTable("oauthClient", {
-  id: text("id").primaryKey(),
-  clientId: text("clientId").notNull(),
-  name: text("name"),
-});
-
 export const oauthRefreshToken = sqliteTable("oauthRefreshToken", {
   id: text("id").primaryKey(),
   userId: text("userId").notNull(),

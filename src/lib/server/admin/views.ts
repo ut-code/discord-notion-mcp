@@ -1,6 +1,6 @@
 import type { LoginUser } from "../auth/users";
-import { PERMISSIONS, type Permission } from "../authz/permissions";
-import { isGuildAdmin, type EffectiveAccess } from "../authz/resolver";
+import { PERMISSIONS, type Permission } from "../permissions/permissions";
+import { isGuildAdmin, type EffectiveAccess } from "../permissions/resolver";
 import type { GrantRow } from "../db/schema";
 import type { GuildInfo, RoleInfo } from "../discord/types";
 import { displayName } from "../lib/display-name";

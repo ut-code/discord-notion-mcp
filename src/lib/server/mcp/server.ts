@@ -1,8 +1,8 @@
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
-import type { EffectiveAccess } from "../authz/resolver";
 import type { ToolCallErrorKind } from "../db/schema";
 import { errorMessage, ToolError } from "../lib/errors";
-import { logError, logEvent, type LogSink } from "../lib/log";
+import { logError, logEvent, type ErrorSink, type ToolCallLogEntry } from "../lib/log";
+import type { EffectiveAccess } from "../permissions/resolver";
 import type { RateLimitDecision } from "../lib/rate-limit";
 import { toolsForPermissions, type AnyToolDefinition, type Principal, type ToolResult } from "./registry";
 
@@ -23,18 +23,8 @@ export interface McpServerDeps {
   /** Usage statistics; a failure here never fails the tool call. */
   record?: (entry: ToolCallLogEntry) => void;
   /** Unexpected tool failures; defaults to stderr. */
-  logError?: LogSink;
+  logError?: ErrorSink;
 }
-
-export type ToolCallLogEntry = {
-  event: "tool_call";
-  discordUserId: string;
-  tool: string;
-  ok: boolean;
-  durationMs: number;
-  errorKind?: ToolCallErrorKind;
-  error?: string;
-};
 
 function toCallToolResult(result: ToolResult): CallToolResult {
   return typeof result === "string" ? { content: [{ type: "text", text: result }] } : result;
@@ -99,14 +89,13 @@ function resultText(result: CallToolResult): string {
 /** Builds a server exposing only the tools the principal may use. */
 export function buildMcpServer(principal: Principal, deps: McpServerDeps): McpServer {
   const permitted = toolsForPermissions(deps.tools, principal.access.permissions);
-  if (permitted.length === 0) {
-    const server = new McpServer(SERVER_INFO, { instructions: NO_PERMISSIONS_INSTRUCTIONS });
-    // McpServer only advertises `tools` once a tool is registered; answer with an empty list instead of "Method not found".
-    server.server.registerCapabilities({ tools: {} });
-    server.server.setRequestHandler("tools/list", () => ({ tools: [] }));
-    return server;
-  }
-  const server = new McpServer(SERVER_INFO);
+  // Declaring `tools` up front installs the tool handlers even when none is registered,
+  // so a caller without permissions gets an empty list instead of "Method not found".
+  // The list is fixed per request, hence no list-changed notifications.
+  const server = new McpServer(SERVER_INFO, {
+    instructions: permitted.length === 0 ? NO_PERMISSIONS_INSTRUCTIONS : undefined,
+    capabilities: { tools: { listChanged: false } },
+  });
   for (const tool of permitted) {
     server.registerTool(
       tool.name,

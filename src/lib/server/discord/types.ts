@@ -1,3 +1,5 @@
+import type { OverwriteType } from "discord-api-types/v10";
+
 export interface RoleInfo {
   id: string;
   name: string;
@@ -34,14 +36,9 @@ export interface MemberInfo {
   avatarUrl: string | null;
 }
 
-export const OverwriteType = {
-  Role: 0,
-  Member: 1,
-} as const;
-
 export interface PermissionOverwrite {
   id: string;
-  type: (typeof OverwriteType)[keyof typeof OverwriteType];
+  type: OverwriteType;
   allow: bigint;
   deny: bigint;
 }

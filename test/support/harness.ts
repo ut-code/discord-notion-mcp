@@ -1,9 +1,9 @@
 import { expect } from "bun:test";
+import { makeSignature } from "better-auth/crypto";
 import { composeServer, type ComposedServer, type ComposeOptions } from "../../src/lib/server/compose";
 import { loadConfig } from "../../src/lib/server/config";
 import { openDatabase } from "../../src/lib/server/db/client";
-import type { LogEntry } from "../../src/lib/server/lib/log";
-import type { ToolCallLogEntry } from "../../src/lib/server/mcp/server";
+import type { ErrorEntry, EventEntry, ToolCallLogEntry } from "../../src/lib/server/lib/log";
 import { extractSignedOAuthQuery } from "../../src/lib/server/web/oauth-query";
 import { FakeDiscordApi, GUILD_ID } from "./fakes";
 import { FakeNotionApi } from "./notion-fakes";
@@ -23,8 +23,8 @@ export interface Harness {
   discord: FakeDiscordApi;
   notion: FakeNotionApi;
   toolLogs: ToolCallLogEntry[];
-  events: LogEntry[];
-  errors: LogEntry[];
+  events: EventEntry[];
+  errors: ErrorEntry[];
   stop(): void;
 }
 
@@ -45,8 +45,8 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   const discord = options.discord ?? new FakeDiscordApi();
   const notion = options.notion ?? new FakeNotionApi();
   const toolLogs: ToolCallLogEntry[] = [];
-  const events: LogEntry[] = [];
-  const errors: LogEntry[] = [];
+  const events: EventEntry[] = [];
+  const errors: ErrorEntry[] = [];
   const config = loadConfig({
     PUBLIC_URL: base,
     BETTER_AUTH_SECRET: SECRET,
@@ -68,17 +68,12 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
   return { base, resource: config.mcpResource, composed, discord, notion, toolLogs, events, errors, stop: () => server.stop(true) };
 }
 
-async function sign(value: string): Promise<string> {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value)));
-  return btoa(String.fromCharCode(...signature));
-}
-
 /** Creates a browser session for an existing Better Auth user and returns its cookie. */
 export async function newSessionCookie(h: Harness, userId: string): Promise<string> {
   const ctx = await h.composed.auth.$context;
   const session = await ctx.internalAdapter.createSession(userId);
-  return `better-auth.session_token=${encodeURIComponent(`${session.token}.${await sign(session.token)}`)}`;
+  const signed = `${session.token}.${await makeSignature(session.token, SECRET)}`;
+  return `${ctx.authCookies.sessionToken.name}=${encodeURIComponent(signed)}`;
 }
 
 /** Simulates a Discord login: user + linked account on first login, then a new session. */

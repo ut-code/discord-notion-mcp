@@ -1,4 +1,4 @@
-import type { Permission } from "../authz/permissions";
+import type { Permission } from "../permissions/permissions";
 import type { NotionAuditOperation } from "../db/schema";
 import { OPERATION_LABELS } from "../notion/changes/attribution";
 

@@ -49,6 +49,7 @@
       {/snippet}
     </BarChart>
   </Chart.Container>
+  <!-- Plain HTML legend: layerchart's `legend` prop is not server-rendered and overlaps the x-axis labels. -->
   <ul class="chart-legend">
     {#each series as entry (entry.key)}
       <li><span class="chart-swatch" style:background={entry.color}></span>{entry.label}</li>

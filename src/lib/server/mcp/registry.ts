@@ -1,7 +1,7 @@
 import type { CallToolResult, ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
-import type { Permission } from "../authz/permissions";
-import type { EffectiveAccess } from "../authz/resolver";
+import type { Permission } from "../permissions/permissions";
+import type { EffectiveAccess } from "../permissions/resolver";
 
 export type MemberAccess = Extract<EffectiveAccess, { isMember: true }>;
 

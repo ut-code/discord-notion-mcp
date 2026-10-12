@@ -254,11 +254,6 @@
 	.account .stack {
 		flex-grow: 1;
 	}
-	.truncate-line {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
 	.main {
 		flex: 1 1 560px;
 		min-width: 0;

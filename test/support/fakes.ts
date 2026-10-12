@@ -146,7 +146,10 @@ export class FakeDiscordApi implements DiscordApi {
     return this.threads;
   }
 
-  async fetchArchivedPublicThreads(): Promise<ArchivedThreadsPage> {
+  archivedQueries: Array<{ channelId: string; before?: string; limit: number }> = [];
+
+  async fetchArchivedPublicThreads(channelId: string, query: { before?: string; limit: number }): Promise<ArchivedThreadsPage> {
+    this.archivedQueries.push({ channelId, ...query });
     return { threads: [], hasMore: false };
   }
 

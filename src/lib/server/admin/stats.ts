@@ -144,8 +144,10 @@ function rangeHref(range: StatsRange): string {
   return range === DEFAULT_RANGE ? STATS_PATH : `${STATS_PATH}?range=${range}`;
 }
 
+const PERCENT = new Intl.NumberFormat("ja-JP", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
 export function formatRate(failures: number, calls: number): string {
-  return calls === 0 ? "—" : `${((failures / calls) * 100).toFixed(1)}%`;
+  return calls === 0 ? "—" : PERCENT.format(failures / calls);
 }
 
 export function formatDuration(ms: number): string {

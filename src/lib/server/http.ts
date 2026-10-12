@@ -1,7 +1,7 @@
 import { AUTH_BASE_PATH, type Auth } from "./auth/auth";
 import { clientIpFromForwardedFor, withClientIp } from "./lib/client-ip";
 import { errorMessage } from "./lib/errors";
-import { logError, type LogSink } from "./lib/log";
+import { logError, type ErrorSink } from "./lib/log";
 
 /** Handles the non-UI routes; null means the request belongs to the UI. */
 export type HttpHandler = (request: Request, socketAddress?: () => string | null) => Promise<Response | null>;
@@ -12,7 +12,7 @@ export interface HttpDeps {
   /** Reverse proxies in front of the server; 0 uses the socket address. */
   trustedProxyCount: number;
   /** Unhandled request errors; defaults to stderr. */
-  logError?: LogSink;
+  logError?: ErrorSink;
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

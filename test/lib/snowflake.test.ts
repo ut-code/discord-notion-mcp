@@ -21,6 +21,24 @@ describe("snowflake <-> datetime", () => {
   test("rejects dates before the Discord epoch", () => {
     expect(() => dateToSnowflake(new Date("2014-12-31T23:59:59Z"))).toThrow();
   });
+
+  test("matches the previous hand-rolled bit arithmetic", () => {
+    const epoch = 1420070400000n;
+    for (const iso of ["2015-01-01T00:00:00.000Z", "2016-04-30T11:18:25.796Z", "2026-10-12T14:03:00.123Z", "2080-01-01T00:00:00.000Z"]) {
+      const ms = BigInt(new Date(iso).getTime());
+      expect(dateToSnowflake(new Date(iso))).toBe(((ms - epoch) << 22n).toString());
+    }
+    // Low 22 bits all set: a Number-based decode would round up into the next millisecond.
+    const id = ((BigInt(Date.parse("2026-10-12T14:03:00.123Z")) - epoch) << 22n) | ((1n << 22n) - 1n);
+    expect(snowflakeToDate(id.toString()).toISOString()).toBe("2026-10-12T14:03:00.123Z");
+  });
+
+  test("compares numerically, also with leading zeros", () => {
+    expect(compareSnowflakes("175928847299117063", "175928847299117064")).toBe(-1);
+    expect(compareSnowflakes("1175928847299117063", "175928847299117063")).toBe(1);
+    expect(compareSnowflakes("0175928847299117063", "175928847299117063")).toBe(0);
+    expect(compareSnowflakes("00999999999999999", "1000000000000000")).toBe(-1);
+  });
 });
 
 describe("parseMessageCursor", () => {

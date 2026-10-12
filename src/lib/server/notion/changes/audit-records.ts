@@ -9,12 +9,17 @@ import type { PageMarkdownUpdate } from "../client/types";
  * whose JSON does not match is refused instead of being acted on blindly.
  */
 
-const contentUpdateSchema = z.object({ old_str: z.string(), new_str: z.string() });
+export const ContentUpdateSchema = z.object({ old_str: z.string(), new_str: z.string() });
+
+/** The parts of the `request` column (the tool arguments) shown for failed content writes, which have no hunks. */
+export const AppendContentRequestSchema = z.object({ content: z.string() });
+/** Entries are checked one by one with ContentUpdateSchema so one malformed edit does not hide the rest. */
+export const EditContentRequestSchema = z.object({ edits: z.array(z.unknown()) });
 
 const pageMarkdownUpdateSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("update_content"),
-    update_content: z.object({ content_updates: z.array(contentUpdateSchema) }),
+    update_content: z.object({ content_updates: z.array(ContentUpdateSchema) }),
   }),
   z.object({
     type: z.literal("insert_content"),

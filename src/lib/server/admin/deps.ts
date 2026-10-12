@@ -1,14 +1,13 @@
 import type { Auth } from "../auth/auth";
-import type { OAuthClientNames } from "../auth/clients";
 import type { DiscordIdentityStore } from "../auth/identity";
 import type { TokenRevocationService } from "../auth/revocation";
 import type { LoginUserStore } from "../auth/users";
-import type { GrantStore } from "../authz/grants";
-import type { PermissionResolver } from "../authz/resolver";
 import type { DiscordApi } from "../discord/api";
 import type { GuildDirectory } from "../discord/directory";
-import type { LogSink } from "../lib/log";
+import type { ErrorSink, EventSink } from "../lib/log";
 import type { NotionAuditService } from "../notion/changes/audit-service";
+import type { GrantStore } from "../permissions/grants";
+import type { PermissionResolver } from "../permissions/resolver";
 import type { UsageStats } from "./stats";
 import type { SubjectResolver } from "./subjects";
 
@@ -25,14 +24,13 @@ export interface AdminDeps {
   subjects: SubjectResolver;
   grants: GrantStore;
   users: LoginUserStore;
-  clientNames: Pick<OAuthClientNames, "nameFor">;
   audit: NotionAuditService;
   /** Usage statistics (tool calls, Notion writes). */
   usage: UsageStats;
   revocation: TokenRevocationService;
   notionEnabled: boolean;
   /** Admin actions. */
-  log: LogSink;
-  /** Lookup failures. */
-  logError: LogSink;
+  log: EventSink;
+  /** Lookup and sign-out failures. */
+  logError: ErrorSink;
 }

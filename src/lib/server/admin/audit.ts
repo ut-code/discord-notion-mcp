@@ -2,7 +2,13 @@ import { dashboardAuditPath, DASHBOARD_PATH } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
-import { ContentSnapshotSchema, UpdatePropertiesSnapshotSchema } from "../notion/changes/audit-records";
+import {
+  AppendContentRequestSchema,
+  ContentSnapshotSchema,
+  ContentUpdateSchema,
+  EditContentRequestSchema,
+  UpdatePropertiesSnapshotSchema,
+} from "../notion/changes/audit-records";
 import type { ContentHunk } from "../notion/content/content-diff";
 import { renderPropertyValue } from "../notion/content/properties";
 import { ADMIN_ONLY, type Viewer } from "./access";
@@ -174,25 +180,18 @@ export function summarySentence(row: NotionAuditRow): string {
   return `${row.discordDisplayName} が ${formatShortJst(row.createdAt)} に${action}。`;
 }
 
-function stringField(record: Record<string, unknown>, key: string): string | null {
-  const value = record[key];
-  return typeof value === "string" ? value : null;
-}
-
 /** Stored hunks; failed writes have none, so the requested change is shown instead. */
 function contentHunks(row: NotionAuditRow): ContentHunk[] {
   const snapshot = ContentSnapshotSchema.safeParse(row.snapshot);
   if (snapshot.success) return snapshot.data.hunks;
   if (row.operation === "append_content") {
-    const content = stringField(row.request, "content");
+    const content = AppendContentRequestSchema.safeParse(row.request).data?.content;
     return content ? [{ before: "", after: content }] : [];
   }
-  const edits = Array.isArray(row.request.edits) ? row.request.edits : [];
+  const edits = EditContentRequestSchema.safeParse(row.request).data?.edits ?? [];
   return edits.flatMap((edit) => {
-    const entry = edit as Record<string, unknown>;
-    const before = stringField(entry, "old_str");
-    const after = stringField(entry, "new_str");
-    return before === null || after === null ? [] : [{ before, after }];
+    const update = ContentUpdateSchema.safeParse(edit);
+    return update.success ? [{ before: update.data.old_str, after: update.data.new_str }] : [];
   });
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { OverwriteType } from "discord-api-types/v10";
 import {
   ADMINISTRATOR,
   ALL_PERMISSIONS,
@@ -9,7 +10,7 @@ import {
   computeBasePermissions,
   computeChannelPermissions,
 } from "../../src/lib/server/discord/permissions";
-import { OverwriteType, type PermissionOverwrite } from "../../src/lib/server/discord/types";
+import type { PermissionOverwrite } from "../../src/lib/server/discord/types";
 import { GUILD_ID, OWNER_ID, makeGuild, makeMember } from "../support/fakes";
 
 const READ = VIEW_CHANNEL | READ_MESSAGE_HISTORY;

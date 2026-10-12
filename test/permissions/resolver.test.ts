@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { GrantStore } from "../../src/lib/server/authz/grants";
-import { PERMISSIONS } from "../../src/lib/server/authz/permissions";
-import { PermissionResolver } from "../../src/lib/server/authz/resolver";
+import { GrantStore } from "../../src/lib/server/permissions/grants";
+import { PERMISSIONS } from "../../src/lib/server/permissions/permissions";
+import { PermissionResolver } from "../../src/lib/server/permissions/resolver";
 import { openDatabase, runAppMigrations } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
 import { ADMINISTRATOR, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";

@@ -1,6 +1,6 @@
 import { grantSubmitLabel } from "../../grant-label";
 import { DASHBOARD_PATH } from "../../paths";
-import { isPermission, PERMISSIONS, type Permission, type SubjectType } from "../authz/permissions";
+import { isPermission, PERMISSIONS, type Permission, type SubjectType } from "../permissions/permissions";
 import type { GuildInfo, RoleInfo } from "../discord/types";
 import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
@@ -178,7 +178,7 @@ async function searchCandidates(deps: AdminDeps, query: string): Promise<{ candi
     const members = await deps.discord.searchMembers(needle, SEARCH_LIMIT);
     return { candidates: members.map(subjectFromMember), error: null };
   } catch (error) {
-    deps.log({ event: "admin_member_search_failed", error: errorMessage(error) });
+    deps.logError({ event: "admin_lookup_failed", lookup: "member_search", error: errorMessage(error) });
     return { candidates: [], error: "メンバー検索に失敗しました。しばらくしてから再試行してください。" };
   }
 }

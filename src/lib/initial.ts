@@ -1,4 +1,7 @@
-/** First character of a name, upper-cased, for avatar and logo tiles. */
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** First user-perceived character of a name (whole emoji / ZWJ sequences), upper-cased, for avatar and logo tiles. */
 export function initialOf(name: string): string {
-  return Array.from(name.trim())[0]?.toUpperCase() ?? "?";
+  const [first] = graphemes.segment(name.trim());
+  return first?.segment.toUpperCase() ?? "?";
 }

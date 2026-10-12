@@ -6,8 +6,10 @@ const config = {
   preprocess: vitePreprocess(),
   kit: {
     adapter: adapter(),
-    // Form posts are checked against PUBLIC_URL in hooks.server.ts; the built-in check
-    // compares against the request URL, which is wrong behind a TLS-terminating proxy.
+    // The built-in origin check runs before any hook and rejects form-urlencoded POSTs
+    // without an Origin header, which MCP clients send to the OAuth token/revoke endpoints.
+    // "*" turns it off; hooks.server.ts lets the API routes through first and then applies
+    // its own Origin check (isCrossOriginWrite in http.ts) to the UI's form posts.
     csrf: { trustedOrigins: ["*"] },
   },
 };

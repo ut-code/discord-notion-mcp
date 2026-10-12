@@ -9,6 +9,17 @@ import type { GuildChannel } from "../api";
 import { canViewChannel } from "../permissions";
 import { byPosition, describeThread, LISTED_CHANNEL_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
+/** Accepts the archive timestamps Discord returns, e.g. "2026-10-01T12:34:56.789000+00:00". */
+const archiveTimestampSchema = z.iso.datetime({ offset: true });
+
+function parseArchiveTimestamp(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (!archiveTimestampSchema.safeParse(value).success) {
+    throw new ToolError('Invalid "before": expected an ISO 8601 datetime with a time zone, e.g. 2026-10-01T00:00:00Z.');
+  }
+  return new Date(value).toISOString();
+}
+
 export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyToolDefinition; listThreads: AnyToolDefinition } {
   const listChannels = defineTool({
     name: "discord_list_channels",
@@ -67,7 +78,7 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
       before: z
         .string()
         .optional()
-        .describe("ISO 8601 timestamp; return archived threads archived before this time (only with channel_id)"),
+        .describe("ISO 8601 datetime with time zone; return threads archived before this time (only with channel_id)"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withDiscordErrors(async (args, principal) => {
@@ -84,12 +95,7 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
       const parent = await deps.channels.find(args.channel_id);
       if (!parent || !canViewChannel(deps.access.permissionsFor(parent, viewer))) throw new NotAccessibleError();
 
-      let before: string | undefined;
-      if (args.before !== undefined) {
-        const date = new Date(args.before);
-        if (Number.isNaN(date.getTime())) throw new ToolError('Invalid "before": expected an ISO 8601 timestamp.');
-        before = date.toISOString();
-      }
+      const before = parseArchiveTimestamp(args.before);
 
       const activeVisible = await deps.access.filterVisibleThreads(
         active.filter((thread) => thread.parent_id === parent.id),

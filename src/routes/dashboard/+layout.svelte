@@ -31,7 +31,7 @@
     <div class="brand">
       <div class="logo" aria-hidden="true">{initialOf(data.viewer.guildName)}</div>
       <div class="stack">
-        <span class="truncate-line text-sm font-semibold">{data.viewer.guildName}</span>
+        <span class="truncate text-sm font-semibold">{data.viewer.guildName}</span>
         <span class="sub">Discord × Notion MCP</span>
       </div>
     </div>
@@ -50,9 +50,9 @@
     <div class="account">
       <AppAvatar name={data.viewer.displayName} url={data.viewer.avatarUrl} />
       <div class="stack">
-        <span class="truncate-line text-sm font-medium">{data.viewer.displayName}</span>
+        <span class="truncate text-sm font-medium">{data.viewer.displayName}</span>
         <span class="sub">
-          <span class="truncate-line inline-block max-w-full align-bottom">@{data.viewer.username}</span> · <span class="whitespace-nowrap">{data.viewer.roleLabel}</span>
+          <span class="truncate inline-block max-w-full align-bottom">@{data.viewer.username}</span> · <span class="whitespace-nowrap">{data.viewer.roleLabel}</span>
         </span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>

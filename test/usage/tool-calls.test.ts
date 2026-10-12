@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { z } from "zod";
-import type { Permission } from "../../src/lib/server/authz/permissions";
 import { openDatabase, runAppMigrations } from "../../src/lib/server/db/client";
 import { toolCall } from "../../src/lib/server/db/schema";
 import { ToolError } from "../../src/lib/server/lib/errors";
-import type { LogEntry } from "../../src/lib/server/lib/log";
+import type { ErrorEntry, EventEntry, ToolCallLogEntry } from "../../src/lib/server/lib/log";
 import { TokenBucketLimiter } from "../../src/lib/server/lib/rate-limit";
 import { defineTool, type Principal } from "../../src/lib/server/mcp/registry";
-import { runTool, type McpServerDeps, type ToolCallLogEntry } from "../../src/lib/server/mcp/server";
+import { runTool, type McpServerDeps } from "../../src/lib/server/mcp/server";
+import type { Permission } from "../../src/lib/server/permissions/permissions";
 import { startToolCallRetention, TOOL_CALL_RETENTION_MS, ToolCallStore } from "../../src/lib/server/usage/tool-calls";
 import { FakeClock, makeGuild, makeMember } from "../support/fakes";
 
@@ -40,7 +40,7 @@ const echo = defineTool({
 
 function serverDeps(store: ToolCallStore, extra: Partial<McpServerDeps> = {}) {
   const logs: ToolCallLogEntry[] = [];
-  const errors: LogEntry[] = [];
+  const errors: ErrorEntry[] = [];
   const deps: McpServerDeps = {
     tools: [echo],
     resolveAccess: async () => access,
@@ -115,7 +115,7 @@ describe("tool call retention", () => {
     add(at(TOOL_CALL_RETENTION_MS - DAY_MS));
     add(at(0));
 
-    const events: LogEntry[] = [];
+    const events: EventEntry[] = [];
     const stop = startToolCallRetention({ store, now: clock.fn, intervalMs: 20, log: (entry) => events.push(entry), logError: () => {} });
     expect(rows().length).toBe(2);
     expect(events).toEqual([{ event: "tool_calls_pruned", deleted: 1 }]);
@@ -131,7 +131,7 @@ describe("tool call retention", () => {
   });
 
   test("a failing prune is logged, not thrown", () => {
-    const errors: LogEntry[] = [];
+    const errors: ErrorEntry[] = [];
     const stop = startToolCallRetention({
       store: {
         deleteBefore: () => {

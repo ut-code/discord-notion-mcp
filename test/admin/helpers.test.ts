@@ -4,19 +4,49 @@ import { grantSubmitLabel } from "../../src/lib/grant-label";
 import { diffLines } from "../../src/lib/server/admin/audit";
 import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue } from "../../src/lib/server/admin/format";
 import { memberAvatarUrl, userAvatarUrl } from "../../src/lib/server/discord/avatar";
+import { initialOf } from "../../src/lib/initial";
 import { safeNextPath } from "../../src/lib/server/web/next-path";
-import { parseSetCookie } from "../../src/lib/server/web/set-cookie";
 
 describe("safeNextPath", () => {
   test("keeps same-origin paths", () => {
     expect(safeNextPath("/dashboard/audit?status=ok")).toBe("/dashboard/audit?status=ok");
     expect(safeNextPath("/")).toBe("/");
+    expect(safeNextPath("/sign-in?client_id=x&sig=a%2Fb#top")).toBe("/sign-in?client_id=x&sig=a%2Fb#top");
+    expect(safeNextPath("/dashboard/%E3%81%82")).toBe("/dashboard/%E3%81%82");
+    expect(safeNextPath("/a//b")).toBe("/a//b");
   });
 
   test("falls back to /dashboard for anything else", () => {
-    for (const value of [undefined, null, "", "dashboard", "//evil.example", "/\\evil.example", "https://evil.example", "/a\\b", "/\u0000x", "/\tx"]) {
+    for (const value of [
+      undefined,
+      null,
+      "",
+      "dashboard",
+      "//evil.example",
+      "///evil.example",
+      "/\\evil.example",
+      "https://evil.example",
+      "javascript:alert(1)",
+      "/a\\b",
+      "/\u0000x",
+      "/\tx",
+      "/\nx",
+      "/\u007fx",
+      " /dashboard",
+    ]) {
       expect(safeNextPath(value)).toBe("/dashboard");
     }
+  });
+});
+
+describe("initialOf", () => {
+  test("takes the first grapheme, upper-cased", () => {
+    expect(initialOf("  kinako")).toBe("K");
+    expect(initialOf("きなこ")).toBe("き");
+    expect(initialOf("👩‍💻 dev")).toBe("👩‍💻");
+    expect(initialOf("🇯🇵 team")).toBe("🇯🇵");
+    expect(initialOf("école")).toBe("É");
+    expect(initialOf("   ")).toBe("?");
   });
 });
 
@@ -72,20 +102,5 @@ describe("form plumbing", () => {
   test("action URLs keep the page query", () => {
     expect(actionUrl(new URL("http://x/dashboard/grants"), "create")).toBe("?/create");
     expect(actionUrl(new URL("http://x/dashboard/grants?filter=admin&/delete"), "create")).toBe("?filter=admin&/create");
-  });
-
-  test("Set-Cookie headers are parsed for the cookie API", () => {
-    expect(parseSetCookie("better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax")).toEqual({
-      name: "better-auth.session_token",
-      value: "",
-      options: { path: "/", maxAge: 0, httpOnly: true, secure: false, sameSite: "lax" },
-    });
-    expect(parseSetCookie("__Secure-a=b%3Dc; Secure; Path=/x; Expires=Wed, 21 Oct 2026 07:28:00 GMT")?.options).toMatchObject({
-      path: "/x",
-      secure: true,
-      expires: new Date("2026-10-21T07:28:00.000Z"),
-    });
-    expect(parseSetCookie("__Secure-a=b%3Dc")?.value).toBe("b%3Dc");
-    expect(parseSetCookie("garbage")).toBeNull();
   });
 });

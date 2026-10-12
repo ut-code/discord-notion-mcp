@@ -2,20 +2,17 @@ import type { AdminDeps } from "./admin/deps";
 import { UsageStats } from "./admin/stats";
 import { SubjectResolver } from "./admin/subjects";
 import { createAuth, type Auth } from "./auth/auth";
-import { OAuthClientNames } from "./auth/clients";
 import { DiscordIdentityStore } from "./auth/identity";
 import { TokenRevocationService } from "./auth/revocation";
 import { LoginUserStore } from "./auth/users";
-import { CachedGuildDirectory } from "./discord/directory";
-import { GrantStore } from "./authz/grants";
-import { PermissionResolver } from "./authz/resolver";
 import type { Config } from "./config";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "./db/client";
 import { ChannelAccess, ChannelDirectory } from "./discord/access";
 import { RestDiscordApi, type DiscordApi } from "./discord/api";
+import { CachedGuildDirectory } from "./discord/directory";
 import { createDiscordTools } from "./discord/tools";
 import { createHttpHandler, type HttpHandler } from "./http";
-import { logError, logEvent, type LogSink } from "./lib/log";
+import { logError, logEvent, type ErrorSink, type EventSink } from "./lib/log";
 import { createMcpEndpoint } from "./mcp/endpoint";
 import type { AnyToolDefinition } from "./mcp/registry";
 import type { McpServerDeps } from "./mcp/server";
@@ -24,6 +21,8 @@ import { NotionAuditService } from "./notion/changes/audit-service";
 import { NotionAuditStore } from "./notion/changes/audit-store";
 import { NotionWriteService } from "./notion/changes/write-service";
 import { createNotionChangeTools, createNotionTools } from "./notion/tools";
+import { GrantStore } from "./permissions/grants";
+import { PermissionResolver } from "./permissions/resolver";
 import { startToolCallRetention, ToolCallStore } from "./usage/tool-calls";
 
 export interface ComposeOptions {
@@ -33,9 +32,9 @@ export interface ComposeOptions {
   database?: DatabaseHandle;
   logToolCall?: McpServerDeps["log"];
   /** Admin actions (grant changes, revocations, reverts) and startup maintenance; defaults to stdout. */
-  logEvent?: LogSink;
+  logEvent?: EventSink;
   /** Unexpected failures (request errors, lookups, tool crashes); defaults to stderr. */
-  logError?: LogSink;
+  logError?: ErrorSink;
   /** Overrides the per-user tool call rate limit (tests). */
   toolRateLimit?: McpServerDeps["rateLimit"];
   /** Overrides usage recording (tests); defaults to the tool_call table. */
@@ -58,7 +57,7 @@ export interface ComposedServer {
   toolCalls: ToolCallStore;
   publicUrl: string;
   /** Unexpected request failures. */
-  logError: LogSink;
+  logError: ErrorSink;
 }
 
 /** Wires every component together and runs both migration sets. */
@@ -116,7 +115,6 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     subjects: new SubjectResolver(directory, discord, reportError),
     grants,
     users: new LoginUserStore(database.db),
-    clientNames: new OAuthClientNames(database.db),
     audit: notionAudit,
     usage: new UsageStats(database.db),
     revocation,

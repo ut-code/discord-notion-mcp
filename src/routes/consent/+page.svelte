@@ -49,7 +49,7 @@
     <div class="flex items-center gap-3 rounded-[10px] border p-3">
       <AppAvatar name={data.account.name} url={data.account.avatarUrl} size="lg" />
       <div class="stack grow">
-        <span class="truncate-line text-sm font-medium">{data.account.name}</span>
+        <span class="truncate text-sm font-medium">{data.account.name}</span>
         <span class="mono">@{data.account.username} · {data.guildName}</span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>

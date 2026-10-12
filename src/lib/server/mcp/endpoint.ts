@@ -1,10 +1,17 @@
 import { requireMcpAuth } from "@better-auth/mcp";
-import { createMcpHandler, type AuthInfo } from "@modelcontextprotocol/server";
+import {
+  bearerAuthChallengeResponse,
+  createMcpHandler,
+  getOAuthProtectedResourceMetadataUrl,
+  OAuthError,
+  OAuthErrorCode,
+  type AuthInfo,
+} from "@modelcontextprotocol/server";
 import type { Auth } from "../auth/auth";
-import type { EffectiveAccess } from "../authz/resolver";
 import { errorMessage } from "../lib/errors";
-import { logError, type LogSink } from "../lib/log";
+import { logError, type ErrorSink } from "../lib/log";
 import { TokenBucketLimiter } from "../lib/rate-limit";
+import type { EffectiveAccess } from "../permissions/resolver";
 import type { AnyToolDefinition, Principal } from "./registry";
 import { buildMcpServer, type McpServerDeps } from "./server";
 
@@ -25,24 +32,21 @@ export interface McpEndpointDeps {
   tools: readonly AnyToolDefinition[];
   log?: McpServerDeps["log"];
   record?: McpServerDeps["record"];
-  logError?: LogSink;
+  logError?: ErrorSink;
   /** Defaults to an in-memory token bucket per Discord user. */
   rateLimit?: McpServerDeps["rateLimit"];
 }
 
 const PRINCIPAL_KEY = "principal";
 
-function jsonRpcError(status: number, message: string, headers?: Record<string, string>): Response {
-  return Response.json({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }, { status, headers });
+function jsonRpcError(status: number, message: string): Response {
+  return Response.json({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }, { status });
 }
 
 /** RFC 6750 invalid_token challenge with the RFC 9728 metadata pointer, so clients re-authorize. */
 function revokedTokenResponse(resource: string): Response {
-  const url = new URL(resource);
-  const metadata = `${url.origin}/.well-known/oauth-protected-resource${url.pathname.replace(/\/$/, "")}`;
-  const description = "The access token has been revoked";
-  return jsonRpcError(401, `${description}. Sign in again.`, {
-    "WWW-Authenticate": `Bearer error="invalid_token", error_description="${description}", resource_metadata="${metadata}"`,
+  return bearerAuthChallengeResponse(new OAuthError(OAuthErrorCode.InvalidToken, "The access token has been revoked. Sign in again."), {
+    resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(new URL(resource)),
   });
 }
 
@@ -91,7 +95,7 @@ export function createMcpEndpoint(deps: McpEndpointDeps): (request: Request) => 
       try {
         access = await deps.resolveAccess(discordUserId);
       } catch (error) {
-        reportError({ event: "access_resolution_failed", discordUserId, error: errorMessage(error) });
+        reportError({ event: "access_resolution_failed", source: "mcp", discordUserId, error: errorMessage(error) });
         return jsonRpcError(503, "Could not verify your Discord server membership right now. Please retry shortly.");
       }
       if (!access.isMember) return jsonRpcError(403, "You are not a member of the Discord server served by this MCP server.");

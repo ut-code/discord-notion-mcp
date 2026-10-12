@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { PERMISSIONS, type Permission } from "../../src/lib/server/authz/permissions";
+import { PERMISSIONS, type Permission } from "../../src/lib/server/permissions/permissions";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "../../src/lib/server/db/client";
 import type { AnyToolDefinition, Principal } from "../../src/lib/server/mcp/registry";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";

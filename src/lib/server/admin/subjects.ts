@@ -5,7 +5,7 @@ import type { GuildInfo, MemberInfo, RoleInfo } from "../discord/types";
 import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
 import { createLimiter } from "../lib/limiter";
-import { logError, type LogSink } from "../lib/log";
+import { logError, type ErrorSink } from "../lib/log";
 
 export interface UserSubject {
   id: string;
@@ -45,7 +45,7 @@ export class SubjectResolver {
   constructor(
     private readonly directory: GuildDirectory,
     private readonly discord: Pick<DiscordApi, "fetchUser">,
-    private readonly logFailure: LogSink = logError,
+    private readonly logFailure: ErrorSink = logError,
   ) {}
 
   async resolveUser(id: string): Promise<UserSubject> {
@@ -55,7 +55,7 @@ export class SubjectResolver {
       const user = await this.discord.fetchUser(id);
       if (user) return { id, displayName: displayName(user), username: user.username, avatarUrl: user.avatarUrl, member: null };
     } catch (error) {
-      this.logFailure({ event: "admin_user_lookup_failed", userId: id, error: errorMessage(error) });
+      this.logFailure({ event: "admin_lookup_failed", lookup: "user", userId: id, error: errorMessage(error) });
     }
     return { id, displayName: null, username: null, avatarUrl: null, member: null };
   }

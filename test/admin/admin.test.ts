@@ -392,6 +392,8 @@ describe("sign-in and sign-out", () => {
     const page = await signInPage(deps, new URL("http://x/sign-in?client_id=x&ba_param=client_id&sig=abc&next=%2Fdashboard%2Fusers"));
     expect(page.callbackURL).toBe("/");
     expect(page.oauthQuery).toBe("client_id=x&ba_param=client_id&sig=abc");
+    // The provider refuses the forged signature, so the client is shown by its id.
+    expect(page.clientName).toBe("x");
   });
 
   test("the sign-in page names the server, and the client only while resuming an OAuth flow", async () => {
@@ -415,7 +417,11 @@ describe("sign-in and sign-out", () => {
     expect((await gate(cookie)).kind).toBe("viewer");
     const result = await signOut(deps, new Headers({ cookie }), "");
     expect(result.location).toBe("/sign-in?next=%2Fdashboard");
-    expect(result.cookies.some((value) => value.startsWith("better-auth.session_token="))).toBe(true);
+    expect(result.cookies).toContainEqual({
+      name: "better-auth.session_token",
+      value: "",
+      options: expect.objectContaining({ path: "/", maxAge: 0, httpOnly: true, secure: false, sameSite: "lax" }),
+    });
     expect((await gate(cookie)).kind).toBe("signed-out");
   });
 
@@ -518,6 +524,7 @@ describe("token revocation", () => {
     expect(rejected.status).toBe(401);
     expect(rejected.headers.get("www-authenticate")).toContain('error="invalid_token"');
     expect(rejected.headers.get("www-authenticate")).toContain(`resource_metadata="${h.base}/.well-known/oauth-protected-resource/mcp"`);
+    expect(rejected.json).toEqual({ error: "invalid_token", error_description: "The access token has been revoked. Sign in again." });
     expect((await refreshTokens(h, clientId, before.refresh_token!)).status).not.toBe(200);
     expect(await h.composed.auth.api.getSession({ headers: new Headers({ cookie: login.cookie }) })).toBeNull();
 

@@ -9,7 +9,7 @@ import { jwt } from "better-auth/plugins";
 import type { Config } from "../config";
 import { CLIENT_IP_HEADER } from "../lib/client-ip";
 import { errorMessage } from "../lib/errors";
-import { logError, logEvent, type LogSink } from "../lib/log";
+import { logError, logEvent, type ErrorSink, type EventSink } from "../lib/log";
 import { CONSENT_PATH, NOT_MEMBER_PATH, SIGN_IN_PATH } from "../../paths";
 import { withInferredApplicationType } from "./registration";
 
@@ -25,17 +25,12 @@ const REFRESH_TOKEN_TTL_SECONDS = 90 * 24 * 60 * 60;
  */
 const FALSE_POSITIVE_TYPE_WARNING = /has a different type in the database\. Expected (string|number)\[\] but got text\.?$/i;
 
-function betterAuthLogger(reportEvent: LogSink, reportError: LogSink) {
+function betterAuthLogger(reportEvent: EventSink, reportError: ErrorSink) {
   return (level: "debug" | "info" | "warn" | "error", message: string, ...args: unknown[]): void => {
     if (level === "warn" && FALSE_POSITIVE_TYPE_WARNING.test(message)) return;
-    const entry = {
-      event: "better_auth",
-      level,
-      message,
-      ...(args.length > 0 ? { details: args.map((arg) => (arg instanceof Error ? arg.message : arg)) } : {}),
-    };
-    if (level === "error") reportError(entry);
-    else reportEvent(entry);
+    const details = args.length > 0 ? { details: args.map((arg) => (arg instanceof Error ? arg.message : arg)) } : {};
+    if (level === "error") reportError({ event: "better_auth", level, message, ...details });
+    else reportEvent({ event: "better_auth", level, message, ...details });
   };
 }
 
@@ -45,8 +40,8 @@ export interface AuthDeps {
   /** Whether the Better Auth user is linked to a Discord account that is a member of the guild. */
   isGuildMember: (userId: string) => Promise<boolean>;
   /** Defaults to stdout / stderr. */
-  logEvent?: LogSink;
-  logError?: LogSink;
+  logEvent?: EventSink;
+  logError?: ErrorSink;
 }
 
 function authOptions({ config, sqlite, isGuildMember, logEvent: reportEvent = logEvent, logError: reportError = logError }: AuthDeps) {
@@ -92,6 +87,8 @@ function authOptions({ config, sqlite, isGuildMember, logEvent: reportEvent = lo
         consentPage: CONSENT_PATH,
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
+        // Lets the sign-in page name the client before a session exists (signed oauth_query required).
+        allowPublicClientPrelogin: true,
         accessTokenExpiresIn: ACCESS_TOKEN_TTL_SECONDS,
         refreshTokenExpiresIn: REFRESH_TOKEN_TTL_SECONDS,
         postLogin: {
