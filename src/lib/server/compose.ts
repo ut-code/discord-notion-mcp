@@ -1,4 +1,5 @@
 import type { AdminDeps } from "./admin/deps";
+import { UsageStats } from "./admin/stats";
 import { SubjectResolver } from "./admin/subjects";
 import { createAuth, type Auth } from "./auth/auth";
 import { OAuthClientNames } from "./auth/clients";
@@ -23,6 +24,7 @@ import { NotionAuditService } from "./notion/changes/audit-service";
 import { NotionAuditStore } from "./notion/changes/audit-store";
 import { NotionWriteService } from "./notion/changes/write-service";
 import { createNotionChangeTools, createNotionTools } from "./notion/tools";
+import { startToolCallRetention, ToolCallStore } from "./usage/tool-calls";
 
 export interface ComposeOptions {
   discordApi?: DiscordApi;
@@ -36,6 +38,8 @@ export interface ComposeOptions {
   logError?: LogSink;
   /** Overrides the per-user tool call rate limit (tests). */
   toolRateLimit?: McpServerDeps["rateLimit"];
+  /** Overrides usage recording (tests); defaults to the tool_call table. */
+  recordToolCall?: McpServerDeps["record"];
 }
 
 export interface ComposedServer {
@@ -51,6 +55,7 @@ export interface ComposedServer {
   /** Audit list/detail always work; revert needs Notion to be enabled. */
   notionAudit: NotionAuditService;
   revocation: TokenRevocationService;
+  toolCalls: ToolCallStore;
   publicUrl: string;
   /** Unexpected request failures. */
   logError: LogSink;
@@ -99,6 +104,8 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   ];
 
   const revocation = new TokenRevocationService(database.db);
+  const toolCalls = new ToolCallStore(database.db);
+  startToolCallRetention({ store: toolCalls, log: reportEvent, logError: reportError });
   const admin: AdminDeps = {
     auth,
     mcpUrl: config.mcpResource,
@@ -111,6 +118,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     users: new LoginUserStore(database.db),
     clientNames: new OAuthClientNames(database.db),
     audit: notionAudit,
+    usage: new UsageStats(database.db),
     revocation,
     notionEnabled: notion !== null,
     log: reportEvent,
@@ -128,6 +136,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
       isTokenRevoked: (userId, issuedAt) => revocation.isRevoked(userId, issuedAt),
       tools,
       log: options.logToolCall,
+      record: options.recordToolCall ?? ((entry) => toolCalls.record(entry)),
       logError: reportError,
       rateLimit: options.toolRateLimit,
     }),
@@ -145,6 +154,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     notionEnabled: notion !== null,
     notionAudit,
     revocation,
+    toolCalls,
     publicUrl: config.publicUrl,
     logError: reportError,
   };

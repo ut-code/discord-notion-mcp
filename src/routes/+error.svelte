@@ -9,7 +9,7 @@
 
   const title = $derived(page.error?.title ?? DEFAULT_TITLES[page.status] ?? "エラー");
   const message = $derived(page.status === 404 && !page.error?.title ? "ページが見つかりません。" : (page.error?.message ?? ""));
-  const suffix = $derived(page.error?.signedIn ? "MCP 管理" : "Discord × Notion MCP");
+  const suffix = $derived(page.error?.signedIn ? "MCP" : "Discord × Notion MCP");
 </script>
 
 <AuthLayout title={`${title} — ${suffix}`}>

@@ -24,6 +24,7 @@ export interface McpEndpointDeps {
   isTokenRevoked: (userId: string, issuedAt: unknown) => boolean;
   tools: readonly AnyToolDefinition[];
   log?: McpServerDeps["log"];
+  record?: McpServerDeps["record"];
   logError?: LogSink;
   /** Defaults to an in-memory token bucket per Discord user. */
   rateLimit?: McpServerDeps["rateLimit"];
@@ -61,6 +62,7 @@ export function createMcpEndpoint(deps: McpEndpointDeps): (request: Request) => 
     resolveAccess: deps.resolveAccess,
     rateLimit: deps.rateLimit ?? new TokenBucketLimiter({ capacity: TOOL_CALL_BURST, refillPerSecond: TOOL_CALLS_PER_SECOND }),
     log: deps.log,
+    record: deps.record,
     logError: reportError,
   };
   const handler = createMcpHandler(

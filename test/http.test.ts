@@ -63,7 +63,7 @@ describe("http handler", () => {
     expect(await (await http(new Request("http://x/api/auth/session")))!.text()).toBe("auth");
     expect((await http(new Request("http://x/api/auth/session", { method: "PUT" })))!.status).toBe(404);
     expect((await http(new Request("http://x/.well-known/x", { method: "POST" })))!.status).toBe(404);
-    expect(await http(new Request("http://x/admin"))).toBeNull();
+    expect(await http(new Request("http://x/dashboard"))).toBeNull();
     expect(await http(new Request("http://x/api/authx"))).toBeNull();
   });
 
@@ -106,12 +106,12 @@ describe("security headers", () => {
 
 describe("CSRF", () => {
   const post = (origin: string | null) =>
-    new Request("http://x/admin/grants?/create", { method: "POST", headers: origin ? { origin } : {} });
+    new Request("http://x/dashboard/grants?/create", { method: "POST", headers: origin ? { origin } : {} });
 
   test("state-changing requests must come from the public origin", () => {
     expect(isCrossOriginWrite(post("http://evil.example"), "https://mcp.example.com")).toBe(true);
     expect(isCrossOriginWrite(post(null), "https://mcp.example.com")).toBe(true);
     expect(isCrossOriginWrite(post("https://mcp.example.com"), "https://mcp.example.com")).toBe(false);
-    expect(isCrossOriginWrite(new Request("http://x/admin"), "https://mcp.example.com")).toBe(false);
+    expect(isCrossOriginWrite(new Request("http://x/dashboard"), "https://mcp.example.com")).toBe(false);
   });
 });

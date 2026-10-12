@@ -1,5 +1,5 @@
 import type { Handle, HandleServerError, ServerInit } from "@sveltejs/kit";
-import { checkAdmin, type AdminGate } from "$lib/server/admin/access";
+import { checkViewer, type ViewerGate } from "$lib/server/admin/access";
 import { isCrossOriginWrite, withSecurityHeaders } from "$lib/server/http";
 import { errorMessage } from "$lib/server/lib/errors";
 import { runtime } from "$lib/server/runtime";
@@ -18,9 +18,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     return withSecurityHeaders(new Response("Forbidden", { status: 403 }));
   }
 
-  let gate: Promise<AdminGate> | undefined;
+  let gate: Promise<ViewerGate> | undefined;
   event.locals.deps = composed.admin;
-  event.locals.admin = () => (gate ??= checkAdmin(composed.admin, event.request.headers));
+  event.locals.viewer = () => (gate ??= checkViewer(composed.admin, event.request.headers));
   event.locals.preview = preview;
   return withSecurityHeaders(await resolve(event));
 };

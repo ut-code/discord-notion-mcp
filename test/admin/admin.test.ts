@@ -1,10 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { checkAdmin, signInRedirect, type AdminView } from "../../src/lib/server/admin/access";
+import { ADMIN_ONLY, checkViewer, signInRedirect, type Viewer } from "../../src/lib/server/admin/access";
 import { auditDetail, auditList, revertAudit } from "../../src/lib/server/admin/audit";
 import type { AdminDeps } from "../../src/lib/server/admin/deps";
 import { createGrant, deleteGrant, grantsPage } from "../../src/lib/server/admin/grants";
 import { overview } from "../../src/lib/server/admin/overview";
-import { consentPage, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/admin/session";
+import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/admin/session";
 import { revokeTokens, usersPage, type UserTableRow } from "../../src/lib/server/admin/users";
 import { ADMINISTRATOR } from "../../src/lib/server/discord/permissions";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
@@ -28,7 +28,7 @@ const OWNER_AVATAR = "https://cdn.discordapp.com/avatars/100000000000000001/0123
 
 let h: Harness;
 let deps: AdminDeps;
-let owner: AdminView;
+let owner: Viewer;
 let ownerUserId = "";
 let writes: NotionWriteService;
 let store: NotionAuditStore;
@@ -42,16 +42,22 @@ function form(fields: Record<string, string>): FormData {
 }
 
 const params = (query = "") => new URLSearchParams(query);
-const gate = (cookie: string) => checkAdmin(deps, new Headers({ cookie }));
+const gate = (cookie: string) => checkViewer(deps, new Headers({ cookie }));
 
-async function adminFor(discordUserId: string): Promise<AdminView> {
+async function viewerFor(discordUserId: string): Promise<Viewer> {
   const result = await gate((await signIn(h, discordUserId)).cookie);
-  if (result.kind !== "admin") throw new Error(`not an admin: ${result.kind}`);
-  return result.admin;
+  if (result.kind !== "viewer") throw new Error(`not a viewer: ${result.kind}`);
+  return result.viewer;
 }
 
-async function userRow(userId: string, query = ""): Promise<UserTableRow> {
-  const row = (await usersPage(deps, params(query))).rows.find((candidate) => candidate.userId === userId);
+async function adminFor(discordUserId: string): Promise<Viewer> {
+  const viewer = await viewerFor(discordUserId);
+  if (!viewer.isAdmin) throw new Error(`not an admin: ${discordUserId}`);
+  return viewer;
+}
+
+async function userRow(userId: string, query = "", viewer: Viewer = owner): Promise<UserTableRow> {
+  const row = (await usersPage(deps, params(query), viewer)).rows.find((candidate) => candidate.userId === userId);
   if (!row) throw new Error(`no row for ${userId}`);
   return row;
 }
@@ -94,19 +100,27 @@ afterAll(() => {
   h?.stop();
 });
 
-describe("admin access control", () => {
+describe("dashboard access control", () => {
   test("without a session the sign-in redirect keeps the requested page", async () => {
-    expect(await checkAdmin(deps, new Headers())).toEqual({ kind: "signed-out" });
-    expect(signInRedirect(new URL("http://x/admin"), "GET")).toBe("/sign-in?next=%2Fadmin");
-    expect(signInRedirect(new URL("http://x/admin/audit?status=ok"), "GET")).toBe(`/sign-in?next=${encodeURIComponent("/admin/audit?status=ok")}`);
-    expect(signInRedirect(new URL("http://x/admin/grants?/create"), "POST")).toBe("/sign-in?next=%2Fadmin");
+    expect(await checkViewer(deps, new Headers())).toEqual({ kind: "signed-out" });
+    expect(signInRedirect(new URL("http://x/dashboard"), "GET")).toBe("/sign-in?next=%2Fdashboard");
+    expect(signInRedirect(new URL("http://x/dashboard/audit?status=ok"), "GET")).toBe(`/sign-in?next=${encodeURIComponent("/dashboard/audit?status=ok")}`);
+    expect(signInRedirect(new URL("http://x/dashboard/grants?/create"), "POST")).toBe("/sign-in?next=%2Fdashboard");
   });
 
-  test("non-admin members and non-members are denied with 403", async () => {
-    const member = await gate((await signIn(h, MEMBER)).cookie);
-    expect(member).toMatchObject({ kind: "denied", status: 403, title: "アクセスできません" });
+  test("non-admin members are read-only viewers; non-members are denied with 403", async () => {
+    const member = await viewerFor(MEMBER);
+    expect(member).toMatchObject({ discordUserId: MEMBER, roleLabel: "メンバー", isAdmin: false, canViewAudit: false });
     const outsider = await gate((await signIn(h, OUTSIDER)).cookie);
-    expect(outsider).toMatchObject({ kind: "denied", status: 403 });
+    expect(outsider).toEqual({ kind: "denied", status: 403, ...NOT_MEMBER });
+  });
+
+  test("the write history needs notion:read (or admin)", async () => {
+    expect((await viewerFor(READER)).canViewAudit).toBe(false);
+    await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    expect(await viewerFor(READER)).toMatchObject({ isAdmin: false, canViewAudit: true });
+    await h.composed.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    expect(owner.canViewAudit).toBe(true);
   });
 
   test("a failing membership check yields 503", async () => {
@@ -119,7 +133,7 @@ describe("admin access control", () => {
     expect((await adminFor(GRANTED_ADMIN)).roleLabel).toBe("管理者");
   });
 
-  test("the sidebar view names the server and the signed-in admin", () => {
+  test("the sidebar view names the server and the signed-in viewer", () => {
     expect(owner).toEqual({
       discordUserId: OWNER_ID,
       displayName: "The Owner",
@@ -127,24 +141,27 @@ describe("admin access control", () => {
       avatarUrl: OWNER_AVATAR,
       roleLabel: "オーナー",
       guildName: "Test Guild",
+      isAdmin: true,
+      canViewAudit: true,
     });
   });
 
   test("an unknown audit id is not found", async () => {
-    expect(await auditDetail(deps, "99999")).toBeNull();
-    expect(await auditDetail(deps, "abc")).toBeNull();
+    expect(await auditDetail(deps, "99999", owner)).toBeNull();
+    expect(await auditDetail(deps, "abc", owner)).toBeNull();
   });
 });
 
 describe("overview", () => {
-  test("shows recent writes and the MCP URL", async () => {
-    const data = await overview(deps);
-    expect(data.mcpUrl).toBe(`${h.base}/mcp`);
-    expect(data.failuresHref).toBe("/admin/audit?status=failed");
+  test("links failures to the write history and offers granting to admins", async () => {
+    const data = await overview(deps, owner);
+    expect(data.failuresHref).toBe("/dashboard/audit?status=failed");
+    expect(data.canGrant).toBe(true);
+    expect(data.recent).toBeArray();
   });
 
   test("the failure count covers unreverted failed writes of the last 7 days", async () => {
-    expect((await overview(deps)).recentFailures).toBe(0);
+    expect((await overview(deps, owner)).recentFailures).toBe(0);
     await store.insert({
       createdAt: new Date(Date.now() - 8 * 24 * 60 * 60_000),
       discordUserId: MEMBER,
@@ -154,13 +171,22 @@ describe("overview", () => {
       status: "failed",
       error: "old failure",
     });
-    expect((await overview(deps)).recentFailures).toBe(0);
+    expect((await overview(deps, owner)).recentFailures).toBe(0);
 
     const page = h.notion.addPage({ title: "Failing page", markdown: "Intro" });
     await expect(writes.editContent(MEMBER_ACTOR, { pageId: page.id, edits: [{ old_str: "missing", new_str: "x" }], request: {} })).rejects.toThrow();
-    const data = await overview(deps);
+    const data = await overview(deps, owner);
     expect(data.recentFailures).toBe(1);
-    expect(data.recent[0]).toMatchObject({ operation: "本文を編集", title: "Failing page", compactBadges: [{ label: "失敗", tone: "destructive" }] });
+    expect(data.recent?.[0]).toMatchObject({ operation: "本文を編集", title: "Failing page", compactBadges: [{ label: "失敗", tone: "destructive" }] });
+  });
+
+  test("members without notion:read see neither failures nor recent writes", async () => {
+    const member = await viewerFor(MEMBER);
+    expect(await overview(deps, member)).toMatchObject({ recentFailures: 0, recent: null, canGrant: false });
+    const reader = { ...member, canViewAudit: true };
+    const data = await overview(deps, reader);
+    expect(data.recentFailures).toBe(1);
+    expect(data.canGrant).toBe(false);
   });
 });
 
@@ -171,8 +197,13 @@ describe("grants", () => {
     const stored = (await h.composed.grants.listGrants()).find((grant) => grant.subjectId === ROLE_MOD);
     expect(stored).toMatchObject({ permission: "discord:read", subjectType: "role", createdBy: OWNER_ID });
     expect(h.events).toContainEqual({ event: "grant_added", permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD, by: OWNER_ID });
-    const row = (await grantsPage(deps, params())).rows.find((candidate) => candidate.key === `role:${ROLE_MOD}:discord:read`);
+    const row = (await grantsPage(deps, params(), owner)).rows.find((candidate) => candidate.key === `role:${ROLE_MOD}:discord:read`);
     expect(row?.subject).toMatchObject({ name: "@Moderator", color: "#3498db", secondary: "ロール" });
+    expect(row?.remove).toMatchObject({
+      label: "@Moderator の Discord 読み取りを削除",
+      menuLabel: "@Moderator の Discord 読み取りの操作",
+      confirm: "@Moderator の Discord 読み取りを削除しますか？",
+    });
 
     expect(await createGrant(deps, form(fields), owner)).toMatchObject({ kind: "warn", message: "ロール「Moderator」には既に「Discord 読み取り」が付与されています。" });
 
@@ -213,17 +244,17 @@ describe("grants", () => {
     for (const subjectId of [MEMBER, STRANGER, "399999999999999999"]) {
       await createGrant(deps, form({ permission: "notion:read", subjectType: "user", subjectId }), owner);
     }
-    const data = await grantsPage(deps, params());
+    const data = await grantsPage(deps, params(), owner);
     const subjects = data.rows.map((row) => row.subject);
     expect(subjects).toContainEqual(expect.objectContaining({ name: "Mina", secondary: "@mina · Moderator", title: `Discord ID ${MEMBER}` }));
     expect(subjects).toContainEqual(expect.objectContaining({ name: "Stranger", secondary: "@stranger · 非メンバー" }));
     expect(subjects).toContainEqual(expect.objectContaining({ name: "399999999999999999", secondary: "不明なユーザー", unknown: true }));
     expect(data.rows.find((row) => row.subject.name === "Mina")?.remove?.label).toBe("Mina の Notion 読み取りを削除");
-    expect(data.form.roles.map((role) => role.name)).toEqual(["Staff", "Moderator", "@everyone"]);
+    expect(data.form?.roles.map((role) => role.name)).toEqual(["Staff", "Moderator", "@everyone"]);
   });
 
   test("implicit admins are listed as locked rows under すべて and 管理者", async () => {
-    const all = await grantsPage(deps, params());
+    const all = await grantsPage(deps, params(), owner);
     expect(all.rows[0]).toMatchObject({
       subject: { name: "@Staff" },
       permissionLabel: "管理者",
@@ -234,20 +265,20 @@ describe("grants", () => {
     expect(all.rows[1]).toMatchObject({ subject: { name: "The Owner" }, grantedBy: "サーバーオーナー", locked: "サーバーオーナーは常に管理者です" });
     expect(all.tabs[0]).toMatchObject({ label: "すべて", count: all.rows.length, active: true });
 
-    const admins = await grantsPage(deps, params("filter=admin"));
+    const admins = await grantsPage(deps, params("filter=admin"), owner);
     expect(admins.rows.some((row) => row.grantedBy === "サーバーオーナー")).toBe(true);
-    expect(admins.tabs.find((tab) => tab.active)).toMatchObject({ href: "/admin/grants?filter=admin", label: "管理者" });
-    const readers = await grantsPage(deps, params("filter=notion%3Aread"));
+    expect(admins.tabs.find((tab) => tab.active)).toMatchObject({ href: "/dashboard/grants?filter=admin", label: "管理者" });
+    const readers = await grantsPage(deps, params("filter=notion%3Aread"), owner);
     expect(readers.rows.some((row) => row.grantedBy === "サーバーオーナー")).toBe(false);
     expect(readers.rows.some((row) => row.subject.secondary === "@mina · Moderator")).toBe(true);
-    expect(readers.form.permission).toBe("notion:read");
+    expect(readers.form?.permission).toBe("notion:read");
   });
 
   test("individual grants already provided by a role or by admin status are flagged", async () => {
     await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
     await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
     await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
-    const badges = (await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []));
+    const badges = (await grantsPage(deps, params(), owner)).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []));
     expect(badges).toContainEqual({
       label: "@Moderator で付与済み",
       tone: "warn",
@@ -258,42 +289,107 @@ describe("grants", () => {
     await h.composed.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
     await h.composed.grants.removeGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
     await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
-    expect((await grantsPage(deps, params())).rows.some((row) => row.redundancy)).toBe(false);
+    expect((await grantsPage(deps, params(), owner)).rows.some((row) => row.redundancy)).toBe(false);
   });
 
   test("member search lists matches; a preselected user labels the submit button", async () => {
-    const search = await grantsPage(deps, params("q=min&permission=notion%3Awrite"));
+    const search = await grantsPage(deps, params("q=min&permission=notion%3Awrite"), owner);
     expect(search.form).toMatchObject({ permission: "notion:write", subjectType: "user", query: "min" });
-    expect(search.form.candidates.map((candidate) => candidate.id)).toContain(MEMBER);
-    expect(search.form.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
+    expect(search.form?.candidates.map((candidate) => candidate.id)).toContain(MEMBER);
+    expect(search.form?.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
       "ページの作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
     );
 
-    const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`));
-    expect(preselected.form.selectedUserId).toBe(MEMBER);
-    expect(preselected.form.candidates[0]?.id).toBe(MEMBER);
-    expect(preselected.form.submitLabel).toBe("Mina に Notion 書き込みを付与");
+    const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`), owner);
+    expect(preselected.form?.selectedUserId).toBe(MEMBER);
+    expect(preselected.form?.candidates[0]?.id).toBe(MEMBER);
+    expect(preselected.form?.submitLabel).toBe("Mina に Notion 書き込みを付与");
 
-    expect((await grantsPage(deps, params(`q=${STRANGER}`))).form.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
-    expect((await grantsPage(deps, params("q=zzz"))).form.candidates).toEqual([]);
-    const plain = await grantsPage(deps, params());
+    expect((await grantsPage(deps, params(`q=${STRANGER}`), owner)).form?.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
+    expect((await grantsPage(deps, params("q=zzz"), owner)).form?.candidates).toEqual([]);
+    const plain = await grantsPage(deps, params(), owner);
     expect(plain.form).toMatchObject({ subjectType: "role", roleId: ROLE_ADMIN, submitLabel: "@Staff に Discord 読み取りを付与" });
+  });
+});
+
+describe("read-only members", () => {
+  test("the grants page lists grants without the form, delete actions or member search", async () => {
+    const member = await viewerFor(MEMBER);
+    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    let searched = false;
+    const data = await grantsPage(
+      { ...deps, discord: { searchMembers: async () => ((searched = true), []), fetchUser: (id) => deps.discord.fetchUser(id) } },
+      params(`q=min&userId=${MEMBER}`),
+      member,
+    );
+    expect(data.form).toBeNull();
+    expect(searched).toBe(false);
+    expect(data.rows.length).toBe((await grantsPage(deps, params(), owner)).rows.length);
+    expect(data.rows.some((row) => row.subject.name === "@Moderator")).toBe(true);
+    expect(data.rows.every((row) => row.remove === null)).toBe(true);
+    await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+  });
+
+  test("the users page hides grant links and revocation, and audit links without notion:read", async () => {
+    const member = { ...(await viewerFor(MEMBER)), canViewAudit: false };
+    const memberLogin = await signIn(h, MEMBER);
+    const data = await usersPage(deps, params(), member);
+    expect(data.canRevoke).toBe(false);
+    expect(data.rows.every((row) => row.grantHref === null && row.auditHref === null)).toBe(true);
+    const asReader = await userRow(memberLogin.userId, "", { ...member, canViewAudit: true });
+    expect(asReader).toMatchObject({ grantHref: null, auditHref: `/dashboard/audit?user=${MEMBER}` });
+  });
+
+  test("audit details offer no revert to non-admins", async () => {
+    const parent = h.notion.addPage({ title: "Read-only root" });
+    const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Viewed", request: {} });
+    const reader = { ...(await viewerFor(MEMBER)), canViewAudit: true };
+    expect((await auditDetail(deps, String(created.auditId), reader))?.revert).toBeNull();
+    expect((await auditDetail(deps, String(created.auditId), owner))?.revert).toEqual({ state: "ready" });
+  });
+
+  test("every mutation is refused with 403 and changes nothing", async () => {
+    const member = { ...(await viewerFor(MEMBER)), canViewAudit: true };
+    const before = await h.composed.grants.listGrants();
+    expect(ADMIN_ONLY).toEqual({ kind: "error", message: "この操作は管理者だけが行えます。", status: 403 });
+
+    expect(await createGrant(deps, form({ permission: "admin", subjectType: "user", subjectId: MEMBER }), member)).toEqual(ADMIN_ONLY);
+    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    const withGrant = await h.composed.grants.listGrants();
+    expect(await deleteGrant(deps, form({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD }), member)).toEqual(ADMIN_ONLY);
+    expect(await h.composed.grants.listGrants()).toEqual(withGrant);
+    await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    expect(await h.composed.grants.listGrants()).toEqual(before);
+
+    const target = await signIn(h, READER);
+    expect(await revokeTokens(deps, target.userId, member)).toEqual(ADMIN_ONLY);
+    expect(await h.composed.auth.api.getSession({ headers: new Headers({ cookie: target.cookie }) })).not.toBeNull();
+    expect((await userRow(target.userId)).revoked).toBeNull();
+
+    const parent = h.notion.addPage({ title: "Protected root" });
+    const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Protected", request: {} });
+    const attempts: Array<Record<string, string>> = [{ confirm: "yes" }, { confirm: "yes", force: "true" }];
+    for (const fields of attempts) {
+      expect(await revertAudit(deps, String(created.auditId), form(fields), member)).toEqual({ ...ADMIN_ONLY, conflict: false });
+    }
+    expect((await h.composed.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
+    expect(h.notion.pages.get(created.pageId)!.in_trash).toBeFalsy();
   });
 });
 
 describe("sign-in and sign-out", () => {
   const callbackOf = async (query: string) => (await signInPage(deps, new URL(`http://x/sign-in${query}`))).callbackURL;
 
-  test("plain sign-in honours a safe next path only", async () => {
-    expect(await callbackOf("?next=%2Fadmin%2Fusers")).toBe("/admin/users");
-    expect(await callbackOf("")).toBe("/admin");
-    expect(await callbackOf("?next=%2F%2Fevil.example")).toBe("/admin");
-    expect(await callbackOf("?next=%2F%5Cevil.example")).toBe("/admin");
-    expect(await callbackOf("?next=https%3A%2F%2Fevil.example")).toBe("/admin");
+  test("plain sign-in honours a safe next path only and lands on the dashboard", async () => {
+    expect(await callbackOf("?next=%2Fdashboard%2Fusers")).toBe("/dashboard/users");
+    expect(await callbackOf("")).toBe("/dashboard");
+    expect(await callbackOf("?next=%2F%2Fevil.example")).toBe("/dashboard");
+    expect(await callbackOf("?next=%2F%5Cevil.example")).toBe("/dashboard");
+    expect(await callbackOf("?next=https%3A%2F%2Fevil.example")).toBe("/dashboard");
   });
 
   test("an OAuth sign-in keeps resuming the authorization flow", async () => {
-    const page = await signInPage(deps, new URL("http://x/sign-in?client_id=x&ba_param=client_id&sig=abc&next=%2Fadmin%2Fusers"));
+    const page = await signInPage(deps, new URL("http://x/sign-in?client_id=x&ba_param=client_id&sig=abc&next=%2Fdashboard%2Fusers"));
     expect(page.callbackURL).toBe("/");
     expect(page.oauthQuery).toBe("client_id=x&ba_param=client_id&sig=abc");
   });
@@ -316,9 +412,9 @@ describe("sign-in and sign-out", () => {
 
   test("sign-out ends the session", async () => {
     const { cookie } = await signIn(h, ADMIN_MEMBER);
-    expect((await gate(cookie)).kind).toBe("admin");
+    expect((await gate(cookie)).kind).toBe("viewer");
     const result = await signOut(deps, new Headers({ cookie }), "");
-    expect(result.location).toBe("/sign-in?next=%2Fadmin");
+    expect(result.location).toBe("/sign-in?next=%2Fdashboard");
     expect(result.cookies.some((value) => value.startsWith("better-auth.session_token="))).toBe(true);
     expect((await gate(cookie)).kind).toBe("signed-out");
   });
@@ -327,8 +423,8 @@ describe("sign-in and sign-out", () => {
     const resume = "/sign-in?client_id=x&ba_param=client_id&sig=abc";
     const out = async (next: string) => (await signOut(deps, new Headers({ cookie: (await signIn(h, READER)).cookie }), next)).location;
     expect(await out(resume)).toBe(resume);
-    expect(await out("https://evil.example/sign-in?x")).toBe("/sign-in?next=%2Fadmin");
-    expect(await out("/admin/users")).toBe("/sign-in?next=%2Fadmin");
+    expect(await out("https://evil.example/sign-in?x")).toBe("/sign-in?next=%2Fdashboard");
+    expect(await out("/dashboard/users")).toBe("/sign-in?next=%2Fdashboard");
   });
 });
 
@@ -366,8 +462,9 @@ describe("users", () => {
     await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
     await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER });
     const member = await signIn(h, MEMBER);
-    const data = await usersPage(deps, params());
+    const data = await usersPage(deps, params(), owner);
     expect(data.total).toBe(data.rows.length);
+    expect(data.canRevoke).toBe(true);
 
     const mina = await userRow(member.userId);
     expect(mina).toMatchObject({ displayName: "Mina", username: "mina", roles: { text: "Moderator", title: null } });
@@ -387,18 +484,18 @@ describe("users", () => {
   test("row menu links grant and audit pages of the Discord account", async () => {
     const member = await signIn(h, MEMBER);
     const row = await userRow(member.userId);
-    expect(row.grantHref).toBe(`/admin/grants?subjectType=user&userId=${MEMBER}`);
-    expect(row.auditHref).toBe(`/admin/audit?user=${MEMBER}`);
+    expect(row.grantHref).toBe(`/dashboard/grants?subjectType=user&userId=${MEMBER}`);
+    expect(row.auditHref).toBe(`/dashboard/audit?user=${MEMBER}`);
   });
 
   test("search filters by name, @username and id", async () => {
     const member = await signIn(h, MEMBER);
     for (const query of ["mina", "@mina", MEMBER]) {
-      const data = await usersPage(deps, params(`q=${encodeURIComponent(query)}`));
+      const data = await usersPage(deps, params(`q=${encodeURIComponent(query)}`), owner);
       expect(data.rows.map((row) => row.userId)).toEqual([member.userId]);
       expect(data.total).toBe(1);
     }
-    const none = await usersPage(deps, params("q=nobody-matches"));
+    const none = await usersPage(deps, params("q=nobody-matches"), owner);
     expect(none.rows).toEqual([]);
     expect(none.empty).toBe("「nobody-matches」に一致するユーザーはいません。");
   });
@@ -442,7 +539,7 @@ describe("audit log", () => {
 
     const list = await auditList(deps, params());
     const row = list.rows.find((candidate) => candidate.id === created.auditId);
-    expect(row).toMatchObject({ href: `/admin/audit/${created.auditId}`, operation: "ページを作成", user: { name: "Mina" }, title: "Listed" });
+    expect(row).toMatchObject({ href: `/dashboard/audit/${created.auditId}`, operation: "ページを作成", user: { name: "Mina" }, title: "Listed" });
     expect(row?.targetUrl).toBeString();
     expect(list.userOptions).toContainEqual({ value: MEMBER, label: "Mina" });
     expect(list.range).toMatch(/^\d+ 件中 1–\d+ 件$/);
@@ -459,7 +556,7 @@ describe("audit log", () => {
   test("details show the change and offer a revert", async () => {
     const parent = h.notion.addPage({ title: "Detail root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Detailed", request: { title: "Detailed" } });
-    const detail = (await auditDetail(deps, String(created.auditId)))!;
+    const detail = (await auditDetail(deps, String(created.auditId), owner))!;
     expect(detail).toMatchObject({ id: created.auditId, operation: "ページを作成", revert: { state: "ready" } });
     expect(detail.summary).toMatch(/^Mina が \d{2}\/\d{2} \d{2}:\d{2} に「Detailed」を作成しました。$/);
     expect(detail.change).toMatchObject({ kind: "created", title: "Detailed" });
@@ -469,7 +566,7 @@ describe("audit log", () => {
   test("content writes render their stored hunks as a diff", async () => {
     const page = h.notion.addPage({ title: "Diff page", markdown: "Intro\nOld line\nOutro" });
     const edited = await writes.editContent(MEMBER_ACTOR, { pageId: page.id, edits: [{ old_str: "Old line", new_str: "New line" }], request: {} });
-    const detail = (await auditDetail(deps, String(edited.auditId)))!;
+    const detail = (await auditDetail(deps, String(edited.auditId), owner))!;
     expect(detail.summary).toEndWith("「Diff page」の本文を編集しました。");
     expect(detail.change).toEqual({
       kind: "diff",
@@ -487,7 +584,7 @@ describe("audit log", () => {
       writes.editContent(MEMBER_ACTOR, { pageId: page.id, edits: [{ old_str: "absent", new_str: "x" }], request: { edits: [{ old_str: "absent", new_str: "x" }] } }),
     ).rejects.toThrow();
     const { rows } = await h.composed.notionAudit.listAudit({ status: "failed", limit: 1 });
-    const detail = (await auditDetail(deps, String(rows[0]!.id)))!;
+    const detail = (await auditDetail(deps, String(rows[0]!.id), owner))!;
     expect(detail.badges).toEqual([{ label: "失敗", tone: "destructive" }]);
     expect(detail.details.error).toMatchObject({ label: "エラー", failed: true });
     expect(detail.details.error?.text).toContain("No matches found");
@@ -514,12 +611,12 @@ describe("audit log", () => {
     expect(h.notion.pages.get(created.pageId)!.in_trash).toBe(true);
     expect(h.events.at(-1)).toMatchObject({ event: "audit_revert", auditId: created.auditId, ok: true, force: false });
 
-    const detail = (await auditDetail(deps, id))!;
-    expect(detail.revert).toEqual({ state: "reverted", revert: { id: row.revertAuditId!, href: `/admin/audit/${row.revertAuditId}` }, note: row.revertNote });
+    const detail = (await auditDetail(deps, id, owner))!;
+    expect(detail.revert).toEqual({ state: "reverted", revert: { id: row.revertAuditId!, href: `/dashboard/audit/${row.revertAuditId}` }, note: row.revertNote });
     expect(detail.badges.map((badge) => badge.label)).toEqual(["成功", "取り消し済み"]);
 
-    const revertRow = (await auditDetail(deps, String(row.revertAuditId)))!;
-    expect(revertRow.change).toEqual({ kind: "revert", of: { id: created.auditId, href: `/admin/audit/${created.auditId}` } });
+    const revertRow = (await auditDetail(deps, String(row.revertAuditId), owner))!;
+    expect(revertRow.change).toEqual({ kind: "revert", of: { id: created.auditId, href: `/dashboard/audit/${created.auditId}` } });
     expect(revertRow.revert).toBeNull();
     expect((await auditList(deps, params("status=reverted"))).rows.some((candidate) => candidate.id === created.auditId)).toBe(true);
     expect(await revertAudit(deps, "99999", form({ confirm: "yes" }), owner)).toEqual({ kind: "not-found" });
@@ -533,7 +630,7 @@ describe("audit log", () => {
 
     expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({ kind: "warn", message: null, conflict: true });
     expect(await revertAudit(deps, id, form({ force: "true" }), owner)).toMatchObject({ kind: "error", conflict: true });
-    expect((await auditDetail(deps, id))!.details.targetUrl).toBeString();
+    expect((await auditDetail(deps, id, owner))!.details.targetUrl).toBeString();
 
     const forced = await revertAudit(deps, id, form({ confirm: "yes", force: "true" }), owner);
     expect(forced.kind).toBe("ok");
@@ -544,7 +641,7 @@ describe("audit log", () => {
   test("without Notion a revert is not offered", async () => {
     const parent = h.notion.addPage({ title: "Disabled root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Kept", request: {} });
-    const detail = await auditDetail({ ...deps, notionEnabled: false }, String(created.auditId));
+    const detail = await auditDetail({ ...deps, notionEnabled: false }, String(created.auditId), owner);
     expect(detail?.revert).toEqual({ state: "disabled" });
   });
 });

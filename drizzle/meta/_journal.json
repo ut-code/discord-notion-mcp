@@ -29,6 +29,13 @@
       "when": 1791796443234,
       "tag": "0003_notion_audit_target_title",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1791812741152,
+      "tag": "0004_tool_call",
+      "breakpoints": true
     }
   ]
 }

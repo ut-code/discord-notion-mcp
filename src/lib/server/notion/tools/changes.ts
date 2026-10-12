@@ -3,13 +3,13 @@ import type { NotionAuditRow } from "../../db/schema";
 import { ToolError } from "../../lib/errors";
 import { snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, type AnyToolDefinition } from "../../mcp/registry";
-import { adminAuditPath } from "../../../paths";
+import { dashboardAuditPath } from "../../../paths";
 import { actorOf } from "../changes/attribution";
 import type { NotionAuditService } from "../changes/audit-service";
 
 export interface NotionChangeToolDeps {
   audit: NotionAuditService;
-  /** Origin of the admin UI, for links in tool messages; relative paths are used when unset. */
+  /** Origin of the dashboard, for links in tool messages; relative paths are used when unset. */
   publicUrl?: string;
 }
 
@@ -29,7 +29,7 @@ function notAccessible(id: number): ToolError {
 /** Lets members review and revert their own Notion writes (admins: anyone's). */
 export function createNotionChangeTools(deps: NotionChangeToolDeps): AnyToolDefinition[] {
   const { audit } = deps;
-  const adminAuditUrl = (id: number) => `${deps.publicUrl ?? ""}${adminAuditPath(id)}`;
+  const auditUrl = (id: number) => `${deps.publicUrl ?? ""}${dashboardAuditPath(id)}`;
 
   const listRecentChanges = defineTool({
     name: "notion_list_recent_changes",
@@ -62,7 +62,7 @@ export function createNotionChangeTools(deps: NotionChangeToolDeps): AnyToolDefi
     name: "notion_revert_change",
     title: "Revert a Notion change",
     description:
-      "Revert one of your Notion writes by its audit id (admins: anyone's). A created page is moved to the trash, appended or edited content is put back to its previous text, previous property values are restored, an archived page is restored. If the page was edited after the change the revert is refused; only an admin can force it, from the admin UI.",
+      "Revert one of your Notion writes by its audit id (admins: anyone's). A created page is moved to the trash, appended or edited content is put back to its previous text, previous property values are restored, an archived page is restored. If the page was edited after the change the revert is refused; only an admin can force it, from the dashboard.",
     permission: "notion:write",
     inputSchema: z.object({
       audit_id: z.number().int().positive().describe("Audit id (see notion_list_recent_changes)"),
@@ -82,7 +82,7 @@ export function createNotionChangeTools(deps: NotionChangeToolDeps): AnyToolDefi
       if (result.ok) return result.message;
       if (result.conflict) {
         throw new ToolError(
-          `Not reverted: the page changed after the write. ${result.message} An admin can force the revert from the admin UI at ${adminAuditUrl(row.id)}.`,
+          `Not reverted: the page changed after the write. ${result.message} An admin can force the revert from the dashboard at ${auditUrl(row.id)}.`,
         );
       }
       throw new ToolError(result.message);

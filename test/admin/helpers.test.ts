@@ -9,13 +9,13 @@ import { parseSetCookie } from "../../src/lib/server/web/set-cookie";
 
 describe("safeNextPath", () => {
   test("keeps same-origin paths", () => {
-    expect(safeNextPath("/admin/audit?status=ok")).toBe("/admin/audit?status=ok");
+    expect(safeNextPath("/dashboard/audit?status=ok")).toBe("/dashboard/audit?status=ok");
     expect(safeNextPath("/")).toBe("/");
   });
 
-  test("falls back to /admin for anything else", () => {
-    for (const value of [undefined, null, "", "admin", "//evil.example", "/\\evil.example", "https://evil.example", "/a\\b", "/\u0000x", "/\tx"]) {
-      expect(safeNextPath(value)).toBe("/admin");
+  test("falls back to /dashboard for anything else", () => {
+    for (const value of [undefined, null, "", "dashboard", "//evil.example", "/\\evil.example", "https://evil.example", "/a\\b", "/\u0000x", "/\tx"]) {
+      expect(safeNextPath(value)).toBe("/dashboard");
     }
   });
 });
@@ -70,8 +70,8 @@ describe("admin formatting", () => {
 
 describe("form plumbing", () => {
   test("action URLs keep the page query", () => {
-    expect(actionUrl(new URL("http://x/admin/grants"), "create")).toBe("?/create");
-    expect(actionUrl(new URL("http://x/admin/grants?filter=admin&/delete"), "create")).toBe("?filter=admin&/create");
+    expect(actionUrl(new URL("http://x/dashboard/grants"), "create")).toBe("?/create");
+    expect(actionUrl(new URL("http://x/dashboard/grants?filter=admin&/delete"), "create")).toBe("?filter=admin&/create");
   });
 
   test("Set-Cookie headers are parsed for the cookie API", () => {

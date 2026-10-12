@@ -1,6 +1,6 @@
-import { ADMIN_PATH } from "../../paths";
+import { DASHBOARD_PATH } from "../../paths";
 
-const DEFAULT_NEXT_PATH = ADMIN_PATH;
+const DEFAULT_NEXT_PATH = DASHBOARD_PATH;
 
 const ORIGIN_PROBE = "http://next.invalid";
 

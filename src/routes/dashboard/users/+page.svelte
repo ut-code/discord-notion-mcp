@@ -7,7 +7,7 @@
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import { Input } from "$lib/components/ui/input";
   import * as Table from "$lib/components/ui/table";
-  import { ADMIN_PATH } from "$lib/paths";
+  import { DASHBOARD_PATH } from "$lib/paths";
   import UserMenu from "./user-menu.svelte";
 
   let { data } = $props();
@@ -16,7 +16,7 @@
 <PageHeader title="ユーザー" />
 
 <div class="footer-row">
-  <form class="search min-w-[220px] flex-[0_1_320px]" method="get" action={`${ADMIN_PATH}/users`} role="search">
+  <form class="search min-w-[220px] flex-[0_1_320px]" method="get" action={`${DASHBOARD_PATH}/users`} role="search">
     <button class="search-icon" type="submit" aria-label="検索"><SearchIcon class="size-4" /></button>
     <label for="user-q" class="sr-only">ユーザーを検索</label>
     <Input id="user-q" name="q" type="search" value={data.query} placeholder="名前・@ユーザー名・ID で検索" autocomplete="off" />
@@ -68,7 +68,7 @@
               {#if row.revoked}<ToneBadge badge={row.revoked} />{/if}
             </span>
           </Table.Cell>
-          <Table.Cell class="actions"><UserMenu {row} {index} /></Table.Cell>
+          <Table.Cell class="actions"><UserMenu {row} {index} canRevoke={data.canRevoke} /></Table.Cell>
         </Table.Row>
       {:else}
         <Table.Row>

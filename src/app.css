@@ -175,6 +175,7 @@
 	}
 	.sidebar {
 		flex: 0 0 240px;
+		max-width: 240px;
 		background: var(--sidebar);
 		border-right: 1px solid var(--sidebar-border);
 		padding: 16px 12px;
@@ -233,6 +234,15 @@
 		color: var(--foreground);
 		font-weight: 500;
 	}
+	.nav-foot {
+		margin: auto 0 -16px;
+		height: 32px;
+		font-size: 13px;
+		color: var(--muted-foreground);
+	}
+	.nav-foot + .account {
+		margin-top: 0;
+	}
 	.account {
 		margin-top: auto;
 		display: flex;
@@ -288,8 +298,12 @@
 		gap: 16px;
 	}
 	@media (max-width: 800px) {
+		.shell {
+			align-content: flex-start;
+		}
 		.sidebar {
 			flex-basis: 100%;
+			max-width: none;
 			flex-direction: row;
 			flex-wrap: wrap;
 			align-items: center;
@@ -309,6 +323,15 @@
 			gap: 6px;
 		}
 		.account .stack {
+			display: none;
+		}
+		.nav-foot {
+			margin: 0;
+			width: 32px;
+			padding: 0;
+			justify-content: center;
+		}
+		.nav-foot-label {
 			display: none;
 		}
 		.nav-list {
@@ -602,6 +625,74 @@
 		color: var(--foreground);
 		user-select: all;
 	}
+	.code-wrap {
+		white-space: normal;
+		overflow-wrap: break-word;
+		line-height: 1.5;
+	}
+	/* Stats page */
+	.stat-tiles {
+		margin: 0;
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 16px;
+	}
+	.stat-tile {
+		padding: 16px 20px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.stat-tile dt {
+		font-size: 13px;
+		color: var(--muted-foreground);
+	}
+	.stat-tile dd {
+		margin: 0;
+		font-size: 24px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.2;
+	}
+	.stat-col {
+		flex: 1 1 420px;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+	@media (max-width: 640px) {
+		.stat-tiles {
+			gap: 8px;
+		}
+		.stat-tile {
+			padding: 12px;
+		}
+		.stat-tile dd {
+			font-size: 18px;
+		}
+	}
+	.chart-legend {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 4px 16px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 12px;
+		color: var(--text-4);
+	}
+	.chart-legend li {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.chart-swatch {
+		width: 10px;
+		height: 10px;
+		border-radius: 2px;
+		flex-shrink: 0;
+	}
 	.diff {
 		font: 13px/1.7 var(--font-mono);
 		padding: 12px 0;
@@ -729,6 +820,29 @@
 	width: 100%;
 	padding-left: 34px;
 }
+/* LayerChart's server output drops the container's `position: relative`. */
+.stacked-bars .lc-root-container {
+	position: relative;
+}
+/* Server-rendered chart (before hydration or without JavaScript): scale the fixed-size SVG. */
+.stacked-bars.ssr .lc-root-container,
+.stacked-bars.ssr .lc-tooltip-context,
+.stacked-bars.ssr .lc-tooltip-context-container {
+	position: relative !important;
+	inset: auto !important;
+	width: 100% !important;
+	height: auto !important;
+}
+.stacked-bars.ssr svg.lc-layout-svg {
+	position: static;
+	display: block;
+	width: 100%;
+	height: auto;
+}
+.stacked-bars.ssr svg.lc-layout-svg ~ svg.lc-layout-svg {
+	position: absolute;
+	inset: 0;
+}
 .data-table th {
 	font-weight: 500;
 	color: var(--muted-foreground);
@@ -780,6 +894,10 @@
 .data-table td.muted {
 	color: var(--muted-foreground);
 }
+.data-table .num {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
 @media (max-width: 640px) {
 	.table-wrap:has(.data-table),
 	.table-wrap [data-slot="table-container"] {
@@ -825,5 +943,13 @@
 	.data-table td.empty {
 		flex-basis: 100%;
 		padding: 12px 0;
+	}
+	.data-table td.num {
+		text-align: left;
+	}
+	.data-table td[data-label]::before {
+		content: attr(data-label) " ";
+		color: var(--muted-foreground);
+		font-size: 12px;
 	}
 }

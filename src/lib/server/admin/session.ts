@@ -1,4 +1,4 @@
-import { ADMIN_PATH, SIGN_IN_ERROR_PATH, SIGN_IN_PATH } from "../../paths";
+import { DASHBOARD_PATH, SIGN_IN_ERROR_PATH, SIGN_IN_PATH } from "../../paths";
 import { AUTH_BASE_PATH } from "../auth/auth";
 import { PERMISSIONS, type Permission } from "../authz/permissions";
 import type { EffectiveAccess } from "../authz/resolver";
@@ -137,7 +137,7 @@ export async function consentPage(deps: AdminDeps, url: URL, headers: Headers): 
 
 /**
  * Ends the browser session. `next` may only return to the sign-in page (the consent
- * page uses it to resume the OAuth flow); anything else goes to the admin sign-in.
+ * page uses it to resume the OAuth flow); anything else goes to the dashboard sign-in.
  */
 export async function signOut(deps: AdminDeps, headers: Headers, next: string): Promise<{ cookies: string[]; location: string }> {
   let cookies: string[] = [];
@@ -145,8 +145,8 @@ export async function signOut(deps: AdminDeps, headers: Headers, next: string): 
     const response = await deps.auth.api.signOut({ headers, asResponse: true });
     cookies = response.headers.getSetCookie();
   } catch (error) {
-    deps.log({ event: "admin_sign_out_failed", error: errorMessage(error) });
+    deps.log({ event: "sign_out_failed", error: errorMessage(error) });
   }
-  const location = next.startsWith(`${SIGN_IN_PATH}?`) ? safeNextPath(next) : `${SIGN_IN_PATH}?next=${encodeURIComponent(ADMIN_PATH)}`;
+  const location = next.startsWith(`${SIGN_IN_PATH}?`) ? safeNextPath(next) : `${SIGN_IN_PATH}?next=${encodeURIComponent(DASHBOARD_PATH)}`;
   return { cookies, location };
 }

@@ -8,6 +8,8 @@ export interface ActionResult {
   kind: "ok" | "warn" | "error";
   /** Null when the page itself explains the outcome. */
   message: string | null;
+  /** HTTP status of a failed action; 400 when unset. */
+  status?: 403;
 }
 
 export function pageParam(value: string | null | undefined): number {

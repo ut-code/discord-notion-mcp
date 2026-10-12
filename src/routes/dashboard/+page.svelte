@@ -1,23 +1,24 @@
 <script lang="ts">
   import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
   import PlusIcon from "@lucide/svelte/icons/plus";
-  import CopyButton from "$lib/components/app/copy-button.svelte";
   import PageHeader from "$lib/components/app/page-header.svelte";
   import StatusBadges from "$lib/components/app/status-badges.svelte";
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
-  import { ADMIN_PATH } from "$lib/paths";
+  import { DASHBOARD_PATH } from "$lib/paths";
 
   let { data } = $props();
 </script>
 
 <PageHeader title="概要">
   {#snippet action()}
-    <Button variant="outline" href={`${ADMIN_PATH}/grants`}>
-      <PlusIcon />
-      権限を付与
-    </Button>
+    {#if data.canGrant}
+      <Button variant="outline" href={`${DASHBOARD_PATH}/grants`}>
+        <PlusIcon />
+        権限を付与
+      </Button>
+    {/if}
   {/snippet}
 </PageHeader>
 
@@ -29,11 +30,11 @@
   </div>
 {/if}
 
-<div class="columns columns-tight">
-  <section class="panel panel-clip col-main" aria-labelledby="recent-heading">
+{#if data.recent}
+  <section class="panel panel-clip" aria-labelledby="recent-heading">
     <div class="panel-head panel-head-lg">
       <h2 id="recent-heading">最近の書き込み</h2>
-      <Button variant="outline" size="sm" href={`${ADMIN_PATH}/audit`}>すべて見る</Button>
+      <Button variant="outline" size="sm" href={`${DASHBOARD_PATH}/audit`}>すべて見る</Button>
     </div>
     <Table.Root class="data-table">
       <Table.Header>
@@ -62,15 +63,4 @@
       </Table.Body>
     </Table.Root>
   </section>
-
-  <div class="col-side basis-[300px]">
-    <section class="panel panel-pad gap-3" aria-labelledby="url-heading">
-      <h2 id="url-heading">接続 URL</h2>
-      <p class="sub text-[13px]">Claude Code / Codex に登録する MCP エンドポイント。</p>
-      <div class="flex items-center gap-2">
-        <code class="code-box">{data.mcpUrl}</code>
-        <CopyButton text={data.mcpUrl} label="URL をコピー" />
-      </div>
-    </section>
-  </div>
-</div>
+{/if}

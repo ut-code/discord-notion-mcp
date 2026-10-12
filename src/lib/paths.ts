@@ -4,8 +4,10 @@ export const SIGN_IN_ERROR_PATH = "/sign-in/error";
 export const SIGN_OUT_PATH = "/sign-out";
 export const CONSENT_PATH = "/consent";
 export const NOT_MEMBER_PATH = "/not-member";
-export const ADMIN_PATH = "/admin";
+/** Public page explaining how to register the MCP server in a client. */
+export const CONNECT_PATH = "/";
+export const DASHBOARD_PATH = "/dashboard";
 
-export function adminAuditPath(auditId: number): string {
-  return `${ADMIN_PATH}/audit/${auditId}`;
+export function dashboardAuditPath(auditId: number): string {
+  return `${DASHBOARD_PATH}/audit/${auditId}`;
 }

@@ -9,12 +9,13 @@ import type { DiscordApi } from "../discord/api";
 import type { GuildDirectory } from "../discord/directory";
 import type { LogSink } from "../lib/log";
 import type { NotionAuditService } from "../notion/changes/audit-service";
+import type { UsageStats } from "./stats";
 import type { SubjectResolver } from "./subjects";
 
 /** Everything the browser-facing pages (admin UI, sign-in, consent) read or change. */
 export interface AdminDeps {
   auth: Auth;
-  /** Shown on the overview for registering MCP clients. */
+  /** Shown on the connection page for registering MCP clients. */
   mcpUrl: string;
   identity: Pick<DiscordIdentityStore, "discordUserIdForUser">;
   resolver: Pick<PermissionResolver, "resolve">;
@@ -26,6 +27,8 @@ export interface AdminDeps {
   users: LoginUserStore;
   clientNames: Pick<OAuthClientNames, "nameFor">;
   audit: NotionAuditService;
+  /** Usage statistics (tool calls, Notion writes). */
+  usage: UsageStats;
   revocation: TokenRevocationService;
   notionEnabled: boolean;
   /** Admin actions. */

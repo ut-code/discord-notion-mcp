@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { consentPage } from "../src/lib/server/admin/session";
+import { toolCall } from "../src/lib/server/db/schema";
+import { NO_PERMISSIONS_INSTRUCTIONS } from "../src/lib/server/mcp/server";
 import { extractSignedOAuthQuery } from "../src/lib/server/web/oauth-query";
 import { GUILD_ID, makeGuild, makeMember, message, textChannel } from "./support/fakes";
 import {
@@ -98,6 +100,7 @@ describe("OAuth + MCP end to end", () => {
     expect(init.status).toBe(200);
     expect(init.json.result.protocolVersion).toBe("2025-06-18");
     expect(init.json.result.capabilities.tools).toBeDefined();
+    expect(init.json.result.instructions).toBe(NO_PERMISSIONS_INSTRUCTIONS);
 
     const list = await mcpCall(accessToken, { jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
     expect(list.status).toBe(200);
@@ -106,6 +109,15 @@ describe("OAuth + MCP end to end", () => {
 
   test("granting discord:read exposes the Discord tools, filtered by channel visibility", async () => {
     await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER_ID });
+
+    const init = await mcpCall(accessToken, {
+      jsonrpc: "2.0",
+      id: 2,
+      method: "initialize",
+      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "0" } },
+    });
+    expect(init.json.result.serverInfo.name).toBe("discord-notion-mcp");
+    expect(init.json.result.instructions).toBeUndefined();
 
     const list = await mcpCall(accessToken, { jsonrpc: "2.0", id: 3, method: "tools/list", params: {} });
     const names = (list.json.result.tools as Array<{ name: string }>).map((tool) => tool.name).sort();
@@ -151,6 +163,12 @@ describe("OAuth + MCP end to end", () => {
       ["discord_list_channels", true, MEMBER_ID],
       ["discord_read_messages", false, MEMBER_ID],
       ["discord_read_messages", true, MEMBER_ID],
+    ]);
+    const recorded = h.composed.database.db.select().from(toolCall).orderBy(toolCall.id).all();
+    expect(recorded.map((row) => [row.tool, row.ok, row.errorKind, row.discordUserId])).toEqual([
+      ["discord_list_channels", true, null, MEMBER_ID],
+      ["discord_read_messages", false, "error", MEMBER_ID],
+      ["discord_read_messages", true, null, MEMBER_ID],
     ]);
   });
 

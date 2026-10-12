@@ -70,6 +70,33 @@ export const notionAudit = sqliteTable(
 export type NotionAuditRow = typeof notionAudit.$inferSelect;
 export type NewNotionAuditRow = typeof notionAudit.$inferInsert;
 
+export const TOOL_CALL_ERROR_KINDS = ["error", "rate_limited"] as const;
+export type ToolCallErrorKind = (typeof TOOL_CALL_ERROR_KINDS)[number];
+
+/** One row per MCP tool call, for usage statistics; arguments are never stored. */
+export const toolCall = sqliteTable(
+  "tool_call",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .notNull()
+      .$defaultFn(() => new Date()),
+    discordUserId: text("discord_user_id").notNull(),
+    tool: text("tool").notNull(),
+    ok: integer("ok", { mode: "boolean" }).notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    errorKind: text("error_kind", { enum: TOOL_CALL_ERROR_KINDS }),
+    error: text("error"),
+  },
+  (table) => [
+    index("tool_call_created_at_idx").on(table.createdAt),
+    index("tool_call_user_created_at_idx").on(table.discordUserId, table.createdAt),
+  ],
+);
+
+export type ToolCallRow = typeof toolCall.$inferSelect;
+export type NewToolCallRow = typeof toolCall.$inferInsert;
+
 /** Access tokens (JWTs) of a Better Auth user issued at or before `revokedAt` are rejected. */
 export const tokenRevocation = sqliteTable("token_revocation", {
   userId: text("user_id").primaryKey(),

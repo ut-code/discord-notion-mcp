@@ -5,7 +5,7 @@
 </script>
 
 <svelte:head>
-  <title>{title} — MCP 管理</title>
+  <title>{title} — MCP</title>
 </svelte:head>
 
 <header class="page-head">

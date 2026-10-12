@@ -1,8 +1,8 @@
-import { ADMIN_PATH } from "../../paths";
+import { DASHBOARD_PATH } from "../../paths";
 import type { LoginUser } from "../auth/users";
 import { errorMessage } from "../lib/errors";
 import { createLimiter } from "../lib/limiter";
-import type { AdminView } from "./access";
+import { ADMIN_ONLY, type Viewer } from "./access";
 import { auditListHref } from "./audit";
 import type { BadgeView } from "./badges";
 import type { AdminDeps } from "./deps";
@@ -12,7 +12,7 @@ import { pageParam, type ActionResult } from "./shared";
 import { buildUserRow, matchesUserQuery, type UserRowView } from "./views";
 
 export const USERS_PAGE_SIZE = 50;
-const USERS_PATH = `${ADMIN_PATH}/users`;
+const USERS_PATH = `${DASHBOARD_PATH}/users`;
 /** Searching users filters resolved rows in memory; logins beyond this are not searched. */
 const USER_SEARCH_SCAN_LIMIT = 1000;
 const VISIBLE_ROLES = 2;
@@ -30,13 +30,15 @@ export interface UserTableRow {
   permissions: Array<BadgeView & { individual: boolean }>;
   lastLogin: string;
   revoked: BadgeView | null;
-  /** Row menu links; null without a linked Discord account. */
+  /** Row menu links; null without a linked Discord account or when the viewer cannot open the page. */
   grantHref: string | null;
   auditHref: string | null;
 }
 
 export interface UsersPageData {
   rows: UserTableRow[];
+  /** Admins only. */
+  canRevoke: boolean;
   query: string;
   total: number;
   prevHref: string | null;
@@ -80,7 +82,7 @@ function wasRevokedSinceLogin(user: LoginUser): boolean {
   return user.revokedAt !== null && (user.lastLoginAt === null || user.revokedAt >= user.lastLoginAt);
 }
 
-export function userTableRow(row: UserRowView): UserTableRow {
+export function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">): UserTableRow {
   const discordUserId = row.user.discordUserId;
   return {
     userId: row.user.userId,
@@ -92,12 +94,12 @@ export function userTableRow(row: UserRowView): UserTableRow {
     permissions: permissionBadges(row),
     lastLogin: formatShortJst(row.user.lastLoginAt),
     revoked: wasRevokedSinceLogin(row.user) ? { label: "失効済み", tone: "secondary", title: `${formatJst(row.user.revokedAt)} に失効` } : null,
-    grantHref: discordUserId ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
-    auditHref: discordUserId ? auditListHref({ user: discordUserId }) : null,
+    grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
+    auditHref: discordUserId && viewer.canViewAudit ? auditListHref({ user: discordUserId }) : null,
   };
 }
 
-export async function usersPage(deps: AdminDeps, params: URLSearchParams): Promise<UsersPageData> {
+export async function usersPage(deps: AdminDeps, params: URLSearchParams, viewer: Viewer): Promise<UsersPageData> {
   const query = params.get("q")?.trim() ?? "";
   const page = pageParam(params.get("page"));
   const offset = (page - 1) * USERS_PAGE_SIZE;
@@ -127,7 +129,8 @@ export async function usersPage(deps: AdminDeps, params: URLSearchParams): Promi
   }
   const hasNext = offset + rows.length < total;
   return {
-    rows: rows.map(userTableRow),
+    rows: rows.map((row) => userTableRow(row, viewer)),
+    canRevoke: viewer.isAdmin,
     query,
     total,
     prevHref: page > 1 ? usersHref(query, page - 1) : null,
@@ -136,7 +139,8 @@ export async function usersPage(deps: AdminDeps, params: URLSearchParams): Promi
   };
 }
 
-export async function revokeTokens(deps: AdminDeps, userId: string, actor: AdminView): Promise<ActionResult> {
+export async function revokeTokens(deps: AdminDeps, userId: string, actor: Viewer): Promise<ActionResult> {
+  if (!actor.isAdmin) return ADMIN_ONLY;
   const user = userId ? await deps.users.find(userId) : null;
   if (!user) return { kind: "error", message: "ユーザーが見つかりません。" };
   const result = deps.revocation.revoke(user.userId);

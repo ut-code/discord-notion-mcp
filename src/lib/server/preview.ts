@@ -13,6 +13,7 @@ import { NotionAuditStore } from "./notion/changes/audit-store";
 import { NotionWriteService } from "./notion/changes/write-service";
 import { createNotionTools } from "./notion/tools";
 import type { Runtime } from "./runtime";
+import type { ToolCallStore } from "./usage/tool-calls";
 
 export interface PreviewUser {
   id: string;
@@ -40,6 +41,77 @@ const people: MemberInfo[] = [
   { userId: "300000000000000003", roles: [ROLE_MEMBER], nick: null, username: "sato", globalName: null, avatarUrl: null },
   { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
 ];
+
+const PREVIEW_TOOLS: Array<[tool: string, weight: number, durationMs: number]> = [
+  ["discord_read_messages", 30, 420],
+  ["discord_search_messages", 18, 900],
+  ["notion_search", 16, 650],
+  ["notion_get_page", 14, 380],
+  ["discord_list_channels", 8, 120],
+  ["notion_query_database", 6, 1200],
+  ["notion_edit_content", 4, 1600],
+  ["notion_create_page", 3, 1400],
+  ["discord_get_message", 3, 200],
+];
+
+/** Sample usage over the last 30 days: [discordUserId, calls per active day, active-day probability]. */
+const PREVIEW_USAGE: Array<[string, number, number]> = [
+  [OWNER_ID, 6, 0.6],
+  ["300000000000000001", 14, 0.85],
+  ["300000000000000002", 8, 0.7],
+  ["300000000000000003", 3, 0.4],
+  ["300000000000000004", 2, 0.3],
+];
+
+function seedToolCalls(store: ToolCallStore, now = Date.now()): void {
+  // Deterministic pseudo-random numbers so every preview looks the same.
+  let seed = 42;
+  const random = () => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed / 2_147_483_648;
+  };
+  const totalWeight = PREVIEW_TOOLS.reduce((sum, [, weight]) => sum + weight, 0);
+  const pickTool = () => {
+    let roll = random() * totalWeight;
+    for (const entry of PREVIEW_TOOLS) {
+      roll -= entry[1];
+      if (roll <= 0) return entry;
+    }
+    return PREVIEW_TOOLS[0]!;
+  };
+  for (let daysAgo = 29; daysAgo >= 0; daysAgo--) {
+    const weekend = new Date(now - daysAgo * 86_400_000).getDay() % 6 === 0;
+    for (const [discordUserId, perDay, activeChance] of PREVIEW_USAGE) {
+      if (random() > (weekend ? activeChance / 3 : activeChance)) continue;
+      const calls = Math.max(1, Math.round(perDay * (0.5 + random())));
+      for (let i = 0; i < calls; i++) {
+        const [tool, , durationMs] = pickTool();
+        const createdAt = new Date(now - daysAgo * 86_400_000 - Math.floor(random() * 10 * 3_600_000));
+        const failed = random() < 0.05;
+        store.record({
+          discordUserId,
+          tool,
+          createdAt,
+          ok: !failed,
+          durationMs: Math.round(durationMs * (0.6 + random() * 0.8)),
+          ...(failed ? { errorKind: "error" as const, error: "Channel not found or not accessible." } : {}),
+        });
+      }
+    }
+  }
+  // A burst that hit the per-user rate limit.
+  for (let i = 0; i < 6; i++) {
+    store.record({
+      discordUserId: "300000000000000001",
+      tool: "discord_read_messages",
+      createdAt: new Date(now - 4 * 86_400_000 + i * 1000),
+      ok: false,
+      durationMs: 0,
+      errorKind: "rate_limited",
+      error: "Rate limit exceeded; retry in 1 s.",
+    });
+  }
+}
 
 export async function startPreview(): Promise<Runtime> {
   const port = Number(process.env.PORT ?? 3920);
@@ -126,6 +198,7 @@ export async function startPreview(): Promise<Runtime> {
     await composed.notionAudit.revert(editId, { actorDiscordUserId: OWNER_ID, actorDisplayName: "きなこもち", actorUsername: "kinako" });
   }
   await run("notion_archive_page", { page: notion.addPage({ title: "古いメモ" }).id }, tanaka);
+  seedToolCalls(composed.toolCalls);
 
   const sessionCookie = async (discordUserId: string): Promise<string | null> => {
     const userId = authUserIds.get(discordUserId);

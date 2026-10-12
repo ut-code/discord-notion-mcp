@@ -110,7 +110,7 @@ describe("notion_revert_change", () => {
     expect(listed).toContain(`reverts #${ids.alice}`);
   });
 
-  test("a conflict is refused and points to the admin UI; the tool cannot force", async () => {
+  test("a conflict is refused and points to the dashboard; the tool cannot force", async () => {
     const parent = api.addPage({ title: "P", markdown: "Intro" });
     const appended = await writes.appendContent(actorFor(ALICE), { pageId: parent.id, content: "mine", request: {} });
     api.setMarkdown(parent.id, "Intro\nmine\nlater edit");
@@ -121,13 +121,13 @@ describe("notion_revert_change", () => {
       expect((error as Error).message).toContain("Not reverted: the page changed after the write.");
       expect((error as Error).message).toContain("content changed after audit");
       expect((error as Error).message).toContain(
-        `An admin can force the revert from the admin UI at ${PUBLIC_URL}/admin/audit/${appended.auditId}.`,
+        `An admin can force the revert from the dashboard at ${PUBLIC_URL}/dashboard/audit/${appended.auditId}.`,
       );
     }
     expect(api.markdown.get(parent.id)).toBe("Intro\nmine\nlater edit");
   });
 
-  test("without a public URL the admin UI link is a path", async () => {
+  test("without a public URL the dashboard link is a path", async () => {
     const store = new NotionAuditStore(database.db);
     const [, revert] = createNotionChangeTools({ audit: new NotionAuditService(store, api) });
     const parent = api.addPage({ title: "P", markdown: "Intro" });
@@ -136,13 +136,13 @@ describe("notion_revert_change", () => {
     const error = await revert!.handler(revert!.inputSchema.parse({ audit_id: appended.auditId }) as never, { principal: principalFor(ALICE) }).catch(
       (e: Error) => e,
     );
-    expect((error as Error).message).toContain(`admin UI at /admin/audit/${appended.auditId}.`);
+    expect((error as Error).message).toContain(`dashboard at /dashboard/audit/${appended.auditId}.`);
   });
 
   test("the revert tool has no force option and says forcing is admin-UI only", () => {
     const revert = tools.get("notion_revert_change")!;
     expect(Object.keys(revert.inputSchema.shape)).toEqual(["audit_id"]);
-    expect(revert.description).toContain("only an admin can force it, from the admin UI");
+    expect(revert.description).toContain("only an admin can force it, from the dashboard");
     expect(tools.get("notion_list_recent_changes")!.annotations?.readOnlyHint).toBe(true);
   });
 });

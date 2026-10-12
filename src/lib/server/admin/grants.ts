@@ -1,10 +1,10 @@
 import { grantSubmitLabel } from "../../grant-label";
-import { ADMIN_PATH } from "../../paths";
+import { DASHBOARD_PATH } from "../../paths";
 import { isPermission, PERMISSIONS, type Permission, type SubjectType } from "../authz/permissions";
 import type { GuildInfo, RoleInfo } from "../discord/types";
 import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
-import type { AdminView } from "./access";
+import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
 import type { AdminDeps } from "./deps";
 import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle } from "./format";
@@ -12,7 +12,7 @@ import { formString, type ActionResult } from "./shared";
 import { grantableRoles, heldRoles, subjectFromMember, type UserSubject } from "./subjects";
 import { buildGrantRows, type GrantRowView, type Redundancy } from "./views";
 
-export const GRANTS_PATH = `${ADMIN_PATH}/grants`;
+export const GRANTS_PATH = `${DASHBOARD_PATH}/grants`;
 const SEARCH_LIMIT = 10;
 
 export interface SubjectView {
@@ -38,7 +38,8 @@ export interface GrantTableRow {
   grantedAt: string;
   /** Tooltip of a row that cannot be deleted here. */
   locked: string | null;
-  remove: { permission: Permission; subjectType: SubjectType; subjectId: string; label: string } | null;
+  /** Null for locked rows and for non-admin viewers. */
+  remove: { permission: Permission; subjectType: SubjectType; subjectId: string; label: string; menuLabel: string; confirm: string } | null;
 }
 
 export interface CandidateView {
@@ -66,7 +67,8 @@ export interface GrantsPageData {
   filter: Permission | null;
   tabs: Array<{ label: string; count: number | null; href: string; active: boolean }>;
   rows: GrantTableRow[];
-  form: GrantFormView;
+  /** Admins only. */
+  form: GrantFormView | null;
 }
 
 function rolesText(guild: GuildInfo, user: UserSubject): string {
@@ -154,7 +156,14 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
     grantedBy: row.createdBy ? (row.createdBy.displayName ?? row.createdBy.id) : "—",
     grantedAt: formatDateJst(grant.createdAt),
     locked: null,
-    remove: { permission: grant.permission, subjectType: grant.subjectType, subjectId: grant.subjectId, label: `${subjectLabel} の ${label}を削除` },
+    remove: {
+      permission: grant.permission,
+      subjectType: grant.subjectType,
+      subjectId: grant.subjectId,
+      label: `${subjectLabel} の ${label}を削除`,
+      menuLabel: `${subjectLabel} の ${label}の操作`,
+      confirm: `${subjectLabel} の ${label}を削除しますか？`,
+    },
   };
 }
 
@@ -174,19 +183,14 @@ async function searchCandidates(deps: AdminDeps, query: string): Promise<{ candi
   }
 }
 
-/** Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId`. */
-export async function grantsPage(deps: AdminDeps, params: URLSearchParams): Promise<GrantsPageData> {
+/** Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId` (admins only). */
+export async function grantsPage(deps: AdminDeps, params: URLSearchParams, viewer: Viewer): Promise<GrantsPageData> {
   const [guild, grants] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants()]);
   const filterParam = params.get("filter") ?? "";
   const filter = isPermission(filterParam) ? filterParam : null;
-  const permissionParam = params.get("permission") ?? "";
-  const query = params.get("q")?.trim() ?? "";
+  const query = viewer.isAdmin ? (params.get("q")?.trim() ?? "") : "";
   const userParam = params.get("userId")?.trim() ?? "";
-  const selectedUserId = isSnowflake(userParam) ? userParam : null;
-  const typeParam = params.get("subjectType");
-  const subjectType: SubjectType = typeParam === "role" || typeParam === "user" ? typeParam : query || selectedUserId ? "user" : "role";
-  const roles = grantableRoles(guild);
-  const roleParam = params.get("roleId") ?? "";
+  const selectedUserId = viewer.isAdmin && isSnowflake(userParam) ? userParam : null;
 
   const userIds = grants.flatMap((grant) => [
     ...(grant.subjectType === "user" ? [grant.subjectId] : []),
@@ -196,13 +200,42 @@ export async function grantsPage(deps: AdminDeps, params: URLSearchParams): Prom
     deps.subjects.resolveUsers([...userIds, guild.ownerId, ...(selectedUserId ? [selectedUserId] : [])]),
     query ? searchCandidates(deps, query) : Promise.resolve({ candidates: [], error: null }),
   ]);
-  const selected = selectedUserId ? users.get(selectedUserId) : undefined;
-  const candidates =
-    selected?.displayName && !search.candidates.some((candidate) => candidate.id === selected.id) ? [selected, ...search.candidates] : search.candidates;
 
   const owner = users.get(guild.ownerId) ?? (await deps.subjects.resolveUser(guild.ownerId));
   const allRows = buildGrantRows(guild, grants, users, owner);
   const visible = filter ? allRows.filter((row) => row.permission === filter) : allRows;
+  const rows = visible.map((row) => tableRow(guild, row));
+
+  return {
+    filter,
+    tabs: [null, ...PERMISSIONS].map((value) => ({
+      label: value ? PERMISSION_LABELS[value] : "すべて",
+      count: value ? null : allRows.length,
+      href: value ? `${GRANTS_PATH}?filter=${encodeURIComponent(value)}` : GRANTS_PATH,
+      active: filter === value,
+    })),
+    rows: viewer.isAdmin ? rows : rows.map((row) => ({ ...row, remove: null })),
+    form: viewer.isAdmin ? grantForm(guild, params, filter, { query, selectedUserId, users, search }) : null,
+  };
+}
+
+interface FormLookups {
+  query: string;
+  selectedUserId: string | null;
+  users: ReadonlyMap<string, UserSubject>;
+  search: { candidates: UserSubject[]; error: string | null };
+}
+
+function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission | null, lookups: FormLookups): GrantFormView {
+  const { query, selectedUserId, users, search } = lookups;
+  const permissionParam = params.get("permission") ?? "";
+  const typeParam = params.get("subjectType");
+  const subjectType: SubjectType = typeParam === "role" || typeParam === "user" ? typeParam : query || selectedUserId ? "user" : "role";
+  const roles = grantableRoles(guild);
+  const roleParam = params.get("roleId") ?? "";
+  const selected = selectedUserId ? users.get(selectedUserId) : undefined;
+  const candidates =
+    selected?.displayName && !search.candidates.some((candidate) => candidate.id === selected.id) ? [selected, ...search.candidates] : search.candidates;
 
   const permission = isPermission(permissionParam) ? permissionParam : (filter ?? "discord:read");
   const role = roles.find((candidate) => candidate.id === roleParam) ?? roles[0];
@@ -217,26 +250,16 @@ export async function grantsPage(deps: AdminDeps, params: URLSearchParams): Prom
   const target = subjectType === "role" ? (role ? roleHandle(role.name) : null) : selectedName;
 
   return {
-    filter,
-    tabs: [null, ...PERMISSIONS].map((value) => ({
-      label: value ? PERMISSION_LABELS[value] : "すべて",
-      count: value ? null : allRows.length,
-      href: value ? `${GRANTS_PATH}?filter=${encodeURIComponent(value)}` : GRANTS_PATH,
-      active: filter === value,
-    })),
-    rows: visible.map((row) => tableRow(guild, row)),
-    form: {
-      permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
-      permission,
-      subjectType,
-      roles: roles.map((candidate) => ({ id: candidate.id, name: candidate.name, handle: roleHandle(candidate.name) })),
-      roleId: role?.id ?? "",
-      query,
-      candidates: candidateViews,
-      selectedUserId,
-      searchError: search.error,
-      submitLabel: grantSubmitLabel(PERMISSION_LABELS[permission], target),
-    },
+    permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
+    permission,
+    subjectType,
+    roles: roles.map((candidate) => ({ id: candidate.id, name: candidate.name, handle: roleHandle(candidate.name) })),
+    roleId: role?.id ?? "",
+    query,
+    candidates: candidateViews,
+    selectedUserId,
+    searchError: search.error,
+    submitLabel: grantSubmitLabel(PERMISSION_LABELS[permission], target),
   };
 }
 
@@ -261,7 +284,8 @@ async function parseGrantForm(deps: AdminDeps, body: FormData): Promise<ParsedGr
   return { ok: true, form: { permission, subjectType, subjectId, role, label: role ? `ロール「${role.name}」` : `ロール ${subjectId}` } };
 }
 
-export async function createGrant(deps: AdminDeps, body: FormData, actor: AdminView): Promise<ActionResult> {
+export async function createGrant(deps: AdminDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
+  if (!actor.isAdmin) return ADMIN_ONLY;
   const parsed = await parseGrantForm(deps, body);
   if (!parsed.ok) return { kind: "error", message: parsed.message };
   const { form } = parsed;
@@ -275,7 +299,8 @@ export async function createGrant(deps: AdminDeps, body: FormData, actor: AdminV
   return { kind: "ok", message: `${form.label}に「${PERMISSION_LABELS[form.permission]}」を付与しました。` };
 }
 
-export async function deleteGrant(deps: AdminDeps, body: FormData, actor: AdminView): Promise<ActionResult> {
+export async function deleteGrant(deps: AdminDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
+  if (!actor.isAdmin) return ADMIN_ONLY;
   const parsed = await parseGrantForm(deps, body);
   if (!parsed.ok) return { kind: "error", message: parsed.message };
   const { form } = parsed;

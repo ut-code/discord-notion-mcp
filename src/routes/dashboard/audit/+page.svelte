@@ -10,7 +10,7 @@
   import { Button } from "$lib/components/ui/button";
   import * as NativeSelect from "$lib/components/ui/native-select";
   import * as Table from "$lib/components/ui/table";
-  import { ADMIN_PATH } from "$lib/paths";
+  import { DASHBOARD_PATH } from "$lib/paths";
 
   let { data } = $props();
 </script>
@@ -18,7 +18,7 @@
 <PageHeader title="Notion 書き込み履歴" />
 <ActionFeedback result={data.error ? { kind: "error", message: data.error } : null} />
 
-<form class="flex flex-wrap items-center gap-2" method="get" action={`${ADMIN_PATH}/audit`}>
+<form class="flex flex-wrap items-center gap-2" method="get" action={`${DASHBOARD_PATH}/audit`}>
   <label for="filter-user" class="sr-only">ユーザー</label>
   <NativeSelect.Root id="filter-user" name="user" value={data.filters.user}>
     <option value="">すべてのユーザー</option>
@@ -41,7 +41,7 @@
     {/each}
   </NativeSelect.Root>
   <Button type="submit" variant="outline">絞り込む</Button>
-  <Button variant="ghost" class="text-text-4" href={`${ADMIN_PATH}/audit`}>リセット</Button>
+  <Button variant="ghost" class="text-text-4" href={`${DASHBOARD_PATH}/audit`}>リセット</Button>
 </form>
 
 <div class="table-wrap">

@@ -1,11 +1,11 @@
-import { adminAuditPath, ADMIN_PATH } from "../../paths";
+import { dashboardAuditPath, DASHBOARD_PATH } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
 import { ContentSnapshotSchema, UpdatePropertiesSnapshotSchema } from "../notion/changes/audit-records";
 import type { ContentHunk } from "../notion/content/content-diff";
 import { renderPropertyValue } from "../notion/content/properties";
-import type { AdminView } from "./access";
+import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
 import type { AdminDeps } from "./deps";
 import {
@@ -32,7 +32,7 @@ export function auditListHref(filters: AuditFilters, page = 1): string {
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
-  return query ? `${ADMIN_PATH}/audit?${query}` : `${ADMIN_PATH}/audit`;
+  return query ? `${DASHBOARD_PATH}/audit?${query}` : `${DASHBOARD_PATH}/audit`;
 }
 
 /** Title recorded with the write; older rows fall back to the requested title or a generic label. */
@@ -71,7 +71,7 @@ export interface AuditRowView {
 export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> = new Map()): AuditRowView {
   return {
     id: row.id,
-    href: adminAuditPath(row.id),
+    href: dashboardAuditPath(row.id),
     createdAt: formatShortJst(row.createdAt),
     user: { id: row.discordUserId, name: row.discordDisplayName, avatarUrl: avatars.get(row.discordUserId) ?? null },
     operation: AUDIT_OPERATION_LABELS[row.operation],
@@ -246,7 +246,7 @@ function changeView(row: NotionAuditRow): ChangeView {
     case "archive_page":
       return { kind: "archived" };
     case "revert":
-      return { kind: "revert", of: row.revertOfAuditId !== null ? { id: row.revertOfAuditId, href: adminAuditPath(row.revertOfAuditId) } : null };
+      return { kind: "revert", of: row.revertOfAuditId !== null ? { id: row.revertOfAuditId, href: dashboardAuditPath(row.revertOfAuditId) } : null };
   }
 }
 
@@ -271,7 +271,7 @@ export interface AuditDetailData {
     comment: { kind: "error"; text: string } | { kind: "posted" } | { kind: "none" };
     error: { label: string; text: string; failed: boolean } | null;
   };
-  /** Null when the row cannot be reverted (failed writes, reverts). */
+  /** Null when the row cannot be reverted (failed writes, reverts) and for non-admin viewers. */
   revert: RevertView | null;
 }
 
@@ -279,18 +279,18 @@ export function parseAuditId(raw: string): number | null {
   return /^\d{1,15}$/.test(raw) ? Number(raw) : null;
 }
 
-export async function auditDetail(deps: AdminDeps, idParam: string): Promise<AuditDetailData | null> {
+export async function auditDetail(deps: AdminDeps, idParam: string, viewer: Pick<Viewer, "isAdmin">): Promise<AuditDetailData | null> {
   const id = parseAuditId(idParam);
   const row = id === null ? null : await deps.audit.getAudit(id);
   if (!row) return null;
   const avatars = await deps.subjects.memberAvatars([row.discordUserId]);
-  const revertible = row.operation !== "revert" && row.status === "ok";
+  const revertible = viewer.isAdmin && row.operation !== "revert" && row.status === "ok";
   let revert: RevertView | null = null;
   if (revertible) {
     if (row.revertedAt) {
       revert = {
         state: "reverted",
-        revert: row.revertAuditId !== null ? { id: row.revertAuditId, href: adminAuditPath(row.revertAuditId) } : null,
+        revert: row.revertAuditId !== null ? { id: row.revertAuditId, href: dashboardAuditPath(row.revertAuditId) } : null,
         note: row.revertNote,
       };
     } else {
@@ -320,7 +320,8 @@ export async function auditDetail(deps: AdminDeps, idParam: string): Promise<Aud
 /** `conflict` asks the page to offer a forced revert (the page changed after the write). */
 export type RevertActionResult = { kind: "not-found" } | (ActionResult & { conflict: boolean });
 
-export async function revertAudit(deps: AdminDeps, idParam: string, form: FormData, actor: AdminView): Promise<RevertActionResult> {
+export async function revertAudit(deps: AdminDeps, idParam: string, form: FormData, actor: Viewer): Promise<RevertActionResult> {
+  if (!actor.isAdmin) return { ...ADMIN_ONLY, conflict: false };
   const id = parseAuditId(idParam);
   if (id === null || !(await deps.audit.getAudit(id))) return { kind: "not-found" };
   const force = formString(form, "force") === "true";

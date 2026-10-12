@@ -5,7 +5,7 @@
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
   import ExternalLink from "$lib/components/app/external-link.svelte";
   import StatusBadges from "$lib/components/app/status-badges.svelte";
-  import { ADMIN_PATH } from "$lib/paths";
+  import { DASHBOARD_PATH } from "$lib/paths";
   import RevertCard from "./revert-card.svelte";
 
   let { data, form } = $props();
@@ -15,11 +15,11 @@
 </script>
 
 <svelte:head>
-  <title>#{data.id} {data.operation} — MCP 管理</title>
+  <title>#{data.id} {data.operation} — MCP</title>
 </svelte:head>
 
 <div class="stack gap-3">
-  <a class="text-text-4 hover:text-foreground inline-flex items-center gap-1.5 self-start text-[13px] no-underline" href={`${ADMIN_PATH}/audit`}>
+  <a class="text-text-4 hover:text-foreground inline-flex items-center gap-1.5 self-start text-[13px] no-underline" href={`${DASHBOARD_PATH}/audit`}>
     <ChevronLeftIcon class="size-3.5" />
     書き込み履歴
   </a>
