@@ -1,0 +1,350 @@
+import { adminAuditPath, ADMIN_PATH } from "../../paths";
+import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
+import { errorMessage } from "../lib/errors";
+import { isSnowflake } from "../lib/snowflake";
+import { ContentSnapshotSchema, UpdatePropertiesSnapshotSchema } from "../notion/changes/audit-records";
+import type { ContentHunk } from "../notion/content/content-diff";
+import { renderPropertyValue } from "../notion/content/properties";
+import type { AdminView } from "./access";
+import type { BadgeView } from "./badges";
+import type { AdminDeps } from "./deps";
+import {
+  AUDIT_OPERATION_LABELS,
+  AUDIT_STATUS_FILTERS,
+  formatJst,
+  formatShortJst,
+  isAuditStatusFilter,
+  renderRequestedPropertyValue,
+  type AuditStatusFilter,
+} from "./format";
+import { formString, pageParam, type ActionResult, type Option } from "./shared";
+
+export const AUDIT_PAGE_SIZE = 50;
+
+export interface AuditFilters {
+  user?: string;
+  operation?: string;
+  status?: AuditStatusFilter;
+}
+
+export function auditListHref(filters: AuditFilters, page = 1): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return query ? `${ADMIN_PATH}/audit?${query}` : `${ADMIN_PATH}/audit`;
+}
+
+/** Title recorded with the write; older rows fall back to the requested title or a generic label. */
+export function auditTitle(row: NotionAuditRow): string {
+  if (row.targetTitle) return row.targetTitle;
+  const requested = row.operation === "create_page" ? row.request.title : undefined;
+  return typeof requested === "string" && requested ? requested : "Notion ページ";
+}
+
+/** `compact` shows one badge (a reverted write reads 取り消し済み); otherwise 成功 + 取り消し済み. */
+export function statusBadges(row: NotionAuditRow, compact = false): BadgeView[] {
+  if (row.status === "failed") return [{ label: "失敗", tone: "destructive" }];
+  if (row.status === "pending") return [{ label: "処理中", tone: "secondary" }];
+  if (!row.revertedAt) return [{ label: "成功", tone: "success" }];
+  if (compact) return [{ label: "取り消し済み", tone: "secondary" }];
+  return [
+    { label: "成功", tone: "success" },
+    { label: "取り消し済み", tone: "secondary" },
+  ];
+}
+
+export interface AuditRowView {
+  id: number;
+  href: string;
+  createdAt: string;
+  user: { id: string; name: string; avatarUrl: string | null };
+  operation: string;
+  /** Source row of a revert. */
+  revertOf: number | null;
+  title: string;
+  targetUrl: string | null;
+  badges: BadgeView[];
+  compactBadges: BadgeView[];
+}
+
+export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> = new Map()): AuditRowView {
+  return {
+    id: row.id,
+    href: adminAuditPath(row.id),
+    createdAt: formatShortJst(row.createdAt),
+    user: { id: row.discordUserId, name: row.discordDisplayName, avatarUrl: avatars.get(row.discordUserId) ?? null },
+    operation: AUDIT_OPERATION_LABELS[row.operation],
+    revertOf: row.revertOfAuditId,
+    title: auditTitle(row),
+    targetUrl: row.targetUrl,
+    badges: statusBadges(row),
+    compactBadges: statusBadges(row, true),
+  };
+}
+
+export interface AuditListData {
+  rows: AuditRowView[];
+  total: number;
+  /** "N 件中 a–b 件"; null when empty. */
+  range: string | null;
+  prevHref: string | null;
+  nextHref: string | null;
+  filters: { user: string; operation: string; status: string };
+  userOptions: Option[];
+  operationOptions: Option[];
+  statusOptions: Option[];
+  /** Shown when the user filter is not a Discord id. */
+  error: string | null;
+}
+
+export async function auditList(deps: AdminDeps, params: URLSearchParams): Promise<AuditListData> {
+  const filters: AuditFilters = {};
+  let error: string | null = null;
+  const user = params.get("user")?.trim();
+  if (user) {
+    if (isSnowflake(user)) filters.user = user;
+    else error = "ユーザー ID は Discord の数値 ID で指定してください。";
+  }
+  const operation = params.get("operation");
+  if (operation && (NOTION_AUDIT_OPERATIONS as readonly string[]).includes(operation)) filters.operation = operation;
+  const status = params.get("status") ?? undefined;
+  if (isAuditStatusFilter(status)) filters.status = status;
+
+  const page = pageParam(params.get("page"));
+  const [{ rows, total }, actors] = await Promise.all([
+    deps.audit.listAudit({
+      limit: AUDIT_PAGE_SIZE,
+      offset: (page - 1) * AUDIT_PAGE_SIZE,
+      discordUserId: filters.user,
+      operation: filters.operation as NotionAuditOperation | undefined,
+      status: filters.status === "ok" || filters.status === "failed" ? filters.status : undefined,
+      reverted: filters.status === "reverted" ? true : undefined,
+    }),
+    deps.audit.listActors(),
+  ]);
+  const avatars = await deps.subjects.memberAvatars(rows.map((row) => row.discordUserId));
+  const first = (page - 1) * AUDIT_PAGE_SIZE + 1;
+  const last = first + rows.length - 1;
+  // Keep a filtered user selectable even when it has no rows any more.
+  const userOptions = actors.map((actor) => ({ value: actor.discordUserId, label: actor.displayName }));
+  if (filters.user && !userOptions.some((option) => option.value === filters.user)) {
+    userOptions.push({ value: filters.user, label: filters.user });
+  }
+  return {
+    rows: rows.map((row) => auditRowView(row, avatars)),
+    total,
+    range: total > 0 ? `${total} 件中 ${first}–${last} 件` : null,
+    prevHref: page > 1 ? auditListHref(filters, page - 1) : null,
+    nextHref: last < total ? auditListHref(filters, page + 1) : null,
+    filters: { user: filters.user ?? "", operation: filters.operation ?? "", status: filters.status ?? "" },
+    userOptions,
+    operationOptions: NOTION_AUDIT_OPERATIONS.map((value) => ({ value, label: AUDIT_OPERATION_LABELS[value] })),
+    statusOptions: (Object.keys(AUDIT_STATUS_FILTERS) as AuditStatusFilter[]).map((value) => ({ value, label: AUDIT_STATUS_FILTERS[value] })),
+    error,
+  };
+}
+
+const DONE: Record<NotionAuditOperation, (title: string, row: NotionAuditRow) => string> = {
+  create_page: (t) => `「${t}」を作成しました`,
+  append_content: (t) => `「${t}」に内容を追記しました`,
+  edit_content: (t) => `「${t}」の本文を編集しました`,
+  update_properties: (t) => `「${t}」のプロパティを更新しました`,
+  archive_page: (t) => `「${t}」をアーカイブしました`,
+  revert: (t, row) => `「${t}」への #${row.revertOfAuditId ?? "?"} の変更を取り消しました`,
+};
+
+const FAILED: Record<NotionAuditOperation, (title: string, row: NotionAuditRow) => string> = {
+  create_page: (t) => `「${t}」の作成に失敗しました`,
+  append_content: (t) => `「${t}」への追記に失敗しました`,
+  edit_content: (t) => `「${t}」の本文の編集に失敗しました`,
+  update_properties: (t) => `「${t}」のプロパティの更新に失敗しました`,
+  archive_page: (t) => `「${t}」のアーカイブに失敗しました`,
+  revert: (t, row) => `「${t}」への #${row.revertOfAuditId ?? "?"} の変更の取り消しに失敗しました`,
+};
+
+export function summarySentence(row: NotionAuditRow): string {
+  const title = auditTitle(row);
+  const action =
+    row.status === "ok"
+      ? DONE[row.operation](title, row)
+      : row.status === "failed"
+        ? FAILED[row.operation](title, row)
+        : `「${title}」の${AUDIT_OPERATION_LABELS[row.operation]}を処理しています`;
+  return `${row.discordDisplayName} が ${formatShortJst(row.createdAt)} に${action}。`;
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | null {
+  const value = record[key];
+  return typeof value === "string" ? value : null;
+}
+
+/** Stored hunks; failed writes have none, so the requested change is shown instead. */
+function contentHunks(row: NotionAuditRow): ContentHunk[] {
+  const snapshot = ContentSnapshotSchema.safeParse(row.snapshot);
+  if (snapshot.success) return snapshot.data.hunks;
+  if (row.operation === "append_content") {
+    const content = stringField(row.request, "content");
+    return content ? [{ before: "", after: content }] : [];
+  }
+  const edits = Array.isArray(row.request.edits) ? row.request.edits : [];
+  return edits.flatMap((edit) => {
+    const entry = edit as Record<string, unknown>;
+    const before = stringField(entry, "old_str");
+    const after = stringField(entry, "new_str");
+    return before === null || after === null ? [] : [{ before, after }];
+  });
+}
+
+const linesOf = (text: string) => (text === "" ? [] : text.split("\n"));
+
+export interface DiffLine {
+  kind: "del" | "add" | "gap";
+  text: string;
+}
+
+/** Hunks as −/+ lines with a ⋯ separator between hunks. */
+export function diffLines(hunks: readonly ContentHunk[]): DiffLine[] {
+  return hunks.flatMap((hunk, index) => [
+    ...(index > 0 ? [{ kind: "gap" as const, text: "⋯" }] : []),
+    ...linesOf(hunk.before).map((line) => ({ kind: "del" as const, text: `− ${line}` })),
+    ...linesOf(hunk.after).map((line) => ({ kind: "add" as const, text: `+ ${line}` })),
+  ]);
+}
+
+export type ChangeView =
+  | { kind: "diff"; meta: string | null; lines: DiffLine[] }
+  | { kind: "properties"; meta: string | null; entries: Array<{ name: string; before: string; after: string }> }
+  | { kind: "created"; title: string; targetUrl: string | null }
+  | { kind: "archived" }
+  | { kind: "revert"; of: { id: number; href: string } | null };
+
+function changeView(row: NotionAuditRow): ChangeView {
+  switch (row.operation) {
+    case "append_content":
+    case "edit_content": {
+      const hunks = contentHunks(row);
+      const removed = hunks.reduce((sum, hunk) => sum + linesOf(hunk.before).length, 0);
+      const added = hunks.reduce((sum, hunk) => sum + linesOf(hunk.after).length, 0);
+      return { kind: "diff", meta: hunks.length > 0 ? `${hunks.length} か所 · −${removed} +${added}` : null, lines: diffLines(hunks) };
+    }
+    case "update_properties": {
+      const snapshot = UpdatePropertiesSnapshotSchema.safeParse(row.snapshot);
+      const requested = (row.request.properties ?? {}) as Record<string, unknown>;
+      const entries = (snapshot.success ? snapshot.data.properties : []).map((entry) => {
+        const raw = requested[entry.name] ?? requested[entry.id];
+        return {
+          name: entry.name,
+          before: renderPropertyValue(entry.value) || "（空）",
+          after: (raw === undefined ? "" : renderRequestedPropertyValue(entry.type, raw)) || "（空）",
+        };
+      });
+      return { kind: "properties", meta: entries.length > 0 ? `${entries.length} 件` : null, entries };
+    }
+    case "create_page":
+      return { kind: "created", title: auditTitle(row), targetUrl: row.targetUrl };
+    case "archive_page":
+      return { kind: "archived" };
+    case "revert":
+      return { kind: "revert", of: row.revertOfAuditId !== null ? { id: row.revertOfAuditId, href: adminAuditPath(row.revertOfAuditId) } : null };
+  }
+}
+
+export type RevertView =
+  | { state: "reverted"; revert: { id: number; href: string } | null; note: string | null }
+  | { state: "disabled" }
+  | { state: "ready" };
+
+export interface AuditDetailData {
+  id: number;
+  operation: string;
+  badges: BadgeView[];
+  summary: string;
+  change: ChangeView;
+  details: {
+    userName: string;
+    username: string | null;
+    avatarUrl: string | null;
+    title: string;
+    targetUrl: string | null;
+    createdAt: string;
+    comment: { kind: "error"; text: string } | { kind: "posted" } | { kind: "none" };
+    error: { label: string; text: string; failed: boolean } | null;
+  };
+  /** Null when the row cannot be reverted (failed writes, reverts). */
+  revert: RevertView | null;
+}
+
+export function parseAuditId(raw: string): number | null {
+  return /^\d{1,15}$/.test(raw) ? Number(raw) : null;
+}
+
+export async function auditDetail(deps: AdminDeps, idParam: string): Promise<AuditDetailData | null> {
+  const id = parseAuditId(idParam);
+  const row = id === null ? null : await deps.audit.getAudit(id);
+  if (!row) return null;
+  const avatars = await deps.subjects.memberAvatars([row.discordUserId]);
+  const revertible = row.operation !== "revert" && row.status === "ok";
+  let revert: RevertView | null = null;
+  if (revertible) {
+    if (row.revertedAt) {
+      revert = {
+        state: "reverted",
+        revert: row.revertAuditId !== null ? { id: row.revertAuditId, href: adminAuditPath(row.revertAuditId) } : null,
+        note: row.revertNote,
+      };
+    } else {
+      revert = deps.notionEnabled ? { state: "ready" } : { state: "disabled" };
+    }
+  }
+  return {
+    id: row.id,
+    operation: AUDIT_OPERATION_LABELS[row.operation],
+    badges: statusBadges(row),
+    summary: summarySentence(row),
+    change: changeView(row),
+    details: {
+      userName: row.discordDisplayName,
+      username: row.discordUsername,
+      avatarUrl: avatars.get(row.discordUserId) ?? null,
+      title: auditTitle(row),
+      targetUrl: row.targetUrl,
+      createdAt: formatJst(row.createdAt),
+      comment: row.commentError ? { kind: "error", text: row.commentError } : row.status === "ok" ? { kind: "posted" } : { kind: "none" },
+      error: row.error ? { label: row.status === "failed" ? "エラー" : "注記", text: row.error, failed: row.status === "failed" } : null,
+    },
+    revert,
+  };
+}
+
+/** `conflict` asks the page to offer a forced revert (the page changed after the write). */
+export type RevertActionResult = { kind: "not-found" } | (ActionResult & { conflict: boolean });
+
+export async function revertAudit(deps: AdminDeps, idParam: string, form: FormData, actor: AdminView): Promise<RevertActionResult> {
+  const id = parseAuditId(idParam);
+  if (id === null || !(await deps.audit.getAudit(id))) return { kind: "not-found" };
+  const force = formString(form, "force") === "true";
+  if (formString(form, "confirm") !== "yes") {
+    return { kind: "error", message: "確認のチェックを入れてから取り消してください。", conflict: force };
+  }
+  let result;
+  try {
+    result = await deps.audit.revert(id, {
+      actorDiscordUserId: actor.discordUserId,
+      actorDisplayName: actor.displayName,
+      actorUsername: actor.username,
+      force,
+    });
+  } catch (error) {
+    deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: false, error: errorMessage(error) });
+    return { kind: "error", message: `取り消しに失敗しました: ${errorMessage(error)}`, conflict: false };
+  }
+  deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: result.ok, revertAuditId: result.revertAuditId });
+  if (result.ok) {
+    const prefix = result.partial ? "一部のみ取り消しました。" : "取り消しました。";
+    return { kind: result.partial ? "warn" : "ok", message: `${prefix}${result.message}`, conflict: false };
+  }
+  // The page explains the conflict and offers a forced revert instead of a message.
+  if (result.conflict) return { kind: "warn", message: null, conflict: true };
+  return { kind: "error", message: `取り消せませんでした: ${result.message}`, conflict: false };
+}
