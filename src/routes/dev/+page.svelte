@@ -1,0 +1,20 @@
+<script lang="ts">
+  import AuthLayout from "$lib/components/app/auth-layout.svelte";
+
+  let { data } = $props();
+</script>
+
+<AuthLayout title="Preview">
+  <section class="auth-card">
+    <h1>Preview: ログインするユーザー</h1>
+    <ul class="grid gap-2">
+      {#each data.users as user (user.id)}
+        <li>
+          <a class="hover:bg-muted block rounded-lg border px-3 py-2.5 no-underline" href={`/dev/login?as=${user.id}`} data-sveltekit-reload>
+            {user.name} <span class="text-muted-foreground">@{user.username}</span>
+          </a>
+        </li>
+      {/each}
+    </ul>
+  </section>
+</AuthLayout>

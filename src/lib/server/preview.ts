@@ -1,0 +1,148 @@
+// Local UI preview backed by fake Discord/Notion APIs and an in-memory database.
+// Loaded only by the dev server with PREVIEW=1 (`bun run preview`); production builds drop it.
+import { FakeDiscordApi, GUILD_ID, makeGuild, OWNER_ID, textChannel } from "../../../test/support/fakes";
+import { FakeNotionApi } from "../../../test/support/notion-fakes";
+import { composeServer } from "./compose";
+import { loadConfig } from "./config";
+import { openDatabase } from "./db/client";
+import { ADMINISTRATOR, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "./discord/permissions";
+import type { MemberInfo } from "./discord/types";
+import { displayName } from "./lib/display-name";
+import type { Principal } from "./mcp/registry";
+import { NotionAuditStore } from "./notion/changes/audit-store";
+import { NotionWriteService } from "./notion/changes/write-service";
+import { createNotionTools } from "./notion/tools";
+import type { Runtime } from "./runtime";
+
+export interface PreviewUser {
+  id: string;
+  name: string;
+  username: string;
+}
+
+export interface Preview {
+  users: PreviewUser[];
+  /** A Set-Cookie value for a new browser session of the sample user; null when unknown. */
+  sessionCookie(discordUserId: string): Promise<string | null>;
+}
+
+const SECRET = "preview-secret-preview-secret-preview-secret";
+
+const ROLE_ADMIN = "200000000000000001";
+const ROLE_STAFF = "200000000000000002";
+const ROLE_MEMBER = "200000000000000003";
+const ROLE_BOT = "200000000000000004";
+
+const people: MemberInfo[] = [
+  { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: null },
+  { userId: "300000000000000001", roles: [ROLE_STAFF, ROLE_MEMBER], nick: "田中", username: "tanaka", globalName: "Tanaka", avatarUrl: null },
+  { userId: "300000000000000002", roles: [ROLE_MEMBER], nick: null, username: "suzuki", globalName: "鈴木", avatarUrl: null },
+  { userId: "300000000000000003", roles: [ROLE_MEMBER], nick: null, username: "sato", globalName: null, avatarUrl: null },
+  { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
+];
+
+export async function startPreview(): Promise<Runtime> {
+  const port = Number(process.env.PORT ?? 3920);
+  const discord = new FakeDiscordApi();
+  discord.guild = {
+    ...makeGuild([
+      { id: GUILD_ID, permissions: 0n },
+      { id: ROLE_ADMIN, name: "管理者", permissions: ADMINISTRATOR, color: 0xe74c3c, position: 4 },
+      { id: ROLE_STAFF, name: "staff", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x3498db, position: 3 },
+      { id: ROLE_MEMBER, name: "member", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x2ecc71, position: 2 },
+      { id: ROLE_BOT, name: "MCP Bot", permissions: VIEW_CHANNEL, managed: true, position: 1 },
+    ]),
+    name: "サンプルサーバー",
+  };
+  for (const person of people) discord.members.set(person.userId, person);
+  discord.channels = [textChannel("400000000000000001", "general"), textChannel("400000000000000002", "staff-only")];
+
+  const notion = new FakeNotionApi();
+  const wiki = notion.addPage({ title: "チーム Wiki", markdown: "# 概要\nこのページはチームの Wiki です。\n- ルール\n- 手順" });
+
+  const database = openDatabase(":memory:");
+  const config = loadConfig({
+    PUBLIC_URL: `http://localhost:${port}`,
+    PORT: String(port),
+    BETTER_AUTH_SECRET: SECRET,
+    DISCORD_CLIENT_ID: "123456789012345678",
+    DISCORD_CLIENT_SECRET: "x",
+    DISCORD_BOT_TOKEN: "x",
+    DISCORD_GUILD_ID: GUILD_ID,
+    NOTION_TOKEN: "preview",
+    TRUSTED_PROXY_COUNT: "0",
+  });
+  const composed = await composeServer(config, { discordApi: discord, notionApi: notion, database, logToolCall: () => {}, logEvent: () => {} });
+  const authContext = await composed.auth.$context;
+
+  const authUserIds = new Map<string, string>();
+  for (const person of people) {
+    const user = await authContext.internalAdapter.createUser(
+      { name: displayName(person), email: `${person.userId}@users.discord.invalid`, emailVerified: false },
+      { method: "oauth", oauth: { providerId: "discord" } },
+    );
+    await authContext.internalAdapter.linkAccount({ userId: user.id, providerId: "discord", accountId: person.userId });
+    authUserIds.set(person.userId, user.id);
+  }
+
+  await composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
+  await composed.grants.createGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
+  await composed.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_STAFF, createdBy: OWNER_ID });
+  await composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: "300000000000000004", createdBy: OWNER_ID });
+  await composed.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: "300000000000000001", createdBy: OWNER_ID });
+
+  const tools = new Map(
+    createNotionTools({ api: notion, writes: new NotionWriteService(notion, new NotionAuditStore(database.db)) }).map((tool) => [tool.name, tool]),
+  );
+  const run = async (name: string, args: Record<string, unknown>, who: MemberInfo): Promise<string> => {
+    const tool = tools.get(name)!;
+    const principal: Principal = {
+      userId: authUserIds.get(who.userId)!,
+      discordUserId: who.userId,
+      clientId: "preview",
+      access: {
+        isMember: true,
+        discordUserId: who.userId,
+        guild: discord.guild,
+        member: who,
+        permissions: new Set(["notion:read", "notion:write"]),
+        isAdmin: false,
+      },
+    };
+    try {
+      const result = await tool.handler(tool.inputSchema.parse(args) as never, { principal });
+      return typeof result === "string" ? result : JSON.stringify(result);
+    } catch (error) {
+      return String(error);
+    }
+  };
+  const [, tanaka, suzuki] = people as [MemberInfo, MemberInfo, MemberInfo];
+  await run("notion_create_page", { parent: wiki.id, title: "10/12 定例議事録", content: "## 決定事項\n- リリースは 10/20\n- 担当: 田中" }, tanaka);
+  await run("notion_append_content", { page: wiki.id, content: "- 新メンバー向けの手順を追加予定" }, suzuki);
+  const edit = await run("notion_edit_content", { page: wiki.id, edits: [{ old_str: "- 手順", new_str: "- 手順（2026/10 更新）" }] }, tanaka);
+  await run("notion_edit_content", { page: wiki.id, edits: [{ old_str: "存在しない文章", new_str: "x" }] }, suzuki);
+  const editId = Number(/audit #(\d+)/.exec(edit)?.[1]);
+  if (editId) {
+    await composed.notionAudit.revert(editId, { actorDiscordUserId: OWNER_ID, actorDisplayName: "きなこもち", actorUsername: "kinako" });
+  }
+  await run("notion_archive_page", { page: notion.addPage({ title: "古いメモ" }).id }, tanaka);
+
+  const sessionCookie = async (discordUserId: string): Promise<string | null> => {
+    const userId = authUserIds.get(discordUserId);
+    if (!userId) return null;
+    const session = await authContext.internalAdapter.createSession(userId);
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(session.token)));
+    const value = encodeURIComponent(`${session.token}.${btoa(String.fromCharCode(...signature))}`);
+    return `better-auth.session_token=${value}; Path=/; HttpOnly; SameSite=Lax`;
+  };
+
+  console.log(`preview ready: ${config.publicUrl}/dev`);
+  return {
+    composed,
+    preview: {
+      users: people.map((person) => ({ id: person.userId, name: displayName(person), username: person.username })),
+      sessionCookie,
+    },
+  };
+}
