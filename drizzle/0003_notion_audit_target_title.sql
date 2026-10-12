@@ -1,0 +1,1 @@
+ALTER TABLE `notion_audit` ADD `target_title` text;
