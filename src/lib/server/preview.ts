@@ -135,7 +135,8 @@ export async function startPreview(): Promise<Runtime> {
 
   const database = openDatabase(":memory:");
   const config = loadConfig({
-    PUBLIC_URL: `http://localhost:${port}`,
+    // Set when the preview is reached through a proxy (e.g. `tailscale serve`), so the Origin check matches.
+    PUBLIC_URL: process.env.PREVIEW_PUBLIC_URL ?? `http://localhost:${port}`,
     PORT: String(port),
     BETTER_AUTH_SECRET: SECRET,
     DISCORD_CLIENT_ID: "123456789012345678",

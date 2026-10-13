@@ -88,6 +88,7 @@ bun install
 cp .env.example .env
 bun run dev        # PUBLIC_URL のポート（.env の PORT）で起動
 bun run preview    # 偽データで UI 確認: http://localhost:3920/dev
+# 他端末から: tailscale serve --bg --https=8443 http://localhost:3920 && PREVIEW_PUBLIC_URL=https://<host>.ts.net:8443 bun run preview
 bun test
 bun run typecheck
 bun run build && bun run start
