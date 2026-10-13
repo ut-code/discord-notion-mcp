@@ -272,6 +272,8 @@ function changeView(row: NotionAuditRow): ChangeView {
         kind: "revert",
         of: row.revertOfAuditId !== null ? { id: row.revertOfAuditId, href: dashboardAuditPath(row.revertOfAuditId) } : null,
       };
+    default:
+      throw new Error(`Unknown audit operation: ${row.operation satisfies never}`);
   }
 }
 

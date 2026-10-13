@@ -73,6 +73,8 @@ function parseRevertRecord(row: NotionAuditRow): RevertRecord | null {
       return ArchivePageSnapshotSchema.safeParse(row.snapshot).success ? { operation: row.operation } : null;
     case "revert":
       return null;
+    default:
+      throw new Error(`Unknown audit operation: ${row.operation satisfies never}`);
   }
 }
 
@@ -347,6 +349,8 @@ export class NotionAuditService {
         const commentError = await postComment(api, pageId, comment);
         return { result: { inTrash: false }, note: null, partial: false, commentError, lastEditedTime: restoredPage.last_edited_time };
       }
+      default:
+        throw new Error(`Unknown revert operation: ${record satisfies never}`);
     }
   }
 
