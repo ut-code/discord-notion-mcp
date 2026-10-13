@@ -68,7 +68,7 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
 /** Result of an admin-only action attempted by a non-admin; nothing is changed. */
 export const ADMIN_ONLY: ActionResult = { kind: "error", message: "この操作は管理者だけが行えます。", status: 403 };
 
-/** Sign-in URL that returns to the requested page (form posts return to the overview). */
+/** Sign-in URL that returns to the requested page (form posts return to the dashboard top). */
 export function signInRedirect(url: URL, method: string): string {
   const target = method === "GET" ? `${url.pathname}${url.search}` : DASHBOARD_PATH;
   return `${SIGN_IN_PATH}?next=${encodeURIComponent(target)}`;

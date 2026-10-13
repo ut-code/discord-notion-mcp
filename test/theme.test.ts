@@ -37,9 +37,9 @@ describe("theme cookie → <html> class", () => {
 
 describe("POST /theme", () => {
   test("accepts the three themes and returns to a same-site path", () => {
-    expect(parseThemeForm(form({ theme: "dark", next: "/dashboard/stats?range=7" }))).toEqual({
+    expect(parseThemeForm(form({ theme: "dark", next: "/dashboard?range=7" }))).toEqual({
       theme: "dark",
-      location: "/dashboard/stats?range=7",
+      location: "/dashboard?range=7",
     });
     expect(parseThemeForm(form({ theme: "system" }))).toEqual({ theme: "system", location: "/dashboard" });
   });

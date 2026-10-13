@@ -5,7 +5,6 @@ import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
 import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
 import { requireAdminViewer } from "../../src/lib/server/dashboard/guard";
 import { MemberSearch } from "../../src/lib/server/dashboard/member-search";
-import { overview } from "../../src/lib/server/dashboard/overview";
 import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/dashboard/session";
 import { revokeTokens, USER_SEARCH_SCAN_LIMIT, usersPage, type UserTableRow } from "../../src/lib/server/dashboard/users";
 import type { LoginUser } from "../../src/lib/server/auth/users";
@@ -165,50 +164,6 @@ describe("dashboard access control", () => {
   test("an unknown audit id is not found", async () => {
     expect(await auditDetail(deps, "99999", owner)).toBeNull();
     expect(await auditDetail(deps, "abc", owner)).toBeNull();
-  });
-});
-
-describe("overview", () => {
-  test("links failures to the write history and offers granting to admins", async () => {
-    const data = await overview(deps, owner);
-    expect(data.failuresHref).toBe("/dashboard/audit?status=failed");
-    expect(data.canGrant).toBe(true);
-    expect(data.recent).toBeArray();
-  });
-
-  test("the failure count covers unreverted failed writes of the last 7 days", async () => {
-    expect((await overview(deps, owner)).recentFailures).toBe(0);
-    await store.insert({
-      createdAt: new Date(Date.now() - 8 * 24 * 60 * 60_000),
-      discordUserId: MEMBER,
-      discordDisplayName: "Mina",
-      operation: "archive_page",
-      request: {},
-      status: "failed",
-      error: "old failure",
-    });
-    expect((await overview(deps, owner)).recentFailures).toBe(0);
-
-    const page = h.notion.addPage({ title: "Failing page", markdown: "Intro" });
-    await expect(
-      writes.editContent(MEMBER_ACTOR, { pageId: page.id, edits: [{ old_str: "missing", new_str: "x" }], request: {} }),
-    ).rejects.toThrow();
-    const data = await overview(deps, owner);
-    expect(data.recentFailures).toBe(1);
-    expect(data.recent?.[0]).toMatchObject({
-      operation: "本文を編集",
-      title: "Failing page",
-      badge: { label: "失敗", tone: "destructive" },
-    });
-  });
-
-  test("members without notion:read see neither failures nor recent writes", async () => {
-    const member = await viewerFor(MEMBER);
-    expect(await overview(deps, member)).toMatchObject({ recentFailures: 0, recent: null, canGrant: false });
-    const reader = { ...member, canViewAudit: true };
-    const data = await overview(deps, reader);
-    expect(data.recentFailures).toBe(1);
-    expect(data.canGrant).toBe(false);
   });
 });
 
@@ -731,6 +686,9 @@ describe("audit log", () => {
     expect((await auditList(deps, params("operation=append_content"))).rows.some((candidate) => candidate.id === created.auditId)).toBe(
       false,
     );
+    await expect(
+      writes.editContent(MEMBER_ACTOR, { pageId: parent.id, edits: [{ old_str: "missing", new_str: "x" }], request: {} }),
+    ).rejects.toThrow();
     const failed = await auditList(deps, params("status=failed"));
     expect(failed.rows.some((candidate) => candidate.id === created.auditId)).toBe(false);
     expect(failed.rows[0]?.badge).toEqual({ label: "失敗", tone: "destructive" });

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNotNull, isNull, lt, max, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, lt, max, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../../db/client";
 import {
   notionAudit,
@@ -16,8 +16,6 @@ export interface AuditListQuery {
   status?: NotionAuditStatus;
   /** true: only rows that were reverted; false: only rows that were not. */
   reverted?: boolean;
-  /** Only rows created at or after this time. */
-  since?: Date;
 }
 
 /** A Discord user that appears in the audit log, with the latest recorded names. */
@@ -71,7 +69,6 @@ export class NotionAuditStore {
     if (query.reverted !== undefined) {
       conditions.push(query.reverted ? isNotNull(notionAudit.revertedAt) : isNull(notionAudit.revertedAt));
     }
-    if (query.since) conditions.push(gte(notionAudit.createdAt, query.since));
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const rows = await this.db
       .select()

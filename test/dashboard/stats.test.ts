@@ -72,9 +72,9 @@ describe("usage statistics", () => {
     const data = await statsPage(deps, new URLSearchParams("range=7"), NOW);
     expect(data.range).toBe(7);
     expect(data.ranges).toEqual([
-      { label: "7日", href: "/dashboard/stats?range=7", active: true },
-      { label: "30日", href: "/dashboard/stats", active: false },
-      { label: "90日", href: "/dashboard/stats?range=90", active: false },
+      { label: "7日", href: "/dashboard?range=7", active: true },
+      { label: "30日", href: "/dashboard", active: false },
+      { label: "90日", href: "/dashboard?range=90", active: false },
     ]);
     expect(data.daily.series.map((entry) => [entry.key, entry.label])).toEqual([
       ["s0", "discord_read_messages"],

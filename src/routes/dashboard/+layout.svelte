@@ -1,7 +1,6 @@
 <script lang="ts">
   import ChartColumnIcon from "@lucide/svelte/icons/chart-column";
   import HistoryIcon from "@lucide/svelte/icons/history";
-  import LayoutDashboardIcon from "@lucide/svelte/icons/layout-dashboard";
   import LogOutIcon from "@lucide/svelte/icons/log-out";
   import PlugIcon from "@lucide/svelte/icons/plug";
   import ShieldIcon from "@lucide/svelte/icons/shield";
@@ -19,8 +18,7 @@
   let { data, children } = $props();
 
   const nav = $derived([
-    { href: DASHBOARD_PATH, label: "概要", icon: LayoutDashboardIcon },
-    { href: `${DASHBOARD_PATH}/stats`, label: "統計", icon: ChartColumnIcon },
+    { href: DASHBOARD_PATH, label: "統計", icon: ChartColumnIcon },
     ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: "権限", icon: ShieldIcon }] : []),
     { href: `${DASHBOARD_PATH}/users`, label: "ユーザー", icon: UsersIcon },
     ...(data.viewer.canViewAudit ? [{ href: `${DASHBOARD_PATH}/audit`, label: "Notion 書き込み履歴", icon: HistoryIcon }] : []),

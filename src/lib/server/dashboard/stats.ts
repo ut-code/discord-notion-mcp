@@ -3,7 +3,7 @@ import { DAY_MS, JST_OFFSET_MS, jstDay } from "../usage/usage-stats";
 import type { DashboardDeps } from "./deps";
 import { formatShortJst } from "./format";
 
-const STATS_PATH = `${DASHBOARD_PATH}/stats`;
+const STATS_PATH = DASHBOARD_PATH;
 const STATS_RANGES = [7, 30, 90] as const;
 export type StatsRange = (typeof STATS_RANGES)[number];
 const DEFAULT_RANGE: StatsRange = 30;
