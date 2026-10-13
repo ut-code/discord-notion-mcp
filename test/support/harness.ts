@@ -1,6 +1,6 @@
 import { expect } from "bun:test";
 import { makeSignature } from "better-auth/crypto";
-import { composeServer, type ComposedServer, type ComposeOptions } from "../../src/lib/server/compose";
+import { composeServer, type AppServer, type ComposeOptions } from "../../src/lib/server/compose";
 import { loadConfig } from "../../src/lib/server/config";
 import { openDatabase } from "../../src/lib/server/db/client";
 import type { ErrorEntry, EventEntry, ToolCallLogEntry } from "../../src/lib/server/lib/log";
@@ -13,13 +13,13 @@ export const REDIRECT_URI = "http://localhost:33418/callback";
 export const CODE_VERIFIER = "e2e-code-verifier-e2e-code-verifier-e2e-code-verifier";
 
 /**
- * A composed server listening on a random local port, backed by fakes and an in-memory
+ * An app server listening on a random local port, backed by fakes and an in-memory
  * database. It serves the non-UI routes (http.ts); UI pages are covered by the admin module tests.
  */
 export interface Harness {
   base: string;
   resource: string;
-  composed: ComposedServer;
+  server: AppServer;
   discord: FakeDiscordApi;
   notion: FakeNotionApi;
   toolLogs: ToolCallLogEntry[];
@@ -35,13 +35,13 @@ export interface HarnessOptions {
 }
 
 export async function startHarness(options: HarnessOptions = {}): Promise<Harness> {
-  let handler: ComposedServer["http"] = async () => new Response("starting", { status: 503 });
-  const server = Bun.serve({
+  let handler: AppServer["http"] = async () => new Response("starting", { status: 503 });
+  const listener = Bun.serve({
     port: 0,
     fetch: async (request, bun) =>
       (await handler(request, () => bun.requestIP(request)?.address ?? null)) ?? Response.json({ error: "not_found" }, { status: 404 }),
   });
-  const base = `http://localhost:${server.port}`;
+  const base = `http://localhost:${listener.port}`;
   const discord = options.discord ?? new FakeDiscordApi();
   const notion = options.notion ?? new FakeNotionApi();
   const toolLogs: ToolCallLogEntry[] = [];
@@ -55,7 +55,7 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     DISCORD_BOT_TOKEN: "x",
     DISCORD_GUILD_ID: GUILD_ID,
   });
-  const composed = await composeServer(config, {
+  const server = await composeServer(config, {
     discordApi: discord,
     notionApi: notion,
     database: openDatabase(":memory:"),
@@ -64,13 +64,13 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     logError: (entry) => errors.push(entry),
     toolRateLimit: options.toolRateLimit,
   });
-  handler = composed.http;
-  return { base, resource: config.mcpResource, composed, discord, notion, toolLogs, events, errors, stop: () => server.stop(true) };
+  handler = server.http;
+  return { base, resource: config.mcpResource, server, discord, notion, toolLogs, events, errors, stop: () => listener.stop(true) };
 }
 
 /** Creates a browser session for an existing Better Auth user and returns its cookie. */
 export async function newSessionCookie(h: Harness, userId: string): Promise<string> {
-  const ctx = await h.composed.auth.$context;
+  const ctx = await h.server.auth.$context;
   const session = await ctx.internalAdapter.createSession(userId);
   const signed = `${session.token}.${await makeSignature(session.token, SECRET)}`;
   return `${ctx.authCookies.sessionToken.name}=${encodeURIComponent(signed)}`;
@@ -78,7 +78,7 @@ export async function newSessionCookie(h: Harness, userId: string): Promise<stri
 
 /** Simulates a Discord login: user + linked account on first login, then a new session. */
 export async function signIn(h: Harness, discordUserId: string): Promise<{ userId: string; cookie: string }> {
-  const ctx = await h.composed.auth.$context;
+  const ctx = await h.server.auth.$context;
   const email = `${discordUserId}@users.discord.invalid`;
   const existing = await ctx.internalAdapter.findUserByEmail(email);
   if (existing) return { userId: existing.user.id, cookie: await newSessionCookie(h, existing.user.id) };

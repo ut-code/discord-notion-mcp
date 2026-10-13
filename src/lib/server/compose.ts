@@ -43,8 +43,8 @@ export interface ComposeOptions {
   recordToolCall?: McpServerDeps["record"];
 }
 
-export interface ComposedServer {
-  /** Non-UI routes: /mcp, /api/auth/*, /.well-known/*, /healthz. */
+export interface AppServer {
+  /** Runs before SvelteKit: /mcp, /api/auth/*, /.well-known/*, /healthz, and the UI's CSRF check. */
   http: HttpHandler;
   /** Data and actions of the browser pages. */
   dashboard: DashboardDeps;
@@ -57,13 +57,12 @@ export interface ComposedServer {
   notionAudit: NotionAuditService;
   revocation: TokenRevocationService;
   toolCalls: ToolCallStore;
-  publicUrl: string;
   /** Unexpected request failures. */
   logError: ErrorSink;
 }
 
 /** Wires every component together and runs both migration sets. */
-export async function composeServer(config: Config, options: ComposeOptions = {}): Promise<ComposedServer> {
+export async function composeServer(config: Config, options: ComposeOptions = {}): Promise<AppServer> {
   const database = options.database ?? openDatabase(config.databasePath);
   runAppMigrations(database.db);
   const reportEvent = options.logEvent ?? logEvent;
@@ -144,6 +143,8 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
       rateLimit: options.toolRateLimit,
     }),
     trustedProxyCount: config.trustedProxyCount,
+    publicOrigin: new URL(config.publicUrl).origin,
+    logEvent: reportEvent,
     logError: reportError,
   });
 
@@ -158,7 +159,6 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     notionAudit,
     revocation,
     toolCalls,
-    publicUrl: config.publicUrl,
     logError: reportError,
   };
 }

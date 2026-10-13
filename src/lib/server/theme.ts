@@ -8,11 +8,12 @@ export function themeFromCookie(value: string | undefined): Theme {
   return isTheme(value) ? value : "system";
 }
 
-const DOCUMENT_START = /^(\s*<!doctype html>\s*<html)\b/i;
+/** Placeholder on `<html>` in app.html; only the first match is replaced, and `<html>` precedes page text. */
+const THEME_CLASS = ' class="%theme%"';
 
-/** Marks `<html>` in the first page chunk; "system" leaves the class to `prefers-color-scheme`. */
+/** Fills the `<html>` class; "system" drops it and leaves the colors to `prefers-color-scheme`. */
 export function withThemeClass(html: string, theme: Theme): string {
-  return theme === "system" ? html : html.replace(DOCUMENT_START, `$1 class="${theme}"`);
+  return html.replace(THEME_CLASS, theme === "system" ? "" : ` class="${theme}"`);
 }
 
 /** Form of `POST /theme`: `theme` and the page to return to (`next`, same-site paths only). */

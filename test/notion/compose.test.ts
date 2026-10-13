@@ -21,20 +21,20 @@ describe("Notion configuration", () => {
   });
 
   test("without a token the Notion tools are not registered, but the audit log is still readable", async () => {
-    const composed = await composeServer(loadConfig(ENV), { discordApi: new FakeDiscordApi(), database: openDatabase(":memory:") });
-    expect(composed.notionEnabled).toBe(false);
-    expect(composed.tools.some((tool) => tool.name.startsWith("notion_"))).toBe(false);
-    expect(await composed.notionAudit.listAudit()).toEqual({ rows: [], total: 0 });
-    expect(await composed.notionAudit.revert(1, { actorDiscordUserId: "1", actorDisplayName: "a" })).toMatchObject({ ok: false });
+    const server = await composeServer(loadConfig(ENV), { discordApi: new FakeDiscordApi(), database: openDatabase(":memory:") });
+    expect(server.notionEnabled).toBe(false);
+    expect(server.tools.some((tool) => tool.name.startsWith("notion_"))).toBe(false);
+    expect(await server.notionAudit.listAudit()).toEqual({ rows: [], total: 0 });
+    expect(await server.notionAudit.revert(1, { actorDiscordUserId: "1", actorDisplayName: "a" })).toMatchObject({ ok: false });
   });
 
   test("with a token the Notion tools are registered", async () => {
-    const composed = await composeServer(loadConfig({ ...ENV, NOTION_TOKEN: "ntn_secret" }), {
+    const server = await composeServer(loadConfig({ ...ENV, NOTION_TOKEN: "ntn_secret" }), {
       discordApi: new FakeDiscordApi(),
       database: openDatabase(":memory:"),
     });
-    expect(composed.notionEnabled).toBe(true);
-    const names = composed.tools.filter((tool) => tool.name.startsWith("notion_")).map((tool) => tool.name);
+    expect(server.notionEnabled).toBe(true);
+    const names = server.tools.filter((tool) => tool.name.startsWith("notion_")).map((tool) => tool.name);
     expect(names.length).toBe(12);
     expect(names).toContain("notion_append_content");
     expect(names).toContain("notion_edit_content");

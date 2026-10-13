@@ -11,7 +11,7 @@ const MEMBER = "300000000000000001";
 let h: Harness;
 
 const clientIds = (): string[] =>
-  (h.composed.database.sqlite.query("select clientId from oauthClient order by clientId").all() as Array<{ clientId: string }>).map(
+  (h.server.database.sqlite.query("select clientId from oauthClient order by clientId").all() as Array<{ clientId: string }>).map(
     (row) => row.clientId,
   );
 
@@ -21,7 +21,7 @@ function insert(table: "oauthAccessToken" | "oauthRefreshToken" | "oauthConsent"
   if (table === "oauthConsent") row.updatedAt = now;
   else Object.assign(row, { token: crypto.randomUUID(), expiresAt: now });
   const columns = Object.keys(row);
-  h.composed.database.sqlite
+  h.server.database.sqlite
     .query(`insert into "${table}" (${columns.map((column) => `"${column}"`).join(", ")}) values (${columns.map(() => "?").join(", ")})`)
     .run(...Object.values(row));
 }
@@ -48,7 +48,7 @@ describe("unused OAuth client cleanup", () => {
     insert("oauthRefreshToken", { clientId: withRefreshToken, userId });
     insert("oauthConsent", { clientId: withConsent });
     await issueTokens(h, connected, cookie);
-    const db = h.composed.database.db;
+    const db = h.server.database.db;
 
     // Every client is younger than the cutoff of 7 days.
     expect(deleteUnusedClients(db, new Date(Date.now() - UNUSED_CLIENT_TTL_MS))).toBe(0);
@@ -62,7 +62,7 @@ describe("unused OAuth client cleanup", () => {
     let now = Date.now();
     const events: EventEntry[] = [];
     const stop = startClientCleanup({
-      db: h.composed.database.db,
+      db: h.server.database.db,
       now: () => now,
       intervalMs: 20,
       log: (entry) => events.push(entry),

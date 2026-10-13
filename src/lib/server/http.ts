@@ -1,9 +1,12 @@
 import { AUTH_BASE_PATH, type Auth } from "./auth/auth";
 import { clientIpFromForwardedFor, withClientIp } from "./lib/client-ip";
 import { errorMessage } from "./lib/errors";
-import { logError, type ErrorSink } from "./lib/log";
+import { logError, logEvent, type ErrorSink, type EventSink } from "./lib/log";
 
-/** Handles the non-UI routes; null means the request belongs to the UI. */
+/**
+ * Runs before SvelteKit: answers the non-UI routes and refuses cross-origin writes to the UI;
+ * null hands the request to SvelteKit.
+ */
 export type HttpHandler = (request: Request, socketAddress?: () => string | null) => Promise<Response | null>;
 
 export interface HttpDeps {
@@ -11,6 +14,10 @@ export interface HttpDeps {
   mcpEndpoint: (request: Request) => Promise<Response>;
   /** Reverse proxies in front of the server; 0 uses the socket address. */
   trustedProxyCount: number;
+  /** Origin of PUBLIC_URL; UI writes must carry it. */
+  publicOrigin: string;
+  /** Refused cross-origin writes; defaults to stdout. */
+  logEvent?: EventSink;
   /** Unhandled request errors; defaults to stderr. */
   logError?: ErrorSink;
 }
@@ -42,13 +49,14 @@ export function withSecurityHeaders(response: Response): Response {
   return target;
 }
 
-/** CSRF for the UI's form posts: state-changing requests must carry this origin. */
-export function isCrossOriginWrite(request: Request, publicOrigin: string): boolean {
+/** CSRF for the UI: state-changing requests must carry this origin. */
+function isCrossOriginWrite(request: Request, publicOrigin: string): boolean {
   if (SAFE_METHODS.has(request.method)) return false;
   return request.headers.get("origin") !== publicOrigin;
 }
 
 export function createHttpHandler(deps: HttpDeps): HttpHandler {
+  const reportEvent = deps.logEvent ?? logEvent;
   const reportError = deps.logError ?? logError;
 
   const clientIp = (request: Request, socketAddress?: () => string | null): string | null => {
@@ -56,6 +64,11 @@ export function createHttpHandler(deps: HttpDeps): HttpHandler {
     return socketAddress?.() ?? null;
   };
 
+  /**
+   * Routes answered here skip the UI's Origin check (SvelteKit's own is off, see
+   * svelte.config.js): MCP and OAuth clients post from other origins. None of them may
+   * authenticate with the session cookie unless it checks the origin itself (Better Auth does).
+   */
   const route = async (request: Request, socketAddress?: () => string | null): Promise<Response | null> => {
     const { pathname } = new URL(request.url);
     const method = request.method;
@@ -77,7 +90,13 @@ export function createHttpHandler(deps: HttpDeps): HttpHandler {
   return async (request, socketAddress) => {
     try {
       const response = await route(request, socketAddress);
-      return response ? withSecurityHeaders(response) : null;
+      if (response) return withSecurityHeaders(response);
+      if (isCrossOriginWrite(request, deps.publicOrigin)) {
+        const { pathname } = new URL(request.url);
+        reportEvent({ event: "cross_origin_write_refused", method: request.method, path: pathname, origin: request.headers.get("origin") });
+        return withSecurityHeaders(new Response("Forbidden", { status: 403 }));
+      }
+      return null;
     } catch (error) {
       reportError({ event: "http_error", path: new URL(request.url).pathname, error: errorMessage(error) });
       return withSecurityHeaders(Response.json({ error: "internal_error" }, { status: 500 }));

@@ -102,10 +102,10 @@ beforeAll(async () => {
   discord.users.set(STRANGER, { id: STRANGER, username: "stranger", globalName: "Stranger", avatarUrl: null });
   discord.failingMembers.add(FLAKY);
   h = await startHarness({ discord });
-  deps = h.composed.dashboard;
+  deps = h.server.dashboard;
   ownerUserId = (await signIn(h, OWNER_ID)).userId;
   owner = await adminFor(OWNER_ID);
-  store = new NotionAuditStore(h.composed.database.db);
+  store = new NotionAuditStore(h.server.database.db);
   writes = new NotionWriteService(h.notion, store);
 });
 
@@ -132,9 +132,9 @@ describe("dashboard access control", () => {
 
   test("the write history needs notion:read (or admin)", async () => {
     expect((await viewerFor(READER)).canViewAudit).toBe(false);
-    await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
     expect(await viewerFor(READER)).toMatchObject({ isAdmin: false, canViewAudit: true });
-    await h.composed.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
     expect(owner.canViewAudit).toBe(true);
   });
 
@@ -143,7 +143,7 @@ describe("dashboard access control", () => {
   });
 
   test("owner, ADMINISTRATOR role holders and explicit admin grants are admins", async () => {
-    await h.composed.grants.createGrant({ permission: "admin", subjectType: "user", subjectId: GRANTED_ADMIN });
+    await h.server.grants.createGrant({ permission: "admin", subjectType: "user", subjectId: GRANTED_ADMIN });
     expect((await adminFor(ADMIN_MEMBER)).roleLabel).toBe("管理者");
     expect((await adminFor(GRANTED_ADMIN)).roleLabel).toBe("管理者");
   });
@@ -174,7 +174,7 @@ describe("grants", () => {
       kind: "ok",
       message: "ロール「Moderator」に「Discord 読み取り」を付与しました。",
     });
-    const stored = (await h.composed.grants.listGrants()).find((grant) => grant.subjectId === ROLE_MOD);
+    const stored = (await h.server.grants.listGrants()).find((grant) => grant.subjectId === ROLE_MOD);
     expect(stored).toMatchObject({ permission: "discord:read", subjectType: "role", createdBy: OWNER_ID });
     expect(h.events).toContainEqual({
       event: "grant_added",
@@ -200,7 +200,7 @@ describe("grants", () => {
       kind: "ok",
       message: "@Moderator から「Discord 読み取り」を削除しました。",
     });
-    expect((await h.composed.grants.listGrants()).some((grant) => grant.subjectId === ROLE_MOD)).toBe(false);
+    expect((await h.server.grants.listGrants()).some((grant) => grant.subjectId === ROLE_MOD)).toBe(false);
     expect(h.events.at(-1)).toMatchObject({ event: "grant_removed", subjectId: ROLE_MOD });
     expect(await deleteGrant(deps, form(fields), owner)).toMatchObject({ kind: "warn", message: "この付与は既に削除されています。" });
   });
@@ -222,12 +222,12 @@ describe("grants", () => {
       kind: "error",
       message: "ユーザーを選んでください。",
     });
-    await h.composed.grants.removeGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD });
-    await h.composed.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
   });
 
   test("rejects invalid snowflakes, unknown permissions and integration roles", async () => {
-    const before = (await h.composed.grants.listGrants()).length;
+    const before = (await h.server.grants.listGrants()).length;
     expect((await createGrant(deps, form({ permission: "notion:read", subjectType: "user", subjectId: "12ab" }), owner)).message).toContain(
       "Discord の ID（15〜22 桁の数字）ではありません",
     );
@@ -242,7 +242,7 @@ describe("grants", () => {
     expect(
       (await createGrant(deps, form({ permission: "notion:read", subjectType: "role", subjectId: ROLE_BOT }), owner)).message,
     ).toContain("ロールを選んでください");
-    expect((await h.composed.grants.listGrants()).length).toBe(before);
+    expect((await h.server.grants.listGrants()).length).toBe(before);
   });
 
   test("user grants show resolved names and roles; the role picker excludes integration roles", async () => {
@@ -281,9 +281,9 @@ describe("grants", () => {
   });
 
   test("individual grants already provided by a role or by admin status are flagged", async () => {
-    await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
-    await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
-    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
+    await h.server.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
     const badges = (await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []));
     expect(badges).toContainEqual({
       label: "@Moderator で付与済み",
@@ -292,9 +292,9 @@ describe("grants", () => {
     });
     expect(badges.map((badge) => badge.label)).toContain("管理者で付与済み");
 
-    await h.composed.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
-    await h.composed.grants.removeGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
-    await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
+    await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
+    await h.server.grants.removeGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
     expect((await grantsPage(deps, params())).rows.some((row) => row.redundancy)).toBe(false);
   });
 
@@ -381,7 +381,7 @@ describe("grants", () => {
 describe("read-only members", () => {
   test("the grants page is for admins only", async () => {
     const guardEvent = (viewer: Viewer) => ({
-      locals: { viewer: async () => ({ kind: "viewer", viewer }) } as unknown as App.Locals,
+      locals: { viewerGate: async () => ({ kind: "viewer", viewer }) } as unknown as App.Locals,
       url: new URL("http://x/dashboard/grants"),
       request: new Request("http://x/dashboard/grants"),
     });
@@ -409,22 +409,22 @@ describe("read-only members", () => {
 
   test("every mutation is refused with 403 and changes nothing", async () => {
     const member = { ...(await viewerFor(MEMBER)), canViewAudit: true };
-    const before = await h.composed.grants.listGrants();
+    const before = await h.server.grants.listGrants();
     expect(ADMIN_ONLY).toEqual({ kind: "error", message: "この操作は管理者だけが行えます。", status: 403 });
 
     expect(await createGrant(deps, form({ permission: "admin", subjectType: "user", subjectId: MEMBER }), member)).toEqual(ADMIN_ONLY);
-    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
-    const withGrant = await h.composed.grants.listGrants();
+    await h.server.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    const withGrant = await h.server.grants.listGrants();
     expect(await deleteGrant(deps, form({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD }), member)).toEqual(
       ADMIN_ONLY,
     );
-    expect(await h.composed.grants.listGrants()).toEqual(withGrant);
-    await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
-    expect(await h.composed.grants.listGrants()).toEqual(before);
+    expect(await h.server.grants.listGrants()).toEqual(withGrant);
+    await h.server.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    expect(await h.server.grants.listGrants()).toEqual(before);
 
     const target = await signIn(h, READER);
     expect(await revokeTokens(deps, target.userId, member)).toEqual(ADMIN_ONLY);
-    expect(await h.composed.auth.api.getSession({ headers: new Headers({ cookie: target.cookie }) })).not.toBeNull();
+    expect(await h.server.auth.api.getSession({ headers: new Headers({ cookie: target.cookie }) })).not.toBeNull();
     expect((await userRow(target.userId)).revoked).toBeNull();
 
     const parent = h.notion.addPage({ title: "Protected root" });
@@ -433,7 +433,7 @@ describe("read-only members", () => {
     for (const fields of attempts) {
       expect(await revertAudit(deps, String(created.auditId), form(fields), member)).toEqual({ result: ADMIN_ONLY, conflict: false });
     }
-    expect((await h.composed.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
+    expect((await h.server.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
     expect(h.notion.pages.get(created.pageId)!.in_trash).toBeFalsy();
   });
 });
@@ -502,7 +502,7 @@ describe("sign-in and sign-out", () => {
 
 describe("consent", () => {
   test("lists only the signed-in user's effective permissions", async () => {
-    await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
     const page = await consentFor(READER);
     expect(page.clientName).toBe("E2E CLI");
     expect(page.redirectOrigin).toBe(new URL(REDIRECT_URI).origin);
@@ -551,8 +551,8 @@ describe("consent", () => {
 
 describe("users", () => {
   test("lists permissions with exact labels, admins as one badge, and marks individual grants", async () => {
-    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
-    await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER });
+    await h.server.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER });
     const member = await signIn(h, MEMBER);
     const data = await usersPage(deps, params(), owner);
     expect(data.total).toBe(data.rows.length);
@@ -570,7 +570,7 @@ describe("users", () => {
     expect(ownerRow.permissions).toEqual([{ label: "管理者", tone: "dark", title: undefined, individual: false }]);
     expect(ownerRow.roles.text).toBe("管理者");
 
-    await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
   });
 
   test("row menu links grant and audit pages of the Discord account", async () => {
@@ -634,7 +634,7 @@ describe("user search scan cap", () => {
 
 describe("token revocation", () => {
   test("revoking rejects earlier tokens immediately; a new login works", async () => {
-    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER });
+    await h.server.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER });
     const login = await signIn(h, MEMBER);
     const clientId = await registerClient(h);
     const before = await issueTokens(h, clientId, login.cookie);
@@ -651,7 +651,7 @@ describe("token revocation", () => {
     expect(rejected.headers.get("www-authenticate")).toContain(`resource_metadata="${h.base}/.well-known/oauth-protected-resource/mcp"`);
     expect(rejected.json).toEqual({ error: "invalid_token", error_description: "The access token has been revoked. Sign in again." });
     expect((await refreshTokens(h, clientId, before.refresh_token!)).status).not.toBe(200);
-    expect(await h.composed.auth.api.getSession({ headers: new Headers({ cookie: login.cookie }) })).toBeNull();
+    expect(await h.server.auth.api.getSession({ headers: new Headers({ cookie: login.cookie }) })).toBeNull();
 
     // `iat` has one-second resolution; tokens from the revocation's second stay rejected.
     await Bun.sleep(1000 - (Date.now() % 1000) + 20);
@@ -735,7 +735,7 @@ describe("audit log", () => {
         request: { edits: [{ old_str: "absent", new_str: "x" }] },
       }),
     ).rejects.toThrow();
-    const { rows } = await h.composed.notionAudit.listAudit({ status: "failed", limit: 1 });
+    const { rows } = await h.server.notionAudit.listAudit({ status: "failed", limit: 1 });
     const detail = (await auditDetail(deps, String(rows[0]!.id), owner))!;
     expect(detail.badges).toEqual([{ label: "失敗", tone: "destructive" }]);
     expect(detail.details.error).toMatchObject({ label: "エラー", failed: true });
@@ -760,13 +760,13 @@ describe("audit log", () => {
       result: { kind: "error", message: "確認のチェックを入れてから取り消してください。" },
       conflict: false,
     });
-    expect((await h.composed.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
+    expect((await h.server.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
 
     expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({
       result: { kind: "ok", message: `取り消しました。Reverted audit #${created.auditId}.` },
       conflict: false,
     });
-    const row = (await h.composed.notionAudit.getAudit(created.auditId))!;
+    const row = (await h.server.notionAudit.getAudit(created.auditId))!;
     expect(row.revertedBy).toBe(OWNER_ID);
     expect(h.notion.pages.get(created.pageId)!.in_trash).toBe(true);
     expect(h.events.at(-1)).toMatchObject({ event: "audit_revert", auditId: created.auditId, ok: true, force: false });
@@ -805,7 +805,7 @@ describe("audit log", () => {
     const forced = await revertAudit(deps, id, form({ confirm: "yes", force: "true" }), owner);
     expect(forced?.result.kind).toBe("ok");
     expect(forced?.result.message).toContain("forced despite later edits");
-    expect((await h.composed.notionAudit.getAudit(appended.auditId))!.revertedAt).not.toBeNull();
+    expect((await h.server.notionAudit.getAudit(appended.auditId))!.revertedAt).not.toBeNull();
   });
 
   test("without Notion a revert is not offered", async () => {

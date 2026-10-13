@@ -67,7 +67,7 @@ describe("OAuth + MCP end to end", () => {
     const consentUrl = new URL(first.headers.get("location")!, base);
     expect(consentUrl.pathname).toBe("/consent");
 
-    const page = await consentPage(h.composed.dashboard, consentUrl, new Headers({ cookie }));
+    const page = await consentPage(h.server.dashboard, consentUrl, new Headers({ cookie }));
     if (page.kind !== "ok") throw new Error(`consent page: ${page.kind}`);
     expect(page.data.clientName).toBe("E2E CLI");
     expect(page.data.account.name).toBe("Ali");
@@ -108,7 +108,7 @@ describe("OAuth + MCP end to end", () => {
   });
 
   test("granting discord:read exposes the Discord tools, filtered by channel visibility", async () => {
-    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER_ID });
+    await h.server.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER_ID });
 
     const init = await mcpCall(accessToken, {
       jsonrpc: "2.0",
@@ -164,7 +164,7 @@ describe("OAuth + MCP end to end", () => {
       ["discord_read_messages", false, MEMBER_ID],
       ["discord_read_messages", true, MEMBER_ID],
     ]);
-    const recorded = h.composed.database.db.select().from(toolCall).orderBy(toolCall.id).all();
+    const recorded = h.server.database.db.select().from(toolCall).orderBy(toolCall.id).all();
     expect(recorded.map((row) => [row.tool, row.ok, row.errorKind, row.discordUserId])).toEqual([
       ["discord_list_channels", true, null, MEMBER_ID],
       ["discord_read_messages", false, "error", MEMBER_ID],
@@ -183,7 +183,7 @@ describe("OAuth + MCP end to end", () => {
     };
     expect(await toolNames()).toEqual([]);
 
-    await h.composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER_ID });
+    await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER_ID });
     expect(await toolNames()).toEqual(NOTION_READ_TOOLS);
 
     const page = notion.addPage({ title: "Team wiki" });
@@ -203,7 +203,7 @@ describe("OAuth + MCP end to end", () => {
     });
     expect(denied.json.result?.isError ?? denied.json.error).toBeTruthy();
 
-    await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER_ID });
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER_ID });
     expect(await toolNames()).toEqual([...NOTION_READ_TOOLS, ...NOTION_WRITE_TOOLS].sort());
 
     const created = await mcpCall(accessToken, {
@@ -216,7 +216,7 @@ describe("OAuth + MCP end to end", () => {
     expect(text).toContain('Created page "Minutes"');
     expect(text).toContain("audit #1");
     expect(notion.comments.at(-1)!.text).toBe("🤖 Ali (@alice, Discord) が MCP 経由でページを作成しました — audit #1");
-    expect(await h.composed.notionAudit.getAudit(1)).toMatchObject({ discordUserId: MEMBER_ID, discordDisplayName: "Ali", status: "ok" });
+    expect(await h.server.notionAudit.getAudit(1)).toMatchObject({ discordUserId: MEMBER_ID, discordDisplayName: "Ali", status: "ok" });
 
     const changes = await mcpCall(accessToken, {
       jsonrpc: "2.0",

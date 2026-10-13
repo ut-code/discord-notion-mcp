@@ -8,8 +8,8 @@ const config = {
     adapter: adapter(),
     // The built-in origin check runs before any hook and rejects form-urlencoded POSTs
     // without an Origin header, which MCP clients send to the OAuth token/revoke endpoints.
-    // "*" turns it off; hooks.server.ts lets the API routes through first and then applies
-    // its own Origin check (isCrossOriginWrite in http.ts) to the UI's form posts.
+    // "*" turns it off; the handler in http.ts answers the API routes first and applies its
+    // own Origin check to every other state-changing request (see route() there).
     csrf: { trustedOrigins: ["*"] },
     // Pages only; other responses get frame-ancestors from withSecurityHeaders (http.ts).
     // Styles stay 'unsafe-inline': Svelte transitions, toasts and style attributes inject them.

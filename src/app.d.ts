@@ -15,7 +15,7 @@ declare global {
     interface Locals {
       deps: DashboardDeps;
       /** Dashboard access of the browser session, resolved once per request. */
-      viewer: () => Promise<ViewerGate>;
+      viewerGate: () => Promise<ViewerGate>;
       /** Only under `bun run preview`. */
       preview: Preview | null;
       /** From the `theme` cookie. */

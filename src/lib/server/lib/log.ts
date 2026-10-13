@@ -19,6 +19,7 @@ type GrantChange = { permission: Permission; subjectType: SubjectType; subjectId
 export type EventEntry =
   | { event: "startup"; port: number; publicUrl: string; mcpResource: string; tools: string[] }
   | { event: "notion_disabled"; reason: string }
+  | { event: "cross_origin_write_refused"; method: string; path: string; origin: string | null }
   | { event: "audit_pending_marked_failed"; count: number }
   | { event: "tool_calls_pruned"; deleted: number }
   | { event: "oauth_clients_pruned"; deleted: number }

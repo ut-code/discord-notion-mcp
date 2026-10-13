@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Auth } from "../src/lib/server/auth/auth";
-import { createHttpHandler, isCrossOriginWrite, withSecurityHeaders } from "../src/lib/server/http";
+import { createHttpHandler, withSecurityHeaders } from "../src/lib/server/http";
+import type { EventEntry } from "../src/lib/server/lib/log";
 import { clientIpFromForwardedFor, CLIENT_IP_HEADER, withClientIp } from "../src/lib/server/lib/client-ip";
 
 const fakeAuth = (handler: (request: Request) => Promise<Response>) => ({ handler }) as unknown as Pick<Auth, "handler">;
@@ -35,6 +36,7 @@ describe("http handler", () => {
       auth: fakeAuth(async (request) => (seen.push(request.headers.get(CLIENT_IP_HEADER)), new Response("ok"))),
       mcpEndpoint: async () => new Response(),
       trustedProxyCount: 1,
+      publicOrigin: "http://x",
     });
     await http(
       new Request("http://x/api/auth/ok", { headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.7", [CLIENT_IP_HEADER]: "1.1.1.1" } }),
@@ -49,6 +51,7 @@ describe("http handler", () => {
       auth: fakeAuth(async (request) => (seen.push(request.headers.get(CLIENT_IP_HEADER)), new Response("ok"))),
       mcpEndpoint: async () => new Response(),
       trustedProxyCount: 0,
+      publicOrigin: "http://x",
     });
     await http(new Request("http://x/api/auth/ok", { headers: { "x-forwarded-for": "6.6.6.6" } }), () => "192.0.2.1");
     expect(seen).toEqual(["192.0.2.1"]);
@@ -59,6 +62,7 @@ describe("http handler", () => {
       auth: fakeAuth(async () => new Response("auth")),
       mcpEndpoint: async () => new Response("mcp"),
       trustedProxyCount: 0,
+      publicOrigin: "http://x",
     });
     expect(await (await http(new Request("http://x/mcp", { method: "DELETE" })))!.text()).toBe("mcp");
     expect(await (await http(new Request("http://x/healthz")))!.json()).toEqual({ ok: true });
@@ -77,6 +81,7 @@ describe("http handler", () => {
         throw new Error("kaboom");
       },
       trustedProxyCount: 0,
+      publicOrigin: "http://x",
       logError: (entry) => errors.push(entry),
     });
     const res = (await http(new Request("http://x/mcp", { method: "POST" })))!;
@@ -107,13 +112,41 @@ describe("security headers", () => {
 });
 
 describe("CSRF", () => {
-  const post = (origin: string | null) =>
-    new Request("http://x/dashboard/grants?/create", { method: "POST", headers: origin ? { origin } : {} });
+  const PUBLIC_ORIGIN = "https://mcp.example.com";
+  const handler = (events: EventEntry[] = []) =>
+    createHttpHandler({
+      auth: fakeAuth(async () => new Response("auth")),
+      mcpEndpoint: async () => new Response("mcp"),
+      trustedProxyCount: 0,
+      publicOrigin: PUBLIC_ORIGIN,
+      logEvent: (entry) => events.push(entry),
+    });
+  const post = (path: string, origin: string | null) =>
+    new Request(`${PUBLIC_ORIGIN}${path}`, { method: "POST", headers: origin ? { origin } : {} });
 
-  test("state-changing requests must come from the public origin", () => {
-    expect(isCrossOriginWrite(post("http://evil.example"), "https://mcp.example.com")).toBe(true);
-    expect(isCrossOriginWrite(post(null), "https://mcp.example.com")).toBe(true);
-    expect(isCrossOriginWrite(post("https://mcp.example.com"), "https://mcp.example.com")).toBe(false);
-    expect(isCrossOriginWrite(new Request("http://x/dashboard"), "https://mcp.example.com")).toBe(false);
+  test("UI writes must come from the public origin", async () => {
+    const events: EventEntry[] = [];
+    const http = handler(events);
+    for (const path of ["/dashboard/grants?/create", "/theme"]) {
+      const refused = (await http(post(path, "https://evil.example")))!;
+      expect(refused.status).toBe(403);
+      expect(refused.headers.get("x-frame-options")).toBe("DENY");
+      expect((await http(post(path, null)))!.status).toBe(403);
+      expect(await http(post(path, PUBLIC_ORIGIN))).toBeNull();
+    }
+    expect(await http(new Request(`${PUBLIC_ORIGIN}/dashboard`, { headers: { origin: "https://evil.example" } }))).toBeNull();
+    expect(events[0]).toEqual({
+      event: "cross_origin_write_refused",
+      method: "POST",
+      path: "/dashboard/grants",
+      origin: "https://evil.example",
+    });
+    expect(events).toHaveLength(4);
+  });
+
+  test("MCP and OAuth clients post from other origins", async () => {
+    const http = handler();
+    expect(await (await http(post("/mcp", "https://claude.ai")))!.text()).toBe("mcp");
+    expect(await (await http(post("/api/auth/oauth2/token", null)))!.text()).toBe("auth");
   });
 });

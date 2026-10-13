@@ -153,14 +153,14 @@ export async function startPreview(): Promise<Runtime> {
     NOTION_TOKEN: "preview",
     TRUSTED_PROXY_COUNT: "0",
   });
-  const composed = await composeServer(config, {
+  const server = await composeServer(config, {
     discordApi: discord,
     notionApi: notion,
     database,
     logToolCall: () => {},
     logEvent: () => {},
   });
-  const authContext = await composed.auth.$context;
+  const authContext = await server.auth.$context;
 
   const authUserIds = new Map<string, string>();
   for (const person of people) {
@@ -172,16 +172,16 @@ export async function startPreview(): Promise<Runtime> {
     authUserIds.set(person.userId, user.id);
   }
 
-  await composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
-  await composed.grants.createGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
-  await composed.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_STAFF, createdBy: OWNER_ID });
-  await composed.grants.createGrant({
+  await server.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
+  await server.grants.createGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
+  await server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_STAFF, createdBy: OWNER_ID });
+  await server.grants.createGrant({
     permission: "notion:read",
     subjectType: "user",
     subjectId: "300000000000000004",
     createdBy: OWNER_ID,
   });
-  await composed.grants.createGrant({
+  await server.grants.createGrant({
     permission: "notion:write",
     subjectType: "user",
     subjectId: "300000000000000001",
@@ -231,10 +231,10 @@ export async function startPreview(): Promise<Runtime> {
   await run("notion_edit_content", { page: wiki.id, edits: [{ old_str: "存在しない文章", new_str: "x" }] }, suzuki);
   const editId = Number(/audit #(\d+)/.exec(edit)?.[1]);
   if (editId) {
-    await composed.notionAudit.revert(editId, { actorDiscordUserId: OWNER_ID, actorDisplayName: "きなこもち", actorUsername: "kinako" });
+    await server.notionAudit.revert(editId, { actorDiscordUserId: OWNER_ID, actorDisplayName: "きなこもち", actorUsername: "kinako" });
   }
   await run("notion_archive_page", { page: notion.addPage({ title: "古いメモ" }).id }, tanaka);
-  seedToolCalls(composed.toolCalls);
+  seedToolCalls(server.toolCalls);
 
   const sessionCookie = async (discordUserId: string): Promise<string | null> => {
     const userId = authUserIds.get(discordUserId);
@@ -248,7 +248,7 @@ export async function startPreview(): Promise<Runtime> {
 
   console.log(`preview ready: ${config.publicUrl}/dev`);
   return {
-    composed,
+    server,
     preview: {
       users: people.map((person) => ({ id: person.userId, name: displayName(person), username: person.username })),
       sessionCookie,

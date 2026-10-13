@@ -10,7 +10,7 @@ interface GuardEvent {
 
 /** Dashboard pages and actions: redirects to sign-in, or renders the 403/503 error page. */
 export async function requireViewer({ locals, url, request }: GuardEvent): Promise<Viewer> {
-  const gate = await locals.viewer();
+  const gate = await locals.viewerGate();
   if (gate.kind === "signed-out") redirect(302, signInRedirect(url, request.method));
   if (gate.kind === "denied") error(gate.status, { title: gate.title, message: gate.message, signedIn: true });
   return gate.viewer;
@@ -18,7 +18,7 @@ export async function requireViewer({ locals, url, request }: GuardEvent): Promi
 
 /** Dashboard JSON endpoints: like requireViewer, but 401 instead of a sign-in redirect. */
 export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): Promise<Viewer> {
-  const gate = await locals.viewer();
+  const gate = await locals.viewerGate();
   if (gate.kind === "signed-out") error(401, { message: "ログインが必要です。" });
   if (gate.kind === "denied") error(gate.status, { title: gate.title, message: gate.message });
   return gate.viewer;

@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { isCrossOriginWrite } from "../src/lib/server/http";
 import { parseThemeForm, themeFromCookie, THEME_COOKIE_OPTIONS, withThemeClass } from "../src/lib/server/theme";
 import { nextTheme } from "../src/lib/theme";
 
@@ -20,14 +19,15 @@ describe("theme cookie → <html> class", () => {
 
   test("marks <html> in the page template; system adds nothing", async () => {
     const template = await Bun.file(new URL("../src/app.html", import.meta.url)).text();
-    expect(withThemeClass(template, "dark")).toContain('<html class="dark" lang="ja">');
-    expect(withThemeClass(template, "light")).toContain('<html class="light" lang="ja">');
-    expect(withThemeClass(template, "system")).toBe(template);
+    expect(withThemeClass(template, "dark")).toContain('<html lang="ja" class="dark">');
+    expect(withThemeClass(template, "light")).toContain('<html lang="ja" class="light">');
+    expect(withThemeClass(template, "system")).toContain('<html lang="ja">');
+    expect(withThemeClass(template, "system")).not.toContain("%theme%");
   });
 
-  test("only touches the start of the document, not later chunks", () => {
-    const chunk = '<pre>&lt;html&gt;</pre><script>"<!doctype html><html>"</script>';
-    expect(withThemeClass(chunk, "dark")).toBe(chunk);
+  test("page text that spells the placeholder is left alone", () => {
+    const page = '<!doctype html><html lang="ja" class="%theme%"><body><p> class="%theme%"</p></body></html>';
+    expect(withThemeClass(page, "dark")).toBe('<!doctype html><html lang="ja" class="dark"><body><p> class="%theme%"</p></body></html>');
   });
 
   test("the toggle cycles system → light → dark", () => {
@@ -53,12 +53,6 @@ describe("POST /theme", () => {
     for (const next of ["//evil.example", "https://evil.example", "/\\evil.example", "/\t/evil.example"]) {
       expect(parseThemeForm(form({ theme: "light", next }))?.location).toBe("/dashboard");
     }
-  });
-
-  test("cross-origin posts are refused by the hook's origin check", () => {
-    const post = (origin: string) => new Request("https://mcp.example.com/theme", { method: "POST", headers: { origin } });
-    expect(isCrossOriginWrite(post("https://evil.example"), "https://mcp.example.com")).toBe(true);
-    expect(isCrossOriginWrite(post("https://mcp.example.com"), "https://mcp.example.com")).toBe(false);
   });
 
   test("the cookie lasts a year for the whole site", () => {
