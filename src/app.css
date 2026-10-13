@@ -804,7 +804,7 @@
 	.stat-tiles {
 		margin: 0;
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 16px;
 	}
 	.stat-tile {
@@ -832,6 +832,7 @@
 	}
 	@media (max-width: 640px) {
 		.stat-tiles {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 8px;
 		}
 		.stat-tile {

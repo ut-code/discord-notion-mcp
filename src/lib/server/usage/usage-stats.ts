@@ -10,7 +10,7 @@ export function jstDay(ms: number): number {
   return Math.floor((ms + JST_OFFSET_MS) / DAY_MS);
 }
 
-const jstDayExpr = (column: typeof toolCall.createdAt | typeof notionAudit.createdAt) =>
+const jstDayExpr = (column: typeof toolCall.createdAt) =>
   sql<number>`cast((${column} + ${sql.raw(String(JST_OFFSET_MS))}) / ${sql.raw(String(DAY_MS))} as integer)`;
 const failed = sql<number>`coalesce(sum(case when ${toolCall.ok} = 0 then 1 else 0 end), 0)`;
 
@@ -63,19 +63,17 @@ export class UsageStats {
     return row?.total ?? 0;
   }
 
-  notionDaily(since: Date): Array<{ day: number; writes: number; reverts: number; failures: number }> {
-    const day = jstDayExpr(notionAudit.createdAt);
+  notionTotals(since: Date): { writes: number; reverts: number; failures: number } {
     const tally = (condition: ReturnType<typeof sql>) => sql<number>`coalesce(sum(case when ${condition} then 1 else 0 end), 0)`;
-    return this.db
+    const [row] = this.db
       .select({
-        day,
         writes: tally(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} != 'revert'`),
         reverts: tally(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} = 'revert'`),
         failures: tally(sql`${notionAudit.status} = 'failed'`),
       })
       .from(notionAudit)
       .where(gte(notionAudit.createdAt, since))
-      .groupBy(day)
       .all();
+    return row ?? { writes: 0, reverts: 0, failures: 0 };
   }
 }

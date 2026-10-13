@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { rangeParam, statsPage } from "../../src/lib/server/dashboard/stats";
+import type { Permission } from "../../src/lib/server/permissions/permissions";
 import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
@@ -24,10 +25,20 @@ function freshDatabase(): DatabaseHandle {
 function depsFor(database: DatabaseHandle) {
   const discord = new FakeDiscordApi();
   discord.members.set(U1, { ...makeMember(U1), nick: "Mina" });
-  return { usage: new UsageStats(database.db), subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, () => {}) };
+  return {
+    usage: new UsageStats(database.db),
+    subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, () => {}),
+    toolPermissions: new Map<string, Permission>([
+      ["discord_read_messages", "discord:read"],
+      ["notion_search", "notion:read"],
+      ["notion_get_page", "notion:read"],
+      ["notion_create_page", "notion:write"],
+    ]),
+  };
 }
 
 let deps: ReturnType<typeof depsFor>;
+const reader = { canViewAudit: true };
 
 beforeAll(async () => {
   const database = freshDatabase();
@@ -68,8 +79,8 @@ describe("usage statistics", () => {
     expect(jstDay(jst(12, 0, 0).getTime())).toBe(jstDay(jst(11, 23, 59).getTime()) + 1);
   });
 
-  test("daily calls are stacked by the top five tools plus その他", async () => {
-    const data = await statsPage(deps, new URLSearchParams("range=7"), NOW);
+  test("daily calls are stacked by the permission each tool needs", async () => {
+    const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
     expect(data.range).toBe(7);
     expect(data.ranges).toEqual([
       { label: "7日", href: "/dashboard?range=7", active: true },
@@ -77,23 +88,20 @@ describe("usage statistics", () => {
       { label: "90日", href: "/dashboard?range=90", active: false },
     ]);
     expect(data.daily.series.map((entry) => [entry.key, entry.label])).toEqual([
-      ["s0", "discord_read_messages"],
-      ["s1", "notion_search"],
-      ["s2", "notion_get_page"],
-      ["s3", "tool_a"],
-      ["s4", "tool_b"],
+      ["discord:read", "Discord 読み取り"],
+      ["notion:read", "Notion 読み取り"],
       ["other", "その他"],
     ]);
     expect(data.daily.rows.map((row) => row.date)).toEqual(["10/06", "10/07", "10/08", "10/09", "10/10", "10/11", "10/12"]);
-    expect(data.daily.rows.at(-1)).toEqual({ date: "10/12", s0: 2, s1: 2, s2: 0, s3: 0, s4: 0, other: 0 });
-    expect(data.daily.rows.at(-2)).toEqual({ date: "10/11", s0: 0, s1: 0, s2: 1, s3: 0, s4: 0, other: 0 });
-    expect(data.daily.rows.at(-3)).toEqual({ date: "10/10", s0: 0, s1: 0, s2: 0, s3: 1, s4: 1, other: 1 });
+    expect(data.daily.rows.at(-1)).toEqual({ date: "10/12", "discord:read": 2, "notion:read": 2, other: 0 });
+    expect(data.daily.rows.at(-2)).toEqual({ date: "10/11", "discord:read": 0, "notion:read": 1, other: 0 });
+    expect(data.daily.rows.at(-3)).toEqual({ date: "10/10", "discord:read": 0, "notion:read": 0, other: 3 });
   });
 
   test("summary, per-user and per-tool tables cover the range only", async () => {
-    const data = await statsPage(deps, new URLSearchParams("range=7"), NOW);
+    const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
     expect(data.empty).toBe(false);
-    expect(data.summary).toEqual({ calls: 8, failureRate: "25.0%", rateLimited: 1 });
+    expect(data.summary).toEqual({ calls: 8, activeUsers: 2, failureRate: "25.0%", rateLimited: 1 });
     expect(data.users).toEqual([
       { id: U1, name: "Mina", avatarUrl: null, calls: 4, failureRate: "50.0%", lastUsed: "10/12 10:00" },
       { id: U2, name: U2, avatarUrl: null, calls: 4, failureRate: "0.0%", lastUsed: "10/11 23:50" },
@@ -103,26 +111,24 @@ describe("usage statistics", () => {
       { tool: "notion_search", calls: 2, failureRate: "0.0%", avgDuration: "200 ms" },
     ]);
 
-    const month = await statsPage(deps, new URLSearchParams(), NOW);
+    const month = await statsPage(deps, new URLSearchParams(), reader, NOW);
     expect(month.range).toBe(30);
     expect(month.daily.rows.length).toBe(30);
     expect(month.summary.calls).toBe(9);
     expect(month.tools[0]).toMatchObject({ tool: "notion_search", calls: 3 });
   });
 
-  test("Notion writes, reverts and failures per day come from the audit log", async () => {
-    const data = await statsPage(deps, new URLSearchParams("range=7"), NOW);
-    expect(data.notion.totals).toEqual({ writes: 1, reverts: 1, failures: 1 });
-    expect(data.notion.rows.at(-1)).toEqual({ date: "10/12", writes: 1, reverts: 0, failures: 1 });
-    expect(data.notion.rows.at(-2)).toEqual({ date: "10/11", writes: 0, reverts: 1, failures: 0 });
-    expect(data.notion.series.map((entry) => entry.label)).toEqual(["書き込み", "取り消し", "失敗"]);
-    expect((await statsPage(deps, new URLSearchParams("range=90"), NOW)).notion.totals.writes).toBe(2);
+  test("Notion writes, reverts and failures come from the audit log", async () => {
+    const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
+    expect(data.notion).toEqual({ writes: 1, reverts: 1, failures: 1, auditHref: "/dashboard/audit" });
+    expect((await statsPage(deps, new URLSearchParams("range=90"), reader, NOW)).notion.writes).toBe(2);
+    expect((await statsPage(deps, new URLSearchParams("range=7"), { canViewAudit: false }, NOW)).notion.auditHref).toBeNull();
   });
 
   test("an empty log is reported as empty with zero-filled days", async () => {
-    const data = await statsPage(depsFor(freshDatabase()), new URLSearchParams(), NOW);
+    const data = await statsPage(depsFor(freshDatabase()), new URLSearchParams(), reader, NOW);
     expect(data.empty).toBe(true);
-    expect(data.summary).toEqual({ calls: 0, failureRate: "—", rateLimited: 0 });
+    expect(data.summary).toEqual({ calls: 0, activeUsers: 0, failureRate: "—", rateLimited: 0 });
     expect(data.daily.series).toEqual([]);
     expect(data.daily.rows.length).toBe(30);
     expect(data.users).toEqual([]);

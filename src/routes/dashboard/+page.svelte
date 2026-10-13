@@ -1,6 +1,7 @@
 <script lang="ts">
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
   import PageHeader from "$lib/components/app/page-header.svelte";
+  import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
   import StackedBars from "./stacked-bars.svelte";
 
@@ -8,12 +9,15 @@
 
   const summary = $derived([
     { label: "呼び出し", value: data.summary.calls.toLocaleString("ja-JP") },
+    { label: "利用者", value: data.summary.activeUsers.toLocaleString("ja-JP") },
     { label: "失敗率", value: data.summary.failureRate },
     { label: "レート制限", value: data.summary.rateLimited.toLocaleString("ja-JP") },
   ]);
-  const notionTotals = $derived(
-    data.notion.series.map((entry) => ({ ...entry, value: data.notion.totals[entry.key as keyof typeof data.notion.totals] })),
-  );
+  const notionTotals = $derived([
+    { label: "書き込み", value: data.notion.writes },
+    { label: "取り消し", value: data.notion.reverts },
+    { label: "失敗", value: data.notion.failures },
+  ]);
 </script>
 
 <PageHeader title="統計">
@@ -40,7 +44,7 @@
 
   <section class="panel panel-pad" aria-labelledby="daily-heading">
     <h2 id="daily-heading">日別の呼び出し</h2>
-    <StackedBars rows={data.daily.rows} series={data.daily.series} label="日別・ツール別の呼び出し回数" />
+    <StackedBars rows={data.daily.rows} series={data.daily.series} label="日別・権限別の呼び出し回数" />
   </section>
 
   <div class="columns">
@@ -110,18 +114,18 @@
     </section>
   </div>
 
-  <section class="panel panel-pad" aria-labelledby="notion-heading">
-    <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <h2 id="notion-heading">Notion 書き込み</h2>
-      <dl class="cluster gap-x-4 text-[13px]">
-        {#each notionTotals as total (total.key)}
-          <div class="flex items-baseline gap-1.5">
-            <dt class="text-muted-foreground">{total.label}</dt>
-            <dd class="font-medium tabular-nums">{total.value}</dd>
-          </div>
-        {/each}
-      </dl>
-    </div>
-    <StackedBars rows={data.notion.rows} series={data.notion.series} label="日別の Notion 書き込み・取り消し・失敗" />
+  <section class="panel panel-pad flex flex-row flex-wrap items-center gap-x-6 gap-y-3" aria-labelledby="notion-heading">
+    <h2 id="notion-heading">Notion 書き込み</h2>
+    <dl class="cluster grow gap-x-4 text-[13px]">
+      {#each notionTotals as total (total.label)}
+        <div class="flex items-baseline gap-1.5">
+          <dt class="text-muted-foreground">{total.label}</dt>
+          <dd class="font-medium tabular-nums">{total.value.toLocaleString("ja-JP")}</dd>
+        </div>
+      {/each}
+    </dl>
+    {#if data.notion.auditHref}
+      <Button variant="outline" size="sm" href={data.notion.auditHref}>履歴を見る</Button>
+    {/if}
   </section>
 {/if}

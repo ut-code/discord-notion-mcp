@@ -6,6 +6,7 @@ import type { GuildDirectory } from "../discord/directory";
 import type { ErrorSink, EventSink } from "../lib/log";
 import type { NotionAuditService } from "../notion/changes/audit-service";
 import type { GrantStore } from "../permissions/grants";
+import type { Permission } from "../permissions/permissions";
 import type { PermissionResolver } from "../permissions/resolver";
 import type { UsageStats } from "../usage/usage-stats";
 import type { MemberSearch } from "./member-search";
@@ -28,6 +29,8 @@ export interface DashboardDeps {
   audit: NotionAuditService;
   /** Usage statistics (tool calls, Notion writes). */
   usage: UsageStats;
+  /** Permission each MCP tool requires; groups usage in the stats chart. */
+  toolPermissions: ReadonlyMap<string, Permission>;
   revocation: TokenRevocationService;
   notionEnabled: boolean;
   /** Admin actions. */
