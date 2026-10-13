@@ -626,6 +626,9 @@
 	.pick:hover {
 		background: var(--sidebar);
 	}
+	.pick[data-active] {
+		background: var(--muted);
+	}
 	.pick input {
 		position: absolute;
 		opacity: 0;

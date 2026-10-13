@@ -4,11 +4,11 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 
 ## ツール
 
-| 権限 | ツール |
-|---|---|
+| 権限           | ツール                                                                                                                                                                                 |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `discord:read` | `discord_list_channels` `discord_list_threads` `discord_read_messages` `discord_get_message` `discord_search_messages` `discord_find_member` `discord_list_pins` `discord_list_events` |
-| `notion:read` | `notion_search` `notion_get_page` `notion_query_database` `notion_get_database` `notion_get_comments` |
-| `notion:write` | `notion_create_page` `notion_append_content` `notion_edit_content` `notion_update_properties` `notion_archive_page` `notion_list_recent_changes` `notion_revert_change` |
+| `notion:read`  | `notion_search` `notion_get_page` `notion_query_database` `notion_get_database` `notion_get_comments`                                                                                  |
+| `notion:write` | `notion_create_page` `notion_append_content` `notion_edit_content` `notion_update_properties` `notion_archive_page` `notion_list_recent_changes` `notion_revert_change`                |
 
 - Discord は本人が閲覧できるチャンネルのみ。
 - Notion の権限は Notion 連携に共有されたすべてのページ・データベースが対象。
@@ -39,18 +39,18 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 
 ## 環境変数
 
-| 名前 | 必須 | 内容 |
-|---|---|---|
-| `PUBLIC_URL` | ✓ | `https://<domain>` |
-| `BETTER_AUTH_SECRET` | ✓ | `openssl rand -base64 32` |
-| `DISCORD_CLIENT_ID` | ✓ | |
-| `DISCORD_CLIENT_SECRET` | ✓ | |
-| `DISCORD_BOT_TOKEN` | ✓ | |
-| `DISCORD_GUILD_ID` | ✓ | 対象サーバー ID |
-| `NOTION_TOKEN` | | 未設定なら Notion ツール無効 |
-| `PORT` | | 既定 `3000` |
-| `DATABASE_PATH` | | 既定 `/data/app.db`（Docker） |
-| `TRUSTED_PROXY_COUNT` | | 既定 `1`。Cloudflare 経由なら `2` |
+| 名前                    | 必須 | 内容                              |
+| ----------------------- | ---- | --------------------------------- |
+| `PUBLIC_URL`            | ✓    | `https://<domain>`                |
+| `BETTER_AUTH_SECRET`    | ✓    | `openssl rand -base64 32`         |
+| `DISCORD_CLIENT_ID`     | ✓    |                                   |
+| `DISCORD_CLIENT_SECRET` | ✓    |                                   |
+| `DISCORD_BOT_TOKEN`     | ✓    |                                   |
+| `DISCORD_GUILD_ID`      | ✓    | 対象サーバー ID                   |
+| `NOTION_TOKEN`          |      | 未設定なら Notion ツール無効      |
+| `PORT`                  |      | 既定 `3000`                       |
+| `DATABASE_PATH`         |      | 既定 `/data/app.db`（Docker）     |
+| `TRUSTED_PROXY_COUNT`   |      | 既定 `1`。Cloudflare 経由なら `2` |
 
 ## 権限
 
@@ -91,5 +91,7 @@ bun run preview    # 偽データで UI 確認: http://localhost:3920/dev
 # 他端末から: tailscale serve --bg --https=8443 http://localhost:3920 && PREVIEW_PUBLIC_URL=https://<host>.ts.net:8443 bun run preview
 bun test
 bun run typecheck
+bun run lint
+bun run format
 bun run build && bun run start
 ```

@@ -43,7 +43,8 @@ describe("formatMessage", () => {
   });
 
   test("resolves user, role and channel mentions; leaves unknown ones", () => {
-    const content = "hi <@300000000000000002> and <@!300000000000000003>, see <#200000000000000011> <@&200000000000000099> <#1234567890123456789> <@1234567890123456789>";
+    const content =
+      "hi <@300000000000000002> and <@!300000000000000003>, see <#200000000000000011> <@&200000000000000099> <#1234567890123456789> <@1234567890123456789>";
     const mentions = [
       { id: "300000000000000002", username: "carol", global_name: "Carol", discriminator: "0", avatar: null },
       { id: "300000000000000003", username: "dave", global_name: null, discriminator: "0", avatar: null },

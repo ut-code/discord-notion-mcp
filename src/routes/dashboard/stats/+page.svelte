@@ -11,7 +11,9 @@
     { label: "失敗率", value: data.summary.failureRate },
     { label: "レート制限", value: data.summary.rateLimited.toLocaleString("ja-JP") },
   ]);
-  const notionTotals = $derived(data.notion.series.map((entry) => ({ ...entry, value: data.notion.totals[entry.key as keyof typeof data.notion.totals] })));
+  const notionTotals = $derived(
+    data.notion.series.map((entry) => ({ ...entry, value: data.notion.totals[entry.key as keyof typeof data.notion.totals] })),
+  );
 </script>
 
 <PageHeader title="統計">
@@ -25,7 +27,7 @@
 </PageHeader>
 
 {#if data.empty}
-  <div class="panel text-muted-foreground px-5 py-10 text-center">まだ記録がありません。</div>
+  <div class="panel px-5 py-10 text-center text-muted-foreground">まだ記録がありません。</div>
 {:else}
   <dl class="stat-tiles">
     {#each summary as tile (tile.label)}

@@ -21,9 +21,7 @@ export class GrantStore implements GrantLookup {
   async permissionsFor(userId: string, roleIds: readonly string[]): Promise<Set<Permission>> {
     const userMatch = and(eq(grants.subjectType, "user"), eq(grants.subjectId, userId));
     const condition =
-      roleIds.length > 0
-        ? or(userMatch, and(eq(grants.subjectType, "role"), inArray(grants.subjectId, [...roleIds])))
-        : userMatch;
+      roleIds.length > 0 ? or(userMatch, and(eq(grants.subjectType, "role"), inArray(grants.subjectId, [...roleIds]))) : userMatch;
     const rows = await this.db.select({ permission: grants.permission }).from(grants).where(condition);
     return new Set(rows.map((row) => row.permission));
   }
@@ -45,11 +43,7 @@ export class GrantStore implements GrantLookup {
       .select()
       .from(grants)
       .where(
-        and(
-          eq(grants.permission, input.permission),
-          eq(grants.subjectType, input.subjectType),
-          eq(grants.subjectId, input.subjectId),
-        ),
+        and(eq(grants.permission, input.permission), eq(grants.subjectType, input.subjectType), eq(grants.subjectId, input.subjectId)),
       );
     if (!existing[0]) throw new Error("Grant insert conflicted but no existing row was found");
     return { grant: existing[0], created: false };
@@ -58,13 +52,7 @@ export class GrantStore implements GrantLookup {
   async removeGrant(input: Omit<GrantInput, "createdBy">): Promise<boolean> {
     const deleted = await this.db
       .delete(grants)
-      .where(
-        and(
-          eq(grants.permission, input.permission),
-          eq(grants.subjectType, input.subjectType),
-          eq(grants.subjectId, input.subjectId),
-        ),
-      )
+      .where(and(eq(grants.permission, input.permission), eq(grants.subjectType, input.subjectType), eq(grants.subjectId, input.subjectId)))
       .returning({ id: grants.id });
     return deleted.length > 0;
   }

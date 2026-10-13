@@ -81,7 +81,7 @@ describe("Notion tools", () => {
 
   test("notion_get_page no longer accepts block-tree limits and describes the markdown syntax", () => {
     const tool = tools.get("notion_get_page")!;
-    expect(Object.keys((tool.inputSchema as any).shape)).toEqual(["page"]);
+    expect(Object.keys((tool.inputSchema as { shape: object }).shape)).toEqual(["page"]);
     expect(tool.description).toContain("<details>");
     expect(tool.description).toContain("<mention-user");
   });
@@ -96,7 +96,13 @@ describe("Notion tools", () => {
           id: "st",
           name: "Status",
           type: "status",
-          status: { options: [{ id: "a", name: "Todo" }, { id: "b", name: "Done" }], groups: [{ name: "Complete", option_ids: ["b"] }] },
+          status: {
+            options: [
+              { id: "a", name: "Todo" },
+              { id: "b", name: "Done" },
+            ],
+            groups: [{ name: "Complete", option_ids: ["b"] }],
+          },
         },
         Created: { id: "ct", name: "Created", type: "created_time", created_time: {} },
       },
@@ -104,7 +110,10 @@ describe("Notion tools", () => {
     const db = api.addDatabase({ title: "Tasks DB", dataSources: [{ id: ds.id, name: "Tasks" }] });
     api.addPage({
       parent: { type: "data_source_id", data_source_id: ds.id, database_id: db.id } as never,
-      properties: { Name: titleValue("Write docs"), Status: { id: "st", type: "status", status: { id: "b", name: "Done", color: "green" } } as PagePropertyValue },
+      properties: {
+        Name: titleValue("Write docs"),
+        Status: { id: "st", type: "status", status: { id: "b", name: "Done", color: "green" } } as PagePropertyValue,
+      },
     });
 
     const schema = await call("notion_get_database", { database: db.id });
@@ -140,9 +149,9 @@ describe("Notion tools", () => {
     await expect(call("notion_edit_content", { page: page.id, edits: [{ old_str: "Nope", new_str: "x" }] })).rejects.toThrow(
       "No matches found",
     );
-    await expect(
-      call("notion_edit_content", { page: page.id, edits: [{ old_str: "Anchor", new_str: "x" }] }),
-    ).rejects.toThrow("Multiple matches found");
+    await expect(call("notion_edit_content", { page: page.id, edits: [{ old_str: "Anchor", new_str: "x" }] })).rejects.toThrow(
+      "Multiple matches found",
+    );
     await expect(
       call("notion_edit_content", { page: page.id, edits: [{ old_str: "Anchor B.", new_str: '<page url="">Sub</page>' }] }),
     ).rejects.toThrow("notion_create_page");
@@ -151,7 +160,9 @@ describe("Notion tools", () => {
   });
 
   test("Notion 404s become a not-accessible tool error", async () => {
-    await expect(call("notion_get_page", { page: "1429989fe8ac4effbc8f57f56486db54" })).rejects.toThrow("not shared with the Notion integration");
+    await expect(call("notion_get_page", { page: "1429989fe8ac4effbc8f57f56486db54" })).rejects.toThrow(
+      "not shared with the Notion integration",
+    );
   });
 
   test("property values larger than 100,000 characters of JSON are rejected", () => {
@@ -162,6 +173,8 @@ describe("Notion tools", () => {
     const rejected = schema.safeParse({ page: "p", properties: text(100_001 - overhead) });
     expect(rejected.success).toBe(false);
     expect(rejected.error!.issues[0]!.message).toBe("Property values are too large (at most 100000 characters as JSON).");
-    expect(tools.get("notion_create_page")!.inputSchema.safeParse({ parent: "p", title: "t", properties: text(200_000) }).success).toBe(false);
+    expect(tools.get("notion_create_page")!.inputSchema.safeParse({ parent: "p", title: "t", properties: text(200_000) }).success).toBe(
+      false,
+    );
   });
 });

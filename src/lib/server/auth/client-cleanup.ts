@@ -37,7 +37,13 @@ export interface ClientCleanupOptions {
 }
 
 /** Deletes unused OAuth clients older than 7 days now and then every 24 hours; returns a stop function. */
-export function startClientCleanup({ db, now = Date.now, intervalMs = CLEANUP_INTERVAL_MS, log, logError }: ClientCleanupOptions): () => void {
+export function startClientCleanup({
+  db,
+  now = Date.now,
+  intervalMs = CLEANUP_INTERVAL_MS,
+  log,
+  logError,
+}: ClientCleanupOptions): () => void {
   return runPeriodically(() => {
     try {
       const deleted = deleteUnusedClients(db, new Date(now() - UNUSED_CLIENT_TTL_MS));

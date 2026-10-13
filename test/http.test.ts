@@ -36,7 +36,9 @@ describe("http handler", () => {
       mcpEndpoint: async () => new Response(),
       trustedProxyCount: 1,
     });
-    await http(new Request("http://x/api/auth/ok", { headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.7", [CLIENT_IP_HEADER]: "1.1.1.1" } }));
+    await http(
+      new Request("http://x/api/auth/ok", { headers: { "x-forwarded-for": "6.6.6.6, 203.0.113.7", [CLIENT_IP_HEADER]: "1.1.1.1" } }),
+    );
     await http(new Request("http://x/.well-known/oauth-authorization-server", { headers: { [CLIENT_IP_HEADER]: "1.1.1.1" } }));
     expect(seen).toEqual(["203.0.113.7", ""]);
   });

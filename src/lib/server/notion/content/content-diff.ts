@@ -146,11 +146,15 @@ export function buildRevertPlan(before: string, after: string): RevertPlan {
   if (after.trim() === "") {
     if (before.trim() === "") return { kind: "unchanged" };
     if (after !== "") return { kind: "unsupported", reason: "the page has no text left to anchor a revert on", hunks };
-    return { kind: "revertible", inverse: { type: "insert_content", insert_content: { content: before, position: { type: "start" } } }, hunks };
+    return {
+      kind: "revertible",
+      inverse: { type: "insert_content", insert_content: { content: before, position: { type: "start" } } },
+      hunks,
+    };
   }
 
   const updates = inverseUpdates(a, b, raw, after);
-  let restored: string | null = null;
+  let restored: string | null;
   try {
     restored = applyContentUpdates(after, updates);
   } catch {

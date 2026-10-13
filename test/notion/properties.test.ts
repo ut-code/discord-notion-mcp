@@ -49,7 +49,13 @@ describe("toWritablePropertyValue", () => {
     ["select (empty)", { type: "select", select: null }, { select: null }],
     [
       "multi_select",
-      { type: "multi_select", multi_select: [{ id: "a", name: "A", color: "red" }, { id: "b", name: "B", color: "blue" }] },
+      {
+        type: "multi_select",
+        multi_select: [
+          { id: "a", name: "A", color: "red" },
+          { id: "b", name: "B", color: "blue" },
+        ],
+      },
       { multi_select: [{ id: "a" }, { id: "b" }] },
     ],
     ["status", { type: "status", status: { id: "s1", name: "Done", color: "green" } }, { status: { id: "s1" } }],
@@ -65,8 +71,19 @@ describe("toWritablePropertyValue", () => {
     ["phone_number", { type: "phone_number", phone_number: "+81" }, { phone_number: "+81" }],
     [
       "people",
-      { type: "people", people: [{ object: "user", id: "u1", name: "A" }, { object: "group", id: "g1", name: "G" }] },
-      { people: [{ object: "user", id: "u1" }, { object: "group", id: "g1" }] },
+      {
+        type: "people",
+        people: [
+          { object: "user", id: "u1", name: "A" },
+          { object: "group", id: "g1", name: "G" },
+        ],
+      },
+      {
+        people: [
+          { object: "user", id: "u1" },
+          { object: "group", id: "g1" },
+        ],
+      },
     ],
     ["relation", { type: "relation", relation: [{ id: "p1" }, { id: "p2" }], has_more: false }, { relation: [{ id: "p1" }, { id: "p2" }] }],
     [
@@ -84,10 +101,14 @@ describe("toWritablePropertyValue", () => {
 
   test("rich_text keeps restorable mentions and degrades others to text", () => {
     const userMention = { ...rt("@A"), type: "mention", mention: { type: "user", user: { object: "user", id: "u1" } } };
-    const linkMention = { ...rt("site", {}, "https://s.test"), type: "mention", mention: { type: "link_mention", link_mention: { href: "https://s.test" } } };
+    const linkMention = {
+      ...rt("site", {}, "https://s.test"),
+      type: "mention",
+      mention: { type: "link_mention", link_mention: { href: "https://s.test" } },
+    };
     const result = toWritablePropertyValue(v({ type: "rich_text", rich_text: [userMention, linkMention] }));
     expect(result.ok).toBe(true);
-    const items = (result as unknown as { value: { rich_text: any[] } }).value.rich_text;
+    const items = (result as unknown as { value: { rich_text: unknown[] } }).value.rich_text;
     expect(items[0]).toMatchObject({ type: "mention", mention: { user: { id: "u1" } } });
     expect(items[1]).toMatchObject({ type: "text", text: { content: "site", link: { url: "https://s.test" } } });
   });
@@ -126,9 +147,14 @@ describe("truncated array properties", () => {
     const value = v({ type: "relation", relation, has_more: true });
     expect(mayBeTruncated(value)).toBe(true);
     expect(mayBeTruncated(v({ type: "relation", relation: [{ id: "x" }], has_more: false }))).toBe(false);
-    const items = Array.from({ length: 30 }, (_, i) => ({ object: "property_item", id: "pid", type: "relation", relation: { id: `p${i}` } }));
+    const items = Array.from({ length: 30 }, (_, i) => ({
+      object: "property_item",
+      id: "pid",
+      type: "relation",
+      relation: { id: `p${i}` },
+    }));
     const full = valueFromPropertyItems(value, items as never);
-    expect((full as any).relation.length).toBe(30);
+    expect((full as Extract<PagePropertyValue, { type: "relation" }>).relation).toHaveLength(30);
     expect(toWritablePropertyValue(full)).toMatchObject({ ok: true, value: { relation: expect.any(Array) } });
   });
 });

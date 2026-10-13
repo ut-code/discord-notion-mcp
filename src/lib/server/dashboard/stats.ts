@@ -87,7 +87,11 @@ function dayLabel(day: number): string {
 }
 
 /** Query: `range` (7, 30 or 90 days, ending today in Japan time). */
-export async function statsPage(deps: Pick<DashboardDeps, "usage" | "subjects">, params: URLSearchParams, now = Date.now()): Promise<StatsPageData> {
+export async function statsPage(
+  deps: Pick<DashboardDeps, "usage" | "subjects">,
+  params: URLSearchParams,
+  now = Date.now(),
+): Promise<StatsPageData> {
   const range = rangeParam(params.get("range"));
   const firstDay = jstDay(now) - (range - 1);
   const since = new Date(firstDay * DAY_MS - JST_OFFSET_MS);

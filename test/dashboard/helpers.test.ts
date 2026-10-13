@@ -83,7 +83,12 @@ describe("admin formatting", () => {
   });
 
   test("diff lines separate hunks with ⋯", () => {
-    expect(diffLines([{ before: "a", after: "b\nc" }, { before: "", after: "d" }])).toEqual([
+    expect(
+      diffLines([
+        { before: "a", after: "b\nc" },
+        { before: "", after: "d" },
+      ]),
+    ).toEqual([
       { kind: "del", text: "− a" },
       { kind: "add", text: "+ b" },
       { kind: "add", text: "+ c" },

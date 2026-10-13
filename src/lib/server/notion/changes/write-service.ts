@@ -251,7 +251,12 @@ export class NotionWriteService {
     try {
       after = await this.api.updatePageMarkdown(page.id, input.update);
     } catch (error) {
-      return this.recordFailure(actor, { ...base, snapshot: toAuditJson(FailedContentSnapshotSchema, { beforeSha256 }) }, error, failureHint);
+      return this.recordFailure(
+        actor,
+        { ...base, snapshot: toAuditJson(FailedContentSnapshotSchema, { beforeSha256 }) },
+        error,
+        failureHint,
+      );
     }
 
     const snapshot: ContentSnapshot = { beforeSha256, afterSha256: null, inverse: null, revertBlocker: null, hunks: [] };
@@ -303,9 +308,7 @@ export class NotionWriteService {
       if (!WRITABLE_PROPERTY_TYPES.has(value.type)) {
         throw new ToolError(`Property "${name}" (${value.type}) cannot be written through this server.`);
       }
-      const full = mayBeTruncated(value)
-        ? valueFromPropertyItems(value, await this.api.retrievePropertyItems(page.id, value.id))
-        : value;
+      const full = mayBeTruncated(value) ? valueFromPropertyItems(value, await this.api.retrievePropertyItems(page.id, value.id)) : value;
       const writable = toWritablePropertyValue(full);
       if (!writable.ok) {
         throw new ToolError(`Property "${name}" cannot be changed because the change could not be reverted: ${writable.reason}.`);

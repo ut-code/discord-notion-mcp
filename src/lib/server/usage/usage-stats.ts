@@ -30,7 +30,12 @@ export class UsageStats {
 
   byUser(since: Date): Array<{ discordUserId: string; calls: number; failures: number; lastUsed: Date }> {
     const rows = this.db
-      .select({ discordUserId: toolCall.discordUserId, calls: count(), failures: failed, lastUsed: sql<number>`max(${toolCall.createdAt})` })
+      .select({
+        discordUserId: toolCall.discordUserId,
+        calls: count(),
+        failures: failed,
+        lastUsed: sql<number>`max(${toolCall.createdAt})`,
+      })
       .from(toolCall)
       .where(gte(toolCall.createdAt, since))
       .groupBy(toolCall.discordUserId)

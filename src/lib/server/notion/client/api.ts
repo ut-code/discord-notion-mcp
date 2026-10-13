@@ -114,8 +114,7 @@ export class SdkNotionApi implements NotionApi {
 
   constructor(token: string, options: { client?: Client; maxConcurrent?: number } = {}) {
     this.client =
-      options.client ??
-      new Client({ auth: token, notionVersion: NOTION_API_VERSION, retry: { maxRetries: 3, maxRetryDelayMs: 30_000 } });
+      options.client ?? new Client({ auth: token, notionVersion: NOTION_API_VERSION, retry: { maxRetries: 3, maxRetryDelayMs: 30_000 } });
     this.limit = createLimiter(options.maxConcurrent ?? MAX_CONCURRENT_REQUESTS);
   }
 
@@ -136,9 +135,7 @@ export class SdkNotionApi implements NotionApi {
         filter: query.filter ? { property: "object", value: query.filter } : undefined,
       }),
     );
-    const results = response.results.filter(
-      (item): item is SearchResult => isFullPage(item) || isFullDataSource(item),
-    );
+    const results = response.results.filter((item): item is SearchResult => isFullPage(item) || isFullDataSource(item));
     return { results, nextCursor: response.next_cursor };
   }
 

@@ -62,7 +62,8 @@ function schemaLines(dataSource: NotionDataSource): string[] {
     if (c.type === "relation") details.push(`related data source: ${c.relation.data_source_id}`);
     if (c.type === "number" && c.number?.format) details.push(`format: ${c.number.format}`);
     if (c.type === "formula" && c.formula?.expression) details.push(`expression: ${c.formula.expression}`);
-    if (c.type === "rollup") details.push(`rollup: ${c.rollup.function} of ${c.rollup.rollup_property_name} via ${c.rollup.relation_property_name}`);
+    if (c.type === "rollup")
+      details.push(`rollup: ${c.rollup.function} of ${c.rollup.rollup_property_name} via ${c.rollup.relation_property_name}`);
     if (!WRITABLE_PROPERTY_TYPES.has(c.type)) details.push("read-only");
     return `- ${name} (${c.type}, id ${c.id})${details.length ? `: ${details.join(" | ")}` : ""}`;
   });
@@ -144,7 +145,10 @@ export function createReadTools(deps: NotionToolDeps): {
     permission: "notion:read",
     inputSchema: z.object({
       database: idOrUrl("Database or data source"),
-      filter: z.record(z.string(), z.unknown()).optional().describe('Notion filter object, e.g. {"property": "Status", "status": {"equals": "Done"}}'),
+      filter: z
+        .record(z.string(), z.unknown())
+        .optional()
+        .describe('Notion filter object, e.g. {"property": "Status", "status": {"equals": "Done"}}'),
       sorts: z
         .array(z.record(z.string(), z.unknown()))
         .optional()
@@ -165,9 +169,11 @@ export function createReadTools(deps: NotionToolDeps): {
       const header = `Data source "${dataSourceTitle(dataSource)}" (id ${dataSource.id}) — ${page.results.length} row(s)`;
       if (page.results.length === 0) return `${header}\n\nNo rows match.`;
       const rows = page.results.map((row) =>
-        [`- ${pageTitle(row)} (id ${row.id})`, `  url: ${row.url}`, ...propertyLines(row, { skipTitle: true, skipEmpty: true, indent: "  " })].join(
-          "\n",
-        ),
+        [
+          `- ${pageTitle(row)} (id ${row.id})`,
+          `  url: ${row.url}`,
+          ...propertyLines(row, { skipTitle: true, skipEmpty: true, indent: "  " }),
+        ].join("\n"),
       );
       const lines = [header, "", ...rows];
       if (page.nextCursor) lines.push("", `More rows: start_cursor="${page.nextCursor}"`);

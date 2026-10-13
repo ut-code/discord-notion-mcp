@@ -45,10 +45,7 @@ export function createMessageTools(deps: DiscordToolDeps): {
       const ctx = await formatContextFor(deps, principal, channel);
       const first = messages[0]!;
       const last = messages.at(-1)!;
-      const hints = [
-        `Older: before="${first.id}"`,
-        after || before ? `Newer: after="${last.id}"` : undefined,
-      ].filter(Boolean);
+      const hints = [`Older: before="${first.id}"`, after || before ? `Newer: after="${last.id}"` : undefined].filter(Boolean);
       return `${header}\n${hints.join(" | ")}\n\n${formatMessages(messages, ctx)}`;
     }),
   });

@@ -72,9 +72,7 @@ export async function runTool(tool: AnyToolDefinition, args: unknown, principal:
     if (!current.isMember || !current.permissions.has(tool.permission)) {
       throw new ToolError(`You do not have the "${tool.permission}" permission required for this tool.`);
     }
-    const result = toCallToolResult(
-      await tool.handler(args as never, { principal: { ...principal, access: current } }),
-    );
+    const result = toCallToolResult(await tool.handler(args as never, { principal: { ...principal, access: current } }));
     finish(!result.isError, result.isError ? { kind: "error", message: TOOL_RESULT_ERROR } : undefined);
     return result;
   } catch (error) {

@@ -52,7 +52,8 @@
       <div class="stack">
         <span class="truncate text-sm font-medium">{data.viewer.displayName}</span>
         <span class="sub">
-          <span class="truncate inline-block max-w-full align-bottom">@{data.viewer.username}</span> · <span class="whitespace-nowrap">{data.viewer.roleLabel}</span>
+          <span class="inline-block max-w-full truncate align-bottom">@{data.viewer.username}</span> ·
+          <span class="whitespace-nowrap">{data.viewer.roleLabel}</span>
         </span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>

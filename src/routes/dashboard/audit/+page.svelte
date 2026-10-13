@@ -23,9 +23,10 @@
 
   /** Applies a changed filter right away (the submit button is the no-JavaScript path). */
   function applyFilters(event: Event & { currentTarget: HTMLFormElement }) {
-    const params = new URLSearchParams();
-    for (const [key, value] of new FormData(event.currentTarget)) if (typeof value === "string" && value) params.set(key, value);
-    const query = params.toString();
+    const filled = [...new FormData(event.currentTarget)].filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
+    );
+    const query = new URLSearchParams(filled).toString();
     void goto(`${DASHBOARD_PATH}/audit${query ? `?${query}` : ""}`, { keepFocus: true, noScroll: true });
   }
 </script>
@@ -53,7 +54,7 @@
     {/each}
   </NativeSelect.Root>
   {#if !hydrated.current}<Button type="submit" variant="outline">絞り込む</Button>{/if}
-  <Button variant="ghost" class="text-text-4 justify-self-start" href={`${DASHBOARD_PATH}/audit`}>リセット</Button>
+  <Button variant="ghost" class="justify-self-start text-text-4" href={`${DASHBOARD_PATH}/audit`}>リセット</Button>
 {/snippet}
 
 <PageHeader title="Notion 書き込み履歴" />
@@ -108,7 +109,9 @@
           <Table.Cell class="primary">
             {#if row.targetUrl}<ExternalLink href={row.targetUrl}>{row.title}</ExternalLink>{:else}<span>{row.title}</span>{/if}
           </Table.Cell>
-          <Table.Cell>{#if row.badge}<ToneBadge badge={row.badge} />{/if}</Table.Cell>
+          <Table.Cell
+            >{#if row.badge}<ToneBadge badge={row.badge} />{/if}</Table.Cell
+          >
           <Table.Cell class="actions">
             <Button variant="ghost" size="icon-sm" href={row.href} aria-label={`#${row.id} の詳細`}><ChevronRightIcon /></Button>
           </Table.Cell>
@@ -124,7 +127,7 @@
 
 {#if data.range}
   <div class="footer-row">
-    <span class="text-muted-foreground text-[13px]">{data.range}</span>
+    <span class="text-[13px] text-muted-foreground">{data.range}</span>
     <Pager prev={data.prevHref} next={data.nextHref} />
   </div>
 {/if}

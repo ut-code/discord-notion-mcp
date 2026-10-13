@@ -60,9 +60,10 @@ export function createWriteTools(deps: NotionToolDeps): {
         content: args.content,
         request: args,
       });
-      return [`Created page "${args.title}" (id ${outcome.pageId}): ${outcome.url} — audit #${outcome.auditId}`, ...outcomeLines(outcome)].join(
-        "\n",
-      );
+      return [
+        `Created page "${args.title}" (id ${outcome.pageId}): ${outcome.url} — audit #${outcome.auditId}`,
+        ...outcomeLines(outcome),
+      ].join("\n");
     }),
   });
 

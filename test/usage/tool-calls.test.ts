@@ -22,7 +22,14 @@ function newStore() {
 }
 
 const member = makeMember(USER);
-const access = { isMember: true as const, discordUserId: USER, guild: makeGuild(), member, permissions: new Set<Permission>(["discord:read"]), isAdmin: false };
+const access = {
+  isMember: true as const,
+  discordUserId: USER,
+  guild: makeGuild(),
+  member,
+  permissions: new Set<Permission>(["discord:read"]),
+  isAdmin: false,
+};
 const principal: Principal = { userId: "u1", discordUserId: USER, clientId: "c1", access };
 
 const echo = defineTool({

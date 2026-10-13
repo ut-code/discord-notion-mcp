@@ -6,6 +6,7 @@ const DEFAULT_NEXT_PATH = DASHBOARD_PATH;
 const BASE = new URL("http://localhost");
 
 /** Browsers treat "\" like "/" and drop tabs and newlines, so "/\evil" or "/\t/evil" would become "//evil". */
+// eslint-disable-next-line no-control-regex -- matching control characters is the point
 const UNSAFE_CHARACTER = /[\u0000-\u001f\u007f\\]/;
 
 /**

@@ -84,7 +84,8 @@ beforeEach(() => {
 });
 
 describe("discord_list_threads", () => {
-  const list = async (args: Record<string, unknown>) => listThreads.handler(listThreads.inputSchema.parse(args) as never, { principal: principal() });
+  const list = async (args: Record<string, unknown>) =>
+    listThreads.handler(listThreads.inputSchema.parse(args) as never, { principal: principal() });
 
   test("passes a valid `before` to Discord as an ISO timestamp", async () => {
     await list({ channel_id: PUBLIC, before: "2026-10-01T12:34:56.789000+00:00" });
@@ -97,7 +98,9 @@ describe("discord_list_threads", () => {
 
   test("rejects a `before` that is not an ISO datetime with a time zone", async () => {
     for (const before of ["yesterday", "2026-10-01", "2026-10-01T00:00:00"]) {
-      await expect(list({ channel_id: PUBLIC, before })).rejects.toThrow('Invalid "before": expected an ISO 8601 datetime with a time zone');
+      await expect(list({ channel_id: PUBLIC, before })).rejects.toThrow(
+        'Invalid "before": expected an ISO 8601 datetime with a time zone',
+      );
     }
     expect(api.archivedQueries).toEqual([]);
   });
@@ -190,11 +193,15 @@ describe("discord_search_messages scope", () => {
 describe("discord_search_messages results", () => {
   test("drops results from unreadable channels and private threads, hides total when filtered", async () => {
     api.searchResponses.push(
-      results([
-        message("700000000000000001", PUBLIC, "visible hello"),
-        message("700000000000000002", STAFF, "secret hello"),
-        message("700000000000000003", PRIVATE_THREAD, "private hello"),
-      ], [api.threads[1]!], 3),
+      results(
+        [
+          message("700000000000000001", PUBLIC, "visible hello"),
+          message("700000000000000002", STAFF, "secret hello"),
+          message("700000000000000003", PRIVATE_THREAD, "private hello"),
+        ],
+        [api.threads[1]!],
+        3,
+      ),
     );
     const text = await search({ query: "hello" });
     expect(text).toContain("visible hello");

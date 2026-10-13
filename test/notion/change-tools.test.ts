@@ -99,7 +99,9 @@ describe("notion_revert_change", () => {
     await expect(call("notion_revert_change", principalFor(ALICE), { audit_id: ids.bob })).rejects.toThrow(
       `Audit #${ids.bob} not found or not accessible.`,
     );
-    await expect(call("notion_revert_change", principalFor(ALICE), { audit_id: 999 })).rejects.toThrow("Audit #999 not found or not accessible.");
+    await expect(call("notion_revert_change", principalFor(ALICE), { audit_id: 999 })).rejects.toThrow(
+      "Audit #999 not found or not accessible.",
+    );
 
     expect(await call("notion_revert_change", principalFor(ALICE), { audit_id: ids.alice })).toBe(`Reverted audit #${ids.alice}.`);
     expect(api.comments.at(-1)!.text).toBe(`↩️ user0001 が audit #${ids.alice} を取り消しました`);
@@ -133,9 +135,9 @@ describe("notion_revert_change", () => {
     const parent = api.addPage({ title: "P", markdown: "Intro" });
     const appended = await writes.appendContent(actorFor(ALICE), { pageId: parent.id, content: "mine", request: {} });
     api.setMarkdown(parent.id, "Intro\nmine\nlater edit");
-    const error = await revert!.handler(revert!.inputSchema.parse({ audit_id: appended.auditId }) as never, { principal: principalFor(ALICE) }).catch(
-      (e: Error) => e,
-    );
+    const error = await revert!
+      .handler(revert!.inputSchema.parse({ audit_id: appended.auditId }) as never, { principal: principalFor(ALICE) })
+      .catch((e: Error) => e);
     expect((error as Error).message).toContain(`dashboard at /dashboard/audit/${appended.auditId}.`);
   });
 

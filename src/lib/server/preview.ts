@@ -37,7 +37,14 @@ const ROLE_BOT = "200000000000000004";
 
 const people: MemberInfo[] = [
   { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: null },
-  { userId: "300000000000000001", roles: [ROLE_STAFF, ROLE_MEMBER], nick: "田中", username: "tanaka", globalName: "Tanaka", avatarUrl: null },
+  {
+    userId: "300000000000000001",
+    roles: [ROLE_STAFF, ROLE_MEMBER],
+    nick: "田中",
+    username: "tanaka",
+    globalName: "Tanaka",
+    avatarUrl: null,
+  },
   { userId: "300000000000000002", roles: [ROLE_MEMBER], nick: null, username: "suzuki", globalName: "鈴木", avatarUrl: null },
   { userId: "300000000000000003", roles: [ROLE_MEMBER], nick: null, username: "sato", globalName: null, avatarUrl: null },
   { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
@@ -146,7 +153,13 @@ export async function startPreview(): Promise<Runtime> {
     NOTION_TOKEN: "preview",
     TRUSTED_PROXY_COUNT: "0",
   });
-  const composed = await composeServer(config, { discordApi: discord, notionApi: notion, database, logToolCall: () => {}, logEvent: () => {} });
+  const composed = await composeServer(config, {
+    discordApi: discord,
+    notionApi: notion,
+    database,
+    logToolCall: () => {},
+    logEvent: () => {},
+  });
   const authContext = await composed.auth.$context;
 
   const authUserIds = new Map<string, string>();
@@ -162,11 +175,24 @@ export async function startPreview(): Promise<Runtime> {
   await composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
   await composed.grants.createGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
   await composed.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_STAFF, createdBy: OWNER_ID });
-  await composed.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: "300000000000000004", createdBy: OWNER_ID });
-  await composed.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: "300000000000000001", createdBy: OWNER_ID });
+  await composed.grants.createGrant({
+    permission: "notion:read",
+    subjectType: "user",
+    subjectId: "300000000000000004",
+    createdBy: OWNER_ID,
+  });
+  await composed.grants.createGrant({
+    permission: "notion:write",
+    subjectType: "user",
+    subjectId: "300000000000000001",
+    createdBy: OWNER_ID,
+  });
 
   const tools = new Map(
-    createNotionTools({ api: notion, writes: new NotionWriteService(notion, new NotionAuditStore(database.db)) }).map((tool) => [tool.name, tool]),
+    createNotionTools({ api: notion, writes: new NotionWriteService(notion, new NotionAuditStore(database.db)) }).map((tool) => [
+      tool.name,
+      tool,
+    ]),
   );
   const run = async (name: string, args: Record<string, unknown>, who: MemberInfo): Promise<string> => {
     const tool = tools.get(name)!;
@@ -191,9 +217,17 @@ export async function startPreview(): Promise<Runtime> {
     }
   };
   const [, tanaka, suzuki] = people as [MemberInfo, MemberInfo, MemberInfo];
-  await run("notion_create_page", { parent: wiki.id, title: "10/12 定例議事録", content: "## 決定事項\n- リリースは 10/20\n- 担当: 田中" }, tanaka);
+  await run(
+    "notion_create_page",
+    { parent: wiki.id, title: "10/12 定例議事録", content: "## 決定事項\n- リリースは 10/20\n- 担当: 田中" },
+    tanaka,
+  );
   await run("notion_append_content", { page: wiki.id, content: "- 新メンバー向けの手順を追加予定" }, suzuki);
-  const edit = await run("notion_edit_content", { page: wiki.id, edits: [{ old_str: "- 手順", new_str: "- 手順（2026/10 更新）" }] }, tanaka);
+  const edit = await run(
+    "notion_edit_content",
+    { page: wiki.id, edits: [{ old_str: "- 手順", new_str: "- 手順（2026/10 更新）" }] },
+    tanaka,
+  );
   await run("notion_edit_content", { page: wiki.id, edits: [{ old_str: "存在しない文章", new_str: "x" }] }, suzuki);
   const editId = Number(/audit #(\d+)/.exec(edit)?.[1]);
   if (editId) {

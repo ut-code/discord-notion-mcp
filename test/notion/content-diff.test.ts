@@ -46,7 +46,12 @@ function expectRoundTrip(before: string, after: string): RevertPlan {
 
 describe("applyContentUpdates", () => {
   test("replaces exactly one match per update, in order", () => {
-    expect(applyContentUpdates("a b c", [{ old_str: "b", new_str: "B" }, { old_str: "B c", new_str: "x" }])).toBe("a x");
+    expect(
+      applyContentUpdates("a b c", [
+        { old_str: "b", new_str: "B" },
+        { old_str: "B c", new_str: "x" },
+      ]),
+    ).toBe("a x");
   });
 
   test("no match and multiple matches are errors", () => {

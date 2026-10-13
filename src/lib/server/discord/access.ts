@@ -3,14 +3,7 @@ import { ToolError } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
 import { TtlCache, systemClock, type Clock } from "../lib/ttl-cache";
 import type { DiscordApi, GuildChannel } from "./api";
-import {
-  MANAGE_THREADS,
-  canReadMessages,
-  canViewChannel,
-  computeChannelPermissions,
-  hasPermission,
-  toOverwrite,
-} from "./permissions";
+import { MANAGE_THREADS, canReadMessages, canViewChannel, computeChannelPermissions, hasPermission, toOverwrite } from "./permissions";
 import type { GuildInfo, MemberInfo } from "./types";
 
 export const DISCORD_NOT_ACCESSIBLE_MESSAGE = "Channel not found or not accessible.";

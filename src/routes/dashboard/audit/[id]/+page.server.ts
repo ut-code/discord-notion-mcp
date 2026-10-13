@@ -8,7 +8,10 @@ export const load: PageServerLoad = async (event) =>
 export const actions: Actions = {
   revert: async (event) => {
     const viewer = await requireAuditViewer(event);
-    const { result, conflict } = orNotFound(await revertAudit(event.locals.deps, event.params.id, await event.request.formData(), viewer), AUDIT_NOT_FOUND);
+    const { result, conflict } = orNotFound(
+      await revertAudit(event.locals.deps, event.params.id, await event.request.formData(), viewer),
+      AUDIT_NOT_FOUND,
+    );
     return respond(result, { conflict });
   },
 };

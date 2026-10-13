@@ -98,7 +98,9 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
     roles: rolesLine(row),
     permissions: permissionBadges(row),
     lastLogin: formatShortJst(row.user.lastLoginAt),
-    revoked: wasRevokedSinceLogin(row.user) ? { label: "失効済み", tone: "secondary", title: `${formatJst(row.user.revokedAt)} に失効` } : null,
+    revoked: wasRevokedSinceLogin(row.user)
+      ? { label: "失効済み", tone: "secondary", title: `${formatJst(row.user.revokedAt)} に失効` }
+      : null,
     grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
     auditHref: discordUserId && viewer.canViewAudit ? auditListHref({ user: discordUserId }) : null,
   };

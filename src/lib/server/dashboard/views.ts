@@ -18,7 +18,6 @@ export type GrantRowView =
       grant: GrantRow;
       role: RoleInfo | null;
       user: UserSubject | null;
-      createdBy: UserSubject | null;
       redundancy: Redundancy | null;
     };
 
@@ -41,7 +40,9 @@ function redundancyOf(guild: GuildInfo, grants: readonly GrantRow[], grant: Gran
   );
   const role = guild.roles.filter((candidate) => providing.has(candidate.id)).sort((a, b) => b.position - a.position)[0];
   if (role) return { kind: "role", role };
-  const individualAdmin = grants.some((other) => other.subjectType === "user" && other.subjectId === grant.subjectId && other.permission === "admin");
+  const individualAdmin = grants.some(
+    (other) => other.subjectType === "user" && other.subjectId === grant.subjectId && other.permission === "admin",
+  );
   return grant.permission !== "admin" && individualAdmin ? { kind: "admin" } : null;
 }
 
@@ -62,7 +63,6 @@ export function buildGrantRows(
         grant,
         role: grant.subjectType === "role" ? (roleById.get(grant.subjectId) ?? null) : null,
         user,
-        createdBy: grant.createdBy ? (users.get(grant.createdBy) ?? null) : null,
         redundancy: redundancyOf(guild, grants, grant, user),
       };
     })
@@ -98,8 +98,23 @@ export interface UserRowView {
 }
 
 /** `access` is null when the Discord account is not linked, an Error when it could not be resolved. */
-export function buildUserRow(user: LoginUser, access: EffectiveAccess | Error | null, guild: GuildInfo, grants: readonly GrantRow[]): UserRowView {
-  const base = { user, displayName: user.name, username: null, avatarUrl: null, roles: [], permissions: [], isAdmin: false, implicitAdmin: false, individual: [] };
+export function buildUserRow(
+  user: LoginUser,
+  access: EffectiveAccess | Error | null,
+  guild: GuildInfo,
+  grants: readonly GrantRow[],
+): UserRowView {
+  const base = {
+    user,
+    displayName: user.name,
+    username: null,
+    avatarUrl: null,
+    roles: [],
+    permissions: [],
+    isAdmin: false,
+    implicitAdmin: false,
+    individual: [],
+  };
   if (access === null) return { ...base, membership: "unlinked" };
   if (access instanceof Error) return { ...base, membership: "unknown" };
   if (!access.isMember) return { ...base, membership: "not_member" };

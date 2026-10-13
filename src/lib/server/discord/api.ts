@@ -41,9 +41,7 @@ export interface ArchivedThreadsPage {
 }
 
 /** Discord answers 202 with `retry_after` while the guild's search index is being built. */
-export type MessageSearchResponse =
-  | { status: "ok"; result: APIMessageSearchResult }
-  | { status: "indexing"; retryAfterSeconds: number };
+export type MessageSearchResponse = { status: "ok"; result: APIMessageSearchResult } | { status: "indexing"; retryAfterSeconds: number };
 
 /** Bot-authenticated Discord REST operations used by the tools. */
 export interface DiscordApi extends GuildDirectory {

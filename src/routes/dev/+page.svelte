@@ -10,7 +10,11 @@
     <ul class="grid gap-2">
       {#each data.users as user (user.id)}
         <li>
-          <a class="hover:bg-muted block rounded-lg border px-3 py-2.5 no-underline" href={`/dev/login?as=${user.id}`} data-sveltekit-reload>
+          <a
+            class="block rounded-lg border px-3 py-2.5 no-underline hover:bg-muted"
+            href={`/dev/login?as=${user.id}`}
+            data-sveltekit-reload
+          >
             {user.name} <span class="text-muted-foreground">@{user.username}</span>
           </a>
         </li>

@@ -15,7 +15,11 @@ export interface OverviewData {
   canGrant: boolean;
 }
 
-export async function overview(deps: DashboardDeps, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">, now = Date.now()): Promise<OverviewData> {
+export async function overview(
+  deps: DashboardDeps,
+  viewer: Pick<Viewer, "isAdmin" | "canViewAudit">,
+  now = Date.now(),
+): Promise<OverviewData> {
   const base = { failuresHref: auditListHref({ status: "failed" }), canGrant: viewer.isAdmin };
   if (!viewer.canViewAudit) return { ...base, recentFailures: 0, recent: null };
   const since = new Date(now - RECENT_FAILURE_WINDOW_MS);

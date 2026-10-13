@@ -136,9 +136,7 @@ export class FakeDiscordApi implements DiscordApi {
 
   async fetchChannel(channelId: string): Promise<APIChannel | null> {
     return (
-      (this.channels.find((c) => c.id === channelId) as APIChannel | undefined) ??
-      this.threads.find((t) => t.id === channelId) ??
-      null
+      (this.channels.find((c) => c.id === channelId) as APIChannel | undefined) ?? this.threads.find((t) => t.id === channelId) ?? null
     );
   }
 

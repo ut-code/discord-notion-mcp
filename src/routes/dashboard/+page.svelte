@@ -23,9 +23,9 @@
 </PageHeader>
 
 {#if data.recentFailures > 0}
-  <div class="border-bad-border bg-bad-bg flex flex-wrap items-center gap-3 rounded-[10px] border px-4 py-3" role="status">
-    <CircleAlertIcon class="text-bad-fg size-4" />
-    <span class="text-bad-text grow text-sm">失敗した Notion への書き込みが {data.recentFailures} 件あります。</span>
+  <div class="flex flex-wrap items-center gap-3 rounded-[10px] border border-bad-border bg-bad-bg px-4 py-3" role="status">
+    <CircleAlertIcon class="size-4 text-bad-fg" />
+    <span class="grow text-sm text-bad-text">失敗した Notion への書き込みが {data.recentFailures} 件あります。</span>
     <Button variant="outline" size="sm" class="border-bad-border" href={data.failuresHref}>確認する</Button>
   </div>
 {/if}
@@ -54,7 +54,9 @@
             <Table.Cell><ToneBadge badge={{ label: row.operation, tone: "outline" }} /></Table.Cell>
             <Table.Cell>{row.user.name}</Table.Cell>
             <Table.Cell class="primary">{row.title}</Table.Cell>
-            <Table.Cell>{#if row.badge}<ToneBadge badge={row.badge} />{/if}</Table.Cell>
+            <Table.Cell
+              >{#if row.badge}<ToneBadge badge={row.badge} />{/if}</Table.Cell
+            >
           </Table.Row>
         {:else}
           <Table.Row>

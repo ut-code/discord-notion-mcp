@@ -32,7 +32,8 @@
 		labelKey?: string;
 		hideIndicator?: boolean;
 		labelClassName?: string;
-		labelFormatter?: // eslint-disable-next-line @typescript-eslint/no-explicit-any
+		labelFormatter?:
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			((value: any, payload: TooltipPayload[]) => string | number | Snippet) | null;
 		formatter?: Snippet<
 			[
@@ -52,9 +53,7 @@
 
 	// Filter to series with defined values (important for item-based charts like Pie/Arc
 	// where only the hovered item has a value)
-	const visibleSeries = $derived(
-		chartCtx.tooltip.series.filter((s: TooltipPayload) => s.value !== undefined)
-	);
+	const visibleSeries = $derived(chartCtx.tooltip.series.filter((s: TooltipPayload) => s.value !== undefined));
 
 	const formattedLabel = $derived.by(() => {
 		if (hideLabel || !visibleSeries?.length) return null;
@@ -66,12 +65,7 @@
 		const dataLabel = tooltipData != null ? chartCtx.x(tooltipData) : undefined;
 
 		const key = labelKey ?? item?.label ?? item?.key ?? "value";
-		const itemConfig = getPayloadConfigFromPayload(
-			chart.config,
-			item,
-			key,
-			tooltipData as Record<string, unknown> | null
-		);
+		const itemConfig = getPayloadConfigFromPayload(chart.config, item, key, tooltipData as Record<string, unknown> | null);
 
 		let value: unknown;
 		if (!labelKey && typeof label === "string") {
@@ -107,7 +101,7 @@
 		bind:this={ref}
 		class={cn(
 			"grid min-w-32 items-start gap-1.5 rounded-lg border border-border/50 bg-background px-2.5 py-1.5 text-xs shadow-xl",
-			className
+			className,
 		)}
 		{...restProps}
 	>
@@ -117,17 +111,12 @@
 		<div class="grid gap-1.5">
 			{#each visibleSeries as item, i (item.key + i)}
 				{@const key = `${nameKey || item.key || item.label || "value"}`}
-				{@const itemConfig = getPayloadConfigFromPayload(
-					chart.config,
-					item,
-					key,
-					chartCtx.tooltip.data
-				)}
+				{@const itemConfig = getPayloadConfigFromPayload(chart.config, item, key, chartCtx.tooltip.data)}
 				{@const indicatorColor = color || item.config?.color || item.color}
 				<div
 					class={cn(
 						"flex w-full flex-wrap items-stretch gap-2 [&>svg]:h-2.5 [&>svg]:w-2.5 [&>svg]:text-muted-foreground",
-						indicator === "dot" && "items-center"
+						indicator === "dot" && "items-center",
 					)}
 				>
 					{#if formatter && item.value !== undefined && item.label}
@@ -152,12 +141,7 @@
 								})}
 							></div>
 						{/if}
-						<div
-							class={cn(
-								"flex flex-1 shrink-0 justify-between gap-4 leading-none",
-								nestLabel ? "items-end" : "items-center"
-							)}
-						>
+						<div class={cn("flex flex-1 shrink-0 justify-between gap-4 leading-none", nestLabel ? "items-end" : "items-center")}>
 							<div class="grid gap-1.5">
 								{#if nestLabel}
 									{@render TooltipLabel()}

@@ -22,10 +22,7 @@ export class PermissionResolver {
   ) {}
 
   async resolve(discordUserId: string): Promise<EffectiveAccess> {
-    const [guild, member] = await Promise.all([
-      this.directory.fetchGuild(),
-      this.directory.fetchMember(discordUserId),
-    ]);
+    const [guild, member] = await Promise.all([this.directory.fetchGuild(), this.directory.fetchMember(discordUserId)]);
     if (!member) {
       return { isMember: false, discordUserId, guild, permissions: new Set(), isAdmin: false };
     }

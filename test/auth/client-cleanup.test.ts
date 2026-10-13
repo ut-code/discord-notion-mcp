@@ -11,7 +11,9 @@ const MEMBER = "300000000000000001";
 let h: Harness;
 
 const clientIds = (): string[] =>
-  (h.composed.database.sqlite.query("select clientId from oauthClient order by clientId").all() as Array<{ clientId: string }>).map((row) => row.clientId);
+  (h.composed.database.sqlite.query("select clientId from oauthClient order by clientId").all() as Array<{ clientId: string }>).map(
+    (row) => row.clientId,
+  );
 
 function insert(table: "oauthAccessToken" | "oauthRefreshToken" | "oauthConsent", values: Record<string, string | null>): void {
   const now = new Date().toISOString();
@@ -59,7 +61,13 @@ describe("unused OAuth client cleanup", () => {
   test("runs at startup and then on every interval, logging the count", async () => {
     let now = Date.now();
     const events: EventEntry[] = [];
-    const stop = startClientCleanup({ db: h.composed.database.db, now: () => now, intervalMs: 20, log: (entry) => events.push(entry), logError: () => {} });
+    const stop = startClientCleanup({
+      db: h.composed.database.db,
+      now: () => now,
+      intervalMs: 20,
+      log: (entry) => events.push(entry),
+      logError: () => {},
+    });
     expect(events).toEqual([]);
 
     const abandoned = await registerClient(h);

@@ -13,6 +13,7 @@ export class MemberLookup {
   loading = $state(false);
   error = $state<string | null>(null);
 
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a memo read in methods, never rendered
   private readonly cache = new Map<string, CandidateView[]>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private controller: AbortController | null = null;

@@ -3,9 +3,7 @@
 
 	let { id, config }: { id: string; config: ChartConfig } = $props();
 
-	const colorConfig = $derived(
-		config ? Object.entries(config).filter(([, config]) => config.theme || config.color) : null
-	);
+	const colorConfig = $derived(config ? Object.entries(config).filter(([, config]) => config.theme || config.color) : null);
 
 	const themeContents = $derived.by(() => {
 		if (!colorConfig || !colorConfig.length) return;
@@ -19,7 +17,7 @@
 				return color ? `\t--color-${key}: ${color};` : null;
 			});
 
-			content += color.join("\n") +"\n}";
+			content += color.join("\n") + "\n}";
 
 			themeContents.push(content);
 		}

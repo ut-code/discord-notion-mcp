@@ -108,8 +108,7 @@ export interface ConsentPageData {
 }
 
 export type ConsentResult =
-  | { kind: "ok"; data: ConsentPageData }
-  | { kind: "error"; status: 400 | 401 | 403; title: string; message: string };
+  { kind: "ok"; data: ConsentPageData } | { kind: "error"; status: 400 | 401 | 403; title: string; message: string };
 
 /**
  * Origin of a redirect URI, so the consent page can tell a CLI's loopback callback from a
@@ -126,7 +125,12 @@ export async function consentPage(deps: DashboardDeps, url: URL, headers: Header
   const oauthQuery = extractSignedOAuthQuery(url.search);
   const clientId = oauthQuery ? signedOAuthParam(oauthQuery, "client_id") : null;
   if (!oauthQuery || !clientId) {
-    return { kind: "error", status: 400, title: "無効なリクエスト", message: "このページは MCP クライアントの認可フローから開いてください。" };
+    return {
+      kind: "error",
+      status: 400,
+      title: "無効なリクエスト",
+      message: "このページは MCP クライアントの認可フローから開いてください。",
+    };
   }
   const session = await deps.auth.api.getSession({ headers });
   if (!session) {
@@ -156,7 +160,11 @@ export async function consentPage(deps: DashboardDeps, url: URL, headers: Header
  * Ends the browser session. `next` may only return to the sign-in page (the consent
  * page uses it to resume the OAuth flow); anything else goes to the dashboard sign-in.
  */
-export async function signOut(deps: DashboardDeps, headers: Headers, next: string): Promise<{ cookies: ResponseCookie[]; location: string }> {
+export async function signOut(
+  deps: DashboardDeps,
+  headers: Headers,
+  next: string,
+): Promise<{ cookies: ResponseCookie[]; location: string }> {
   let cookies: ResponseCookie[] = [];
   try {
     const response = await deps.auth.api.signOut({ headers, asResponse: true });
@@ -179,6 +187,10 @@ function responseCookies(header: string): ResponseCookie[] {
   return [...parseSetCookieHeader(header)].map(([name, attributes]) => {
     const options = toCookieOptions(attributes);
     // Explicit values, or SvelteKit's defaults would add attributes Better Auth did not send.
-    return { name, value: attributes.value, options: { ...options, path: options.path ?? "/", httpOnly: options.httpOnly ?? false, secure: options.secure ?? false } };
+    return {
+      name,
+      value: attributes.value,
+      options: { ...options, path: options.path ?? "/", httpOnly: options.httpOnly ?? false, secure: options.secure ?? false },
+    };
   });
 }

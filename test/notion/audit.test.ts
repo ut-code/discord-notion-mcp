@@ -102,15 +102,19 @@ describe("NotionWriteService", () => {
       properties: { Done: { checkbox: true }, Name: { title: [{ text: { content: "Row" } }] } },
     });
 
-    await expect(writes.createPage(ACTOR, { parentId: db.id, title: "x", properties: { Nope: { checkbox: true } }, request: {} })).rejects.toThrow(
-      "Unknown properties: Nope",
-    );
+    await expect(
+      writes.createPage(ACTOR, { parentId: db.id, title: "x", properties: { Nope: { checkbox: true } }, request: {} }),
+    ).rejects.toThrow("Unknown properties: Nope");
 
     const ds2 = api.addDataSource({ title: "Archive", databaseId: "db2", properties: {} });
-    const multi = api.addDatabase({ title: "Multi", dataSources: [{ id: ds.id, name: "Tasks" }, { id: ds2.id, name: "Archive" }] });
-    await expect(writes.createPage(ACTOR, { parentId: multi.id, title: "x", request: {} })).rejects.toThrow(
-      `data source id ${ds2.id}`,
-    );
+    const multi = api.addDatabase({
+      title: "Multi",
+      dataSources: [
+        { id: ds.id, name: "Tasks" },
+        { id: ds2.id, name: "Archive" },
+      ],
+    });
+    await expect(writes.createPage(ACTOR, { parentId: multi.id, title: "x", request: {} })).rejects.toThrow(`data source id ${ds2.id}`);
   });
 
   test("create_page without content makes no markdown call; whitespace-only content is ignored", async () => {
@@ -211,7 +215,11 @@ describe("NotionWriteService", () => {
       .catch((e) => e);
     expect(multiple.message).toContain("Multiple matches found");
     expect(api.markdown.get(parent.id)).toBe("same\nsame\nother");
-    expect(await store.get(1)).toMatchObject({ status: "failed", operation: "edit_content", snapshot: { beforeSha256: sha256("same\nsame\nother") } });
+    expect(await store.get(1)).toMatchObject({
+      status: "failed",
+      operation: "edit_content",
+      snapshot: { beforeSha256: sha256("same\nsame\nother") },
+    });
     expect(api.comments).toEqual([]);
   });
 
@@ -228,7 +236,9 @@ describe("NotionWriteService", () => {
   test("content writes refuse truncated pages without changing them", async () => {
     api.markdown.set(parent.id, "Huge");
     api.truncated.set(parent.id, ["b1"]);
-    await expect(writes.appendContent(ACTOR, { pageId: parent.id, content: "x", request: {} })).rejects.toThrow("too large to edit revertibly");
+    await expect(writes.appendContent(ACTOR, { pageId: parent.id, content: "x", request: {} })).rejects.toThrow(
+      "too large to edit revertibly",
+    );
     expect(api.callsOf("updatePageMarkdown")).toEqual([]);
     expect((await store.list({ limit: 10, offset: 0 })).total).toBe(0);
   });
@@ -265,20 +275,26 @@ describe("NotionWriteService", () => {
 
     expect(outcome.changed).toEqual(["Count", "Links"]);
     const saved = (await store.get(outcome.auditId))!;
-    const entries = (saved.snapshot as { properties: Array<{ name: string; id: string; value: any }> }).properties;
+    const entries = (
+      saved.snapshot as { properties: Array<{ name: string; id: string; value: { number?: number; relation?: unknown[] } }> }
+    ).properties;
     expect(entries.map((e) => [e.name, e.id])).toEqual([
       ["Count", "cnt"],
       ["Links", "rel"],
     ]);
     expect(entries[0]!.value.number).toBe(1);
-    expect(entries[1]!.value.relation.length).toBe(27);
+    expect(entries[1]!.value.relation).toHaveLength(27);
     expect(api.comments.at(-1)!.text).toContain("プロパティを更新しました");
   });
 
   test("update_properties refuses changes that could not be reverted", async () => {
     const row = addRow({
       Formula: { id: "f", type: "formula", formula: { type: "number", number: 1 } } as PagePropertyValue,
-      Files: { id: "fl", type: "files", files: [{ name: "a.png", type: "file", file: { url: "u", expiry_time: "" } }] } as PagePropertyValue,
+      Files: {
+        id: "fl",
+        type: "files",
+        files: [{ name: "a.png", type: "file", file: { url: "u", expiry_time: "" } }],
+      } as PagePropertyValue,
     });
     await expect(writes.updateProperties(ACTOR, { pageId: row.id, properties: { Formula: { number: 1 } }, request: {} })).rejects.toThrow(
       "cannot be written",

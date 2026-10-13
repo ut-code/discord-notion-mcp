@@ -19,12 +19,15 @@
 </svelte:head>
 
 <div class="stack gap-3">
-  <a class="text-text-4 hover:text-foreground inline-flex items-center gap-1.5 self-start text-[13px] no-underline" href={`${DASHBOARD_PATH}/audit`}>
+  <a
+    class="inline-flex items-center gap-1.5 self-start text-[13px] text-text-4 no-underline hover:text-foreground"
+    href={`${DASHBOARD_PATH}/audit`}
+  >
     <ChevronLeftIcon class="size-3.5" />
     書き込み履歴
   </a>
   <header class="cluster gap-3">
-    <h1><span class="text-muted-foreground font-medium">#{data.id}</span> {data.operation}</h1>
+    <h1><span class="font-medium text-muted-foreground">#{data.id}</span> {data.operation}</h1>
     <StatusBadges badges={data.badges} />
   </header>
   <p class="text-muted-foreground">{data.summary}</p>
@@ -98,7 +101,7 @@
           {#if details.comment.kind === "error"}
             <span class="text-bad-fg">{details.comment.text}</span>
           {:else if details.comment.kind === "posted"}
-            <span class="text-ok-fg inline-flex items-center gap-1.5"><CheckIcon class="size-4" />投稿済み</span>
+            <span class="inline-flex items-center gap-1.5 text-ok-fg"><CheckIcon class="size-4" />投稿済み</span>
           {:else}
             <span class="text-muted-foreground">—</span>
           {/if}

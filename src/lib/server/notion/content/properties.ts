@@ -5,6 +5,7 @@ import type { RichTextRequest } from "../client/types";
 
 export type PagePropertyValue = PageObjectResponse["properties"][string];
 /** Loosely typed view used by the type switches below (the SDK union is too deep to narrow cheaply). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the loose view is the point (see above)
 type AnyValue = Record<string, any>;
 
 /** Property types this server can write and restore on revert. */
@@ -52,7 +53,7 @@ function renderDate(date: { start: string; end: string | null } | null | undefin
   return date.end ? `${date.start} → ${date.end}` : date.start;
 }
 
-function renderFormula(formula: Record<string, any>): string {
+function renderFormula(formula: AnyValue): string {
   switch (formula.type) {
     case "string":
       return formula.string ?? "";
@@ -96,9 +97,7 @@ export function renderPropertyValue(value: PagePropertyValue): string {
       return v.has_more ? `${ids}, …` : ids;
     }
     case "files":
-      return v.files
-        .map((file: Record<string, any>) => `${file.name} (${file.type === "external" ? file.external.url : file.file.url})`)
-        .join(", ");
+      return v.files.map((file: AnyValue) => `${file.name} (${file.type === "external" ? file.external.url : file.file.url})`).join(", ");
     case "formula":
       return renderFormula(v.formula);
     case "rollup": {
@@ -135,7 +134,7 @@ export function mayBeTruncated(value: PagePropertyValue): boolean {
 /** Rebuilds a page-format property value from the paginated property item endpoint. */
 export function valueFromPropertyItems(value: PagePropertyValue, items: readonly PropertyItemObjectResponse[]): PagePropertyValue {
   const type = value.type;
-  const entries = items.filter((item) => item.type === type).map((item) => (item as Record<string, any>)[type]);
+  const entries = items.filter((item) => item.type === type).map((item) => (item as AnyValue)[type]);
   return { id: value.id, type, [type]: entries } as unknown as PagePropertyValue;
 }
 
@@ -147,7 +146,7 @@ function toRichTextRequest(item: RichTextItemResponse): RichTextRequest {
   if (item.type === "equation") {
     return { type: "equation", equation: { expression: item.equation.expression }, annotations };
   }
-  const mention = item.mention as Record<string, any>;
+  const mention = item.mention as AnyValue;
   switch (mention.type) {
     case "user":
       return { type: "mention", mention: { user: { id: mention.user.id } }, annotations };

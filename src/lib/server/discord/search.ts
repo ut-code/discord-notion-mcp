@@ -71,11 +71,7 @@ export async function buildSearchScope(deps: SearchDeps, viewer: Viewer, channel
 }
 
 /** Drops results from channels or threads the viewer cannot read. */
-async function filterReadableResults(
-  deps: SearchDeps,
-  viewer: Viewer,
-  result: APIMessageSearchResult,
-): Promise<SearchMessage[]> {
+async function filterReadableResults(deps: SearchDeps, viewer: Viewer, result: APIMessageSearchResult): Promise<SearchMessage[]> {
   const channelsById = new Map((await deps.channels.list()).map((channel) => [channel.id, channel]));
   const threadsById = new Map((result.threads ?? []).map((thread) => [thread.id, thread]));
   const verdicts = new Map<string, boolean>();
@@ -83,7 +79,7 @@ async function filterReadableResults(
   const canRead = async (channelId: string): Promise<boolean> => {
     const cached = verdicts.get(channelId);
     if (cached !== undefined) return cached;
-    let verdict = false;
+    let verdict: boolean;
     const listed = channelsById.get(channelId);
     if (listed) {
       verdict = canReadMessages(deps.access.permissionsFor(listed, viewer));

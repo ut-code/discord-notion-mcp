@@ -41,13 +41,13 @@
     <div class="logo logo-lg" aria-hidden="true">{initialOf(data.guildName ?? "MCP")}</div>
     <div class="stack items-center gap-1.5">
       <h1 class="text-[22px]">{data.heading}</h1>
-      <p class="text-muted-foreground text-sm">Discord と Notion を AI から使うためのログイン</p>
+      <p class="text-sm text-muted-foreground">Discord と Notion を AI から使うためのログイン</p>
     </div>
   </div>
   <section class="auth-card">
     <Button
       type="button"
-      class="bg-blurple hover:bg-blurple-hover h-11 w-full gap-2.5 text-[15px] text-white [&_svg:not([class*='size-'])]:size-[18px]"
+      class="h-11 w-full gap-2.5 bg-blurple text-[15px] text-white hover:bg-blurple-hover [&_svg:not([class*='size-'])]:size-[18px]"
       disabled={busy}
       onclick={signIn}
     >
@@ -55,12 +55,12 @@
       Discord でログイン
     </Button>
     {#if status}
-      <p class="text-bad-fg text-[13px]" role="status">{status}</p>
+      <p class="text-[13px] text-bad-fg" role="status">{status}</p>
     {/if}
     {#if data.oauthQuery && data.clientName}
-      <div class="bg-muted text-text-4 flex items-center gap-2 rounded-lg px-3 py-2.5 text-[13px]">
+      <div class="flex items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-[13px] text-text-4">
         <LockIcon class="size-4" />
-        <span>接続元: <strong class="text-foreground font-semibold">{data.clientName}</strong></span>
+        <span>接続元: <strong class="font-semibold text-foreground">{data.clientName}</strong></span>
       </div>
     {/if}
   </section>

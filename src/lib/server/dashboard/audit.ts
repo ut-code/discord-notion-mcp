@@ -92,7 +92,9 @@ export interface AuditRowView {
 export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> = new Map()): AuditRowView {
   const createdAt = formatShortJst(row.createdAt);
   const action =
-    row.operation === "revert" && row.revertOfAuditId !== null ? `#${row.revertOfAuditId} を取り消し` : AUDIT_OPERATION_LABELS[row.operation];
+    row.operation === "revert" && row.revertOfAuditId !== null
+      ? `#${row.revertOfAuditId} を取り消し`
+      : AUDIT_OPERATION_LABELS[row.operation];
   return {
     id: row.id,
     href: dashboardAuditPath(row.id),
@@ -164,7 +166,10 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
     filters: { user: filters.user ?? "", operation: filters.operation ?? "", status: filters.status ?? "" },
     userOptions,
     operationOptions: NOTION_AUDIT_OPERATIONS.map((value) => ({ value, label: AUDIT_OPERATION_LABELS[value] })),
-    statusOptions: (Object.keys(AUDIT_STATUS_FILTERS) as AuditStatusFilter[]).map((value) => ({ value, label: AUDIT_STATUS_FILTERS[value] })),
+    statusOptions: (Object.keys(AUDIT_STATUS_FILTERS) as AuditStatusFilter[]).map((value) => ({
+      value,
+      label: AUDIT_STATUS_FILTERS[value],
+    })),
     error,
   };
 }
@@ -263,14 +268,15 @@ function changeView(row: NotionAuditRow): ChangeView {
     case "archive_page":
       return { kind: "archived" };
     case "revert":
-      return { kind: "revert", of: row.revertOfAuditId !== null ? { id: row.revertOfAuditId, href: dashboardAuditPath(row.revertOfAuditId) } : null };
+      return {
+        kind: "revert",
+        of: row.revertOfAuditId !== null ? { id: row.revertOfAuditId, href: dashboardAuditPath(row.revertOfAuditId) } : null,
+      };
   }
 }
 
 export type RevertView =
-  | { state: "reverted"; revert: { id: number; href: string } | null; note: string | null }
-  | { state: "disabled" }
-  | { state: "ready" };
+  { state: "reverted"; revert: { id: number; href: string } | null; note: string | null } | { state: "disabled" } | { state: "ready" };
 
 export interface AuditDetailData {
   id: number;

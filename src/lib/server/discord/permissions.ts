@@ -78,10 +78,6 @@ function applyOverwrites(
   return permissions;
 }
 
-export function computeChannelPermissions(
-  guild: GuildInfo,
-  member: MemberInfo,
-  overwrites: readonly PermissionOverwrite[],
-): bigint {
+export function computeChannelPermissions(guild: GuildInfo, member: MemberInfo, overwrites: readonly PermissionOverwrite[]): bigint {
   return applyOverwrites(computeBasePermissions(guild, member), guild, member, overwrites);
 }

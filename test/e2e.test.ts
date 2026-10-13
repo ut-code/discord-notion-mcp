@@ -67,7 +67,7 @@ describe("OAuth + MCP end to end", () => {
     const consentUrl = new URL(first.headers.get("location")!, base);
     expect(consentUrl.pathname).toBe("/consent");
 
-    const page = await consentPage(h.composed.dashboard,consentUrl, new Headers({ cookie }));
+    const page = await consentPage(h.composed.dashboard, consentUrl, new Headers({ cookie }));
     if (page.kind !== "ok") throw new Error(`consent page: ${page.kind}`);
     expect(page.data.clientName).toBe("E2E CLI");
     expect(page.data.account.name).toBe("Ali");
@@ -176,7 +176,10 @@ describe("OAuth + MCP end to end", () => {
     const { notion } = h;
     const toolNames = async () => {
       const list = await mcpCall(accessToken, { jsonrpc: "2.0", id: 10, method: "tools/list", params: {} });
-      return (list.json.result.tools as Array<{ name: string }>).map((tool) => tool.name).filter((name) => name.startsWith("notion_")).sort();
+      return (list.json.result.tools as Array<{ name: string }>)
+        .map((tool) => tool.name)
+        .filter((name) => name.startsWith("notion_"))
+        .sort();
     };
     expect(await toolNames()).toEqual([]);
 

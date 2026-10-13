@@ -42,9 +42,6 @@ export function defineTool<S extends z.ZodObject>(definition: ToolDefinition<S>)
   return definition;
 }
 
-export function toolsForPermissions(
-  tools: readonly AnyToolDefinition[],
-  permissions: ReadonlySet<Permission>,
-): AnyToolDefinition[] {
+export function toolsForPermissions(tools: readonly AnyToolDefinition[], permissions: ReadonlySet<Permission>): AnyToolDefinition[] {
   return tools.filter((tool) => permissions.has(tool.permission));
 }

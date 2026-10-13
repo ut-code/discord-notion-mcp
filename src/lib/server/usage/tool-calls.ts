@@ -54,7 +54,13 @@ export interface RetentionOptions {
 }
 
 /** Deletes tool calls older than 90 days now and then every 24 hours; returns a stop function. */
-export function startToolCallRetention({ store, now = Date.now, intervalMs = RETENTION_INTERVAL_MS, log, logError }: RetentionOptions): () => void {
+export function startToolCallRetention({
+  store,
+  now = Date.now,
+  intervalMs = RETENTION_INTERVAL_MS,
+  log,
+  logError,
+}: RetentionOptions): () => void {
   return runPeriodically(() => {
     try {
       const deleted = store.deleteBefore(new Date(now() - TOOL_CALL_RETENTION_MS));

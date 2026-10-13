@@ -31,7 +31,11 @@
     timer = setTimeout(() => {
       const q = query.trim();
       if (q === data.query) return;
-      void goto(`${DASHBOARD_PATH}/users${q ? `?q=${encodeURIComponent(q)}` : ""}`, { keepFocus: true, noScroll: true, replaceState: true });
+      void goto(`${DASHBOARD_PATH}/users${q ? `?q=${encodeURIComponent(q)}` : ""}`, {
+        keepFocus: true,
+        noScroll: true,
+        replaceState: true,
+      });
     }, SEARCH_DEBOUNCE_MS);
   }
 </script>
@@ -56,7 +60,7 @@
       autocomplete="off"
     />
   </form>
-  <span class="text-muted-foreground text-[13px]">{data.total} 人</span>
+  <span class="text-[13px] text-muted-foreground">{data.total} 人</span>
 </div>
 
 <div class="table-wrap">

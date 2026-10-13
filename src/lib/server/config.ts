@@ -54,9 +54,7 @@ export class ConfigError extends Error {
 }
 
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
-  const normalized = Object.fromEntries(
-    Object.entries(env).map(([key, value]) => [key, value === "" ? undefined : value]),
-  );
+  const normalized = Object.fromEntries(Object.entries(env).map(([key, value]) => [key, value === "" ? undefined : value]));
   const parsed = EnvSchema.safeParse(normalized);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((issue) => {

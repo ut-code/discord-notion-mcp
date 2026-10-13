@@ -21,9 +21,7 @@ export interface Viewer {
 }
 
 export type ViewerGate =
-  | { kind: "signed-out" }
-  | { kind: "denied"; status: 403 | 503; title: string; message: string }
-  | { kind: "viewer"; viewer: Viewer };
+  { kind: "signed-out" } | { kind: "denied"; status: 403 | 503; title: string; message: string } | { kind: "viewer"; viewer: Viewer };
 
 /** Every dashboard page requires a guild member's browser session. */
 export async function checkViewer(deps: DashboardDeps, headers: Headers): Promise<ViewerGate> {
@@ -31,7 +29,12 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
   if (!session) return { kind: "signed-out" };
   const discordUserId = await deps.identity.discordUserIdForUser(session.user.id);
   if (!discordUserId) {
-    return { kind: "denied", status: 403, title: "アクセスできません", message: "このログインには Discord アカウントが連携されていません。" };
+    return {
+      kind: "denied",
+      status: 403,
+      title: "アクセスできません",
+      message: "このログインには Discord アカウントが連携されていません。",
+    };
   }
   let access: EffectiveAccess;
   try {

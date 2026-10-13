@@ -24,7 +24,13 @@
 </script>
 
 <div class="flex flex-col gap-3" bind:clientWidth={width}>
-  <Chart.Container {config} class={["stacked-bars aspect-auto w-full", !hydrated && "ssr"]} style={hydrated ? `height:${HEIGHT}px` : undefined} role="img" aria-label={label}>
+  <Chart.Container
+    {config}
+    class={["stacked-bars aspect-auto w-full", !hydrated && "ssr"]}
+    style={hydrated ? `height:${HEIGHT}px` : undefined}
+    role="img"
+    aria-label={label}
+  >
     <BarChart
       data={rows}
       x="date"

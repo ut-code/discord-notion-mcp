@@ -30,7 +30,6 @@
           <Table.Row>
             <Table.Head>対象</Table.Head>
             <Table.Head>権限</Table.Head>
-            <Table.Head>付与者</Table.Head>
             <Table.Head>付与日</Table.Head>
             {#if manage}<Table.Head class="actions"><span class="sr-only">操作</span></Table.Head>{/if}
           </Table.Row>
@@ -45,14 +44,13 @@
                   {#if row.redundancy}<ToneBadge badge={row.redundancy} />{/if}
                 </span>
               </Table.Cell>
-              <Table.Cell class="secondary wrap">{row.grantedBy}</Table.Cell>
               <Table.Cell class={row.locked ? "muted" : "secondary"}>{row.grantedAt}</Table.Cell>
               {#if manage}
                 <Table.Cell class="actions">
                   {#if row.remove}
                     <GrantMenu remove={row.remove} {index} />
                   {:else if row.locked}
-                    <span class="text-subtle inline-flex w-8 justify-center" title={row.locked}>
+                    <span class="inline-flex w-8 justify-center text-subtle" title={row.locked}>
                       <LockIcon class="size-4" role="img" aria-label="削除不可" />
                     </span>
                   {/if}
@@ -61,7 +59,7 @@
             </Table.Row>
           {:else}
             <Table.Row>
-              <Table.Cell class="empty" colspan={manage ? 5 : 4}>付与はありません。</Table.Cell>
+              <Table.Cell class="empty" colspan={manage ? 4 : 3}>付与はありません。</Table.Cell>
             </Table.Row>
           {/each}
         </Table.Body>

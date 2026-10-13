@@ -164,7 +164,10 @@ export class NotionAuditService {
     if (!row) return { ok: false, message: `Audit #${id} not found.` };
     if (row.operation === "revert") return { ok: false, message: "Reverting a revert is not supported." };
     if (row.status !== "ok") {
-      return { ok: false, message: `Audit #${id} is ${row.status === "failed" ? "a failed write" : "still pending"}; there is nothing to revert.` };
+      return {
+        ok: false,
+        message: `Audit #${id} is ${row.status === "failed" ? "a failed write" : "still pending"}; there is nothing to revert.`,
+      };
     }
     if (row.revertedAt) {
       return {
@@ -223,9 +226,7 @@ export class NotionAuditService {
       revertNote: executed.note,
     });
     const forced = conflict ? " (forced despite later edits)" : "";
-    const message = executed.note
-      ? `Reverted audit #${id}${forced}: ${executed.note}`
-      : `Reverted audit #${id}${forced}.`;
+    const message = executed.note ? `Reverted audit #${id}${forced}: ${executed.note}` : `Reverted audit #${id}${forced}.`;
     return { ok: true, ...(executed.partial ? { partial: true } : {}), message, revertAuditId: revertRow.id };
   }
 
@@ -243,14 +244,26 @@ export class NotionAuditService {
     };
   }
 
-  private async execute(api: NotionApi, row: NotionAuditRow, record: RevertRecord, current: NotionPage, comment: string): Promise<Executed> {
+  private async execute(
+    api: NotionApi,
+    row: NotionAuditRow,
+    record: RevertRecord,
+    current: NotionPage,
+    comment: string,
+  ): Promise<Executed> {
     const pageId = current.id;
     switch (record.operation) {
       case "create_page": {
         // Comment first: a trashed page may not accept comments.
         const commentError = current.in_trash ? null : await postComment(api, pageId, comment);
         if (current.in_trash) {
-          return { result: { inTrash: true }, note: "The page was already in the trash.", partial: false, commentError, lastEditedTime: current.last_edited_time };
+          return {
+            result: { inTrash: true },
+            note: "The page was already in the trash.",
+            partial: false,
+            commentError,
+            lastEditedTime: current.last_edited_time,
+          };
         }
         const trashed = await api.updatePage({ pageId: record.result.pageId, inTrash: true });
         return { result: { inTrash: true }, note: null, partial: false, commentError, lastEditedTime: trashed.last_edited_time };
@@ -275,6 +288,7 @@ export class NotionAuditService {
           if (error instanceof NotionRequestError && error.status === 400) {
             throw new Error(
               `The page no longer contains the text written by audit #${row.id} in its original form, so it cannot be reverted automatically; restore it by hand. (Notion: ${error.message})`,
+              { cause: error },
             );
           }
           throw error;

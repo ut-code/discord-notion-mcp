@@ -70,7 +70,7 @@
         {@const Icon = item.icon}
         <a class="native-menu-item" href={item.href}><Icon class="size-4" />{item.label}</a>
       {:else if item.kind === "separator"}
-        <div class="bg-border my-1 h-px" role="separator"></div>
+        <div class="my-1 h-px bg-border" role="separator"></div>
       {:else}
         {@const Icon = item.icon}
         <button class="native-menu-item danger" type="button" popovertarget={item.dialogId}><Icon class="size-4" />{item.label}</button>

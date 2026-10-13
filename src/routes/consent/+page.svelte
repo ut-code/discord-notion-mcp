@@ -55,22 +55,22 @@
       </div>
       <form method="post" action={SIGN_OUT_PATH}>
         <input type="hidden" name="next" value={data.switchNext} />
-        <button class="text-text-4 hover:text-foreground cursor-pointer text-[13px] underline" type="submit">切り替え</button>
+        <button class="cursor-pointer text-[13px] text-text-4 underline hover:text-foreground" type="submit">切り替え</button>
       </form>
     </div>
 
     <div class="flex flex-col">
-      <span class="text-text-4 mb-1 text-[13px] font-medium">使えるようになる機能</span>
+      <span class="mb-1 text-[13px] font-medium text-text-4">使えるようになる機能</span>
       {#if data.features.length === 0}
-        <p class="text-muted-foreground py-3 text-[13px]">まだ権限が付与されていません。管理者に依頼してください。</p>
+        <p class="py-3 text-[13px] text-muted-foreground">まだ権限が付与されていません。管理者に依頼してください。</p>
       {:else}
         {#each data.features as feature (feature.permission)}
           {@const Icon = ICONS[feature.permission]}
-          <div class="border-muted flex items-start gap-3 border-b py-3 last:border-b-0">
-            <Icon class="text-foreground mt-0.5 size-4 shrink-0" />
+          <div class="flex items-start gap-3 border-b border-muted py-3 last:border-b-0">
+            <Icon class="mt-0.5 size-4 shrink-0 text-foreground" />
             <div class="stack">
               <span class="text-sm font-medium">{feature.title}</span>
-              <span class="text-muted-foreground text-[13px]">{feature.description}</span>
+              <span class="text-[13px] text-muted-foreground">{feature.description}</span>
             </div>
           </div>
         {/each}
@@ -82,8 +82,8 @@
       <Button size="lg" disabled={busy} onclick={() => decide(true)}>許可する</Button>
     </div>
     {#if status}
-      <p class="text-bad-fg text-[13px]" role="status">{status}</p>
+      <p class="text-[13px] text-bad-fg" role="status">{status}</p>
     {/if}
   </section>
-  <p class="text-muted-foreground text-center text-xs leading-relaxed">自分で接続していない場合は拒否してください。</p>
+  <p class="text-center text-xs leading-relaxed text-muted-foreground">自分で接続していない場合は拒否してください。</p>
 </AuthLayout>

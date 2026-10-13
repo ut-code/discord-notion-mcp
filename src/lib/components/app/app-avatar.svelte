@@ -18,5 +18,5 @@
   {#if url}
     <Avatar.Image src={url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
   {/if}
-  <Avatar.Fallback class="text-text-3 font-semibold text-[length:inherit]">{initialOf(name)}</Avatar.Fallback>
+  <Avatar.Fallback class="text-[length:inherit] font-semibold text-text-3">{initialOf(name)}</Avatar.Fallback>
 </Avatar.Root>

@@ -15,7 +15,11 @@ import type { PageMarkdownUpdate, PageParent, RichTextRequest } from "../../src/
 import { applyContentUpdates, ContentUpdateError } from "../../src/lib/server/notion/content/content-diff";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 
-export function rt(text: string, annotations: Partial<RichTextItemResponse["annotations"]> = {}, href: string | null = null): RichTextItemResponse {
+export function rt(
+  text: string,
+  annotations: Partial<RichTextItemResponse["annotations"]> = {},
+  href: string | null = null,
+): RichTextItemResponse {
   return {
     type: "text",
     text: { content: text, link: href ? { url: href } : null },
@@ -33,6 +37,7 @@ function notFound(what: string): NotionRequestError {
   return new NotionRequestError(`Could not find ${what}.`, 404, "object_not_found");
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- assertions inspect recorded arguments of any API method
 type Call = { method: string; args: any };
 
 let counter = 0;
@@ -89,7 +94,7 @@ export class FakeNotionApi implements NotionApi {
     this.touch(pageId);
   }
 
-  callsOf(method: keyof NotionApi): any[] {
+  callsOf(method: keyof NotionApi): Call["args"][] {
     return this.calls.filter((call) => call.method === method).map((call) => call.args);
   }
 
@@ -123,7 +128,7 @@ export class FakeNotionApi implements NotionApi {
     return page;
   }
 
-  addDataSource(options: { id?: string; title: string; databaseId: string; properties: Record<string, any> }): NotionDataSource {
+  addDataSource(options: { id?: string; title: string; databaseId: string; properties: Record<string, unknown> }): NotionDataSource {
     const id = options.id ?? fakeId();
     const dataSource = {
       object: "data_source",
@@ -206,7 +211,7 @@ export class FakeNotionApi implements NotionApi {
   async updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<PageMarkdown> {
     this.enter("updatePageMarkdown", { pageId, update: structuredClone(update) });
     if (!this.pages.has(pageId)) throw notFound("page");
-    if ("allow_deleting_content" in (update as any)[update.type]) {
+    if ("allow_deleting_content" in (update.type === "update_content" ? update.update_content : update.insert_content)) {
       throw new Error("allow_deleting_content must never be sent");
     }
     const current = this.markdown.get(pageId) ?? "";
@@ -266,7 +271,9 @@ export class FakeNotionApi implements NotionApi {
   async createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage> {
     this.enter("createPage", params);
     const titleEntry = Object.entries(params.properties).find(([, value]) => "title" in (value as object));
-    const title = titleEntry ? ((titleEntry[1] as { title: RichTextRequest[] }).title.map((t) => ("text" in t ? t.text.content : "")).join("")) : "";
+    const title = titleEntry
+      ? (titleEntry[1] as { title: RichTextRequest[] }).title.map((t) => ("text" in t ? t.text.content : "")).join("")
+      : "";
     const parent =
       params.parent.type === "page_id"
         ? { type: "page_id", page_id: params.parent.page_id }

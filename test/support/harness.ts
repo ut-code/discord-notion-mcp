@@ -96,7 +96,10 @@ export async function sessionCookieFor(h: Harness, discordUserId: string): Promi
 
 async function codeChallenge(verifier: string): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
-  return btoa(String.fromCharCode(...digest)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return btoa(String.fromCharCode(...digest))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
 }
 
 export async function registerClient(h: Harness): Promise<string> {
@@ -183,7 +186,10 @@ export async function issueTokens(h: Harness, clientId: string, cookie: string):
   return exchangeCode(h, clientId, redirect.searchParams.get("code")!);
 }
 
-export async function mcpCall(h: Harness, token: string, body: unknown): Promise<{ status: number; json: any; headers: Headers }> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- assertions dig into arbitrary JSON-RPC results
+type McpJson = any;
+
+export async function mcpCall(h: Harness, token: string, body: unknown): Promise<{ status: number; json: McpJson; headers: Headers }> {
   const res = await fetch(`${h.base}/mcp`, {
     method: "POST",
     headers: {

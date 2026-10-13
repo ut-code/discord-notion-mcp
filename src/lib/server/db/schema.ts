@@ -61,10 +61,7 @@ export const notionAudit = sqliteTable(
     /** On a `revert` row: the audit id it reverted. */
     revertOfAuditId: integer("revert_of_audit_id"),
   },
-  (table) => [
-    index("notion_audit_created_at_idx").on(table.createdAt),
-    index("notion_audit_discord_user_idx").on(table.discordUserId),
-  ],
+  (table) => [index("notion_audit_created_at_idx").on(table.createdAt), index("notion_audit_discord_user_idx").on(table.discordUserId)],
 );
 
 export type NotionAuditRow = typeof notionAudit.$inferSelect;

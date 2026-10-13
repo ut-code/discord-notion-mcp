@@ -31,7 +31,7 @@
   let subjectType = $derived(form.subjectType);
   let roleId = $derived(form.roleId);
   let userId = $derived(form.selectedUserId ?? "");
-  // The inline picker that replaces the controls below once JavaScript runs.
+  // The inline search that replaces the controls below once JavaScript runs.
   let subject = $derived(initialSubject(form));
 
   const permissionOption = $derived(form.permissions.find((option) => option.value === permission) ?? form.permissions[0]!);
@@ -56,18 +56,15 @@
           <option value={option.value}>{option.label}</option>
         {/each}
       </NativeSelect.Root>
-      <span class="text-muted-foreground text-xs" id="grant-hint">{permissionOption.hint}</span>
+      <span class="text-xs text-muted-foreground" id="grant-hint">{permissionOption.hint}</span>
     </div>
 
     {#if hydrated.current}
-      <div class="flex flex-col gap-2">
-        <Label for="grant-subject">対象</Label>
-        <SubjectPicker id="grant-subject" roles={form.roles} bind:selected={subject} />
-        {#if subject}
-          <input type="hidden" name="subjectType" value={subject.type} />
-          <input type="hidden" name={subject.type === "role" ? "roleId" : "userId"} value={subject.id} />
-        {/if}
-      </div>
+      <SubjectPicker id="grant-subject" roles={form.roles} bind:selected={subject} />
+      {#if subject}
+        <input type="hidden" name="subjectType" value={subject.type} />
+        <input type="hidden" name={subject.type === "role" ? "roleId" : "userId"} value={subject.id} />
+      {/if}
     {:else}
       <fieldset class="m-0 min-w-0 border-0 p-0">
         <legend class="mb-2 p-0 text-sm font-medium">対象</legend>
@@ -95,13 +92,20 @@
       <div class="only-user flex flex-col gap-2">
         <Label for="grant-q">メンバーを検索</Label>
         <div class="search">
-          <button class="search-icon" type="submit" formmethod="get" formaction={`${DASHBOARD_PATH}/grants`} formnovalidate aria-label="検索">
+          <button
+            class="search-icon"
+            type="submit"
+            formmethod="get"
+            formaction={`${DASHBOARD_PATH}/grants`}
+            formnovalidate
+            aria-label="検索"
+          >
             <SearchIcon class="size-4" />
           </button>
           <Input id="grant-q" name="q" type="search" value={form.query} autocomplete="off" placeholder="名前・@ユーザー名・ID" />
         </div>
         {#if form.searchError}
-          <div class="picker"><p class="text-bad-fg px-2 py-2.5 text-[13px]">{form.searchError}</p></div>
+          <div class="picker"><p class="px-2 py-2.5 text-[13px] text-bad-fg">{form.searchError}</p></div>
         {:else if form.candidates.length > 0}
           <div class="picker" role="radiogroup" aria-label="付与するユーザー">
             {#each form.candidates as user (user.id)}
@@ -117,7 +121,9 @@
             {/each}
           </div>
         {:else if form.query}
-          <div class="picker"><p class="text-muted-foreground px-2 py-2.5 text-[13px]">「{form.query}」に一致するメンバーはいません。</p></div>
+          <div class="picker">
+            <p class="px-2 py-2.5 text-[13px] text-muted-foreground">「{form.query}」に一致するメンバーはいません。</p>
+          </div>
         {/if}
       </div>
     {/if}

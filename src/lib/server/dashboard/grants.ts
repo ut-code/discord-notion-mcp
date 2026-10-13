@@ -33,8 +33,6 @@ export interface GrantTableRow {
   subject: SubjectView;
   permissionLabel: string;
   redundancy: BadgeView | null;
-  /** Who granted it; implicit admins name the source instead. */
-  grantedBy: string;
   grantedAt: string;
   /** Tooltip of a row that cannot be deleted here. */
   locked: string | null;
@@ -127,7 +125,6 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
       subject: roleSubject(row.role, row.role.id),
       permissionLabel: PERMISSION_LABELS.admin,
       redundancy: null,
-      grantedBy: "Discord の Administrator 権限",
       grantedAt: "—",
       locked: "Discord 側の権限なのでここでは削除できません",
       remove: null,
@@ -139,7 +136,6 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
       subject: userSubject(guild, row.user, row.user.id),
       permissionLabel: PERMISSION_LABELS.admin,
       redundancy: null,
-      grantedBy: "サーバーオーナー",
       grantedAt: "—",
       locked: "サーバーオーナーは常に管理者です",
       remove: null,
@@ -154,7 +150,6 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
     subject,
     permissionLabel: label,
     redundancy: row.redundancy ? redundancyBadge(row.redundancy) : null,
-    grantedBy: row.createdBy ? (row.createdBy.displayName ?? row.createdBy.id) : "—",
     grantedAt: formatDateJst(grant.createdAt),
     locked: null,
     remove: {
@@ -204,10 +199,7 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams, v
   const userParam = params.get("userId")?.trim() ?? "";
   const selectedUserId = viewer.isAdmin && isSnowflake(userParam) ? userParam : null;
 
-  const userIds = grants.flatMap((grant) => [
-    ...(grant.subjectType === "user" ? [grant.subjectId] : []),
-    ...(grant.createdBy ? [grant.createdBy] : []),
-  ]);
+  const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
   const [users, search] = await Promise.all([
     deps.subjects.resolveUsers([...userIds, guild.ownerId, ...(selectedUserId ? [selectedUserId] : [])]),
     query ? searchCandidates(deps, query) : Promise.resolve({ candidates: [], error: null }),
@@ -247,7 +239,9 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
   const roleParam = params.get("roleId") ?? "";
   const selected = selectedUserId ? users.get(selectedUserId) : undefined;
   const candidates =
-    selected?.displayName && !search.candidates.some((candidate) => candidate.id === selected.id) ? [selected, ...search.candidates] : search.candidates;
+    selected?.displayName && !search.candidates.some((candidate) => candidate.id === selected.id)
+      ? [selected, ...search.candidates]
+      : search.candidates;
 
   const permission = isPermission(permissionParam) ? permissionParam : (filter ?? "discord:read");
   const role = roles.find((candidate) => candidate.id === roleParam) ?? roles[0];
@@ -307,7 +301,12 @@ export async function createGrant(deps: DashboardDeps, body: FormData, actor: Vi
     return { kind: "error", message: "このサーバーに存在する（連携用でない）ロールを選んでください。" };
   }
   const by = actor.discordUserId;
-  const { created } = await deps.grants.createGrant({ permission: form.permission, subjectType: form.subjectType, subjectId: form.subjectId, createdBy: by });
+  const { created } = await deps.grants.createGrant({
+    permission: form.permission,
+    subjectType: form.subjectType,
+    subjectId: form.subjectId,
+    createdBy: by,
+  });
   if (!created) return { kind: "warn", message: `${form.label}には既に「${PERMISSION_LABELS[form.permission]}」が付与されています。` };
   deps.log({ event: "grant_added", permission: form.permission, subjectType: form.subjectType, subjectId: form.subjectId, by });
   return { kind: "ok", message: `${form.label}に「${PERMISSION_LABELS[form.permission]}」を付与しました。` };
@@ -320,7 +319,13 @@ export async function deleteGrant(deps: DashboardDeps, body: FormData, actor: Vi
   const { form } = parsed;
   const removed = await deps.grants.removeGrant(form);
   if (!removed) return { kind: "warn", message: "この付与は既に削除されています。" };
-  deps.log({ event: "grant_removed", permission: form.permission, subjectType: form.subjectType, subjectId: form.subjectId, by: actor.discordUserId });
+  deps.log({
+    event: "grant_removed",
+    permission: form.permission,
+    subjectType: form.subjectType,
+    subjectId: form.subjectId,
+    by: actor.discordUserId,
+  });
   const subject = form.role ? roleHandle(form.role.name) : form.label;
   return { kind: "ok", message: `${subject} から「${PERMISSION_LABELS[form.permission]}」を削除しました。` };
 }

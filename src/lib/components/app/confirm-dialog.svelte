@@ -62,7 +62,7 @@
 {:else}
   <div class="native-dialog" {id} popover="auto" role="dialog" aria-labelledby={`${id}-title`}>
     <p class="text-base font-semibold" id={`${id}-title`}>{title}</p>
-    {#if description}<p class="text-muted-foreground text-sm">{description}</p>{/if}
+    {#if description}<p class="text-sm text-muted-foreground">{description}</p>{/if}
     <form method="post" action={url} class="mt-4 flex justify-end gap-2">
       {@render fields()}
       <Button variant="outline" popovertarget={id} popovertargetaction="hide">キャンセル</Button>

@@ -34,15 +34,15 @@
     {:else if conflict}
       <form method="post" {action} class="stack gap-4" use:enhance>
         <input type="hidden" name="force" value="true" />
-        <Alert.Root class="border-warn-border bg-warn-bg rounded-[10px] p-3.5 *:[svg]:text-warn-icon">
+        <Alert.Root class="rounded-[10px] border-warn-border bg-warn-bg p-3.5 *:[svg]:text-warn-icon">
           <TriangleAlertIcon />
-          <Alert.Title class="text-warn-text font-semibold">この変更の後にページが編集されています</Alert.Title>
-          <Alert.Description class="text-warn-fg text-[13px] leading-relaxed">
+          <Alert.Title class="font-semibold text-warn-text">この変更の後にページが編集されています</Alert.Title>
+          <Alert.Description class="text-[13px] leading-relaxed text-warn-fg">
             取り消すと、後からの編集と食い違う可能性があります。内容を確認してから実行してください。
           </Alert.Description>
         </Alert.Root>
         <label class="flex cursor-pointer items-start gap-2.5 text-sm">
-          <input type="checkbox" name="confirm" value="yes" required class="accent-primary mt-0.5 size-4 shrink-0" />
+          <input type="checkbox" name="confirm" value="yes" required class="mt-0.5 size-4 shrink-0 accent-primary" />
           <span>後からの編集を確認した上で取り消す</span>
         </label>
         <div class="stack gap-2">
@@ -51,13 +51,20 @@
             強制的に取り消す
           </Button>
           {#if targetUrl}
-            <Button variant="outline" class="w-full" href={targetUrl} target="_blank" rel="noopener noreferrer">Notion でページを確認</Button>
+            <Button variant="outline" class="w-full" href={targetUrl} target="_blank" rel="noopener noreferrer"
+              >Notion でページを確認</Button
+            >
           {/if}
         </div>
       </form>
     {:else}
       <!-- Before hydration the button opens the dialog's native popover. -->
-      <Button variant="outline" class="w-full" popovertarget={hydrated.current ? undefined : "revert-confirm"} onclick={() => (confirming = true)}>
+      <Button
+        variant="outline"
+        class="w-full"
+        popovertarget={hydrated.current ? undefined : "revert-confirm"}
+        onclick={() => (confirming = true)}
+      >
         <Undo2Icon />
         取り消す
       </Button>

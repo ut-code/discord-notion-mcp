@@ -5,111 +5,199 @@
 </script>
 
 <script lang="ts">
-  import ChevronsUpDownIcon from "@lucide/svelte/icons/chevrons-up-down";
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
+  import SearchIcon from "@lucide/svelte/icons/search";
+  import XIcon from "@lucide/svelte/icons/x";
+  import { tick } from "svelte";
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
   import { Button } from "$lib/components/ui/button";
-  import * as Command from "$lib/components/ui/command";
-  import * as Popover from "$lib/components/ui/popover";
+  import { Input } from "$lib/components/ui/input";
+  import { Label } from "$lib/components/ui/label";
   import { DASHBOARD_PATH } from "$lib/paths";
-  import type { GrantFormView } from "$lib/server/dashboard/grants";
+  import type { CandidateView, GrantFormView } from "$lib/server/dashboard/grants";
   import { MemberLookup } from "./member-lookup.svelte";
 
-  let {
-    id,
-    roles,
-    selected = $bindable(),
-  }: { id: string; roles: GrantFormView["roles"]; selected: GrantSubject | null } = $props();
+  const ROLE_LIMIT = 6;
 
-  let open = $state(false);
+  let { id, roles, selected = $bindable() }: { id: string; roles: GrantFormView["roles"]; selected: GrantSubject | null } = $props();
+
   let query = $state("");
+  /** Escape hides the candidates until the query changes. */
+  let dismissed = $state(false);
+  let activeKey = $state<string | null>(null);
+  let input = $state<HTMLInputElement | null>(null);
+  let clear = $state<HTMLButtonElement | null>(null);
   const lookup = new MemberLookup(`${DASHBOARD_PATH}/grants/members`);
 
+  const labelId = $derived(`${id}-label`);
+  const listId = $derived(`${id}-list`);
+  const keyOf = (subject: GrantSubject) => `${subject.type}:${subject.id}`;
+  const optionId = (subject: GrantSubject) => `${id}-option-${subject.type}-${subject.id}`;
   const fold = (text: string) => text.normalize("NFKC").toLowerCase();
+
   const needle = $derived(fold(query.trim().replace(/^@/, "")));
-  const matchingRoles = $derived(needle ? roles.filter((role) => fold(role.name).includes(needle)) : roles);
-  const showMembers = $derived(query.trim() !== "" && (lookup.members.length > 0 || !lookup.loading));
+  const roleOptions = $derived<GrantSubject[]>(
+    needle
+      ? roles
+          .filter((role) => fold(role.name).includes(needle))
+          .slice(0, ROLE_LIMIT)
+          .map((role) => ({ type: "role", id: role.id, label: role.handle, color: role.color }))
+      : [],
+  );
+  const members = $derived<CandidateView[]>(needle ? lookup.members : []);
+  const options = $derived<GrantSubject[]>([
+    ...roleOptions,
+    ...members.map((member): GrantSubject => ({ type: "user", id: member.id, label: member.name, avatarUrl: member.avatarUrl })),
+  ]);
+  const open = $derived(needle !== "" && !dismissed);
+  const active = $derived(options.find((option) => keyOf(option) === activeKey) ?? options[0]);
+  const memberNote = $derived(
+    members.length > 0 || lookup.loading ? null : (lookup.error ?? (roleOptions.length > 0 ? null : "一致するロール・メンバーはいません")),
+  );
 
   $effect(() => {
     lookup.search(query);
   });
   $effect(() => () => lookup.cancel());
 
-  function choose(subject: GrantSubject) {
+  async function choose(subject: GrantSubject) {
     selected = subject;
-    open = false;
     query = "";
+    activeKey = null;
+    await tick();
+    clear?.focus();
+  }
+
+  async function reset() {
+    selected = null;
+    dismissed = false;
+    await tick();
+    input?.focus();
+  }
+
+  async function move(step: number) {
+    if (!open || options.length === 0) return;
+    const index = active ? options.indexOf(active) : -1;
+    const next = options[(index + step + options.length) % options.length]!;
+    activeKey = keyOf(next);
+    await tick();
+    document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" });
+  }
+
+  function onkeydown(event: KeyboardEvent) {
+    if (event.isComposing) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      dismissed = false;
+      void move(event.key === "ArrowDown" ? 1 : -1);
+    } else if (event.key === "Enter") {
+      // Never submit the form from the search box.
+      event.preventDefault();
+      if (open && active) void choose(active);
+    } else if (event.key === "Escape" && open) {
+      event.preventDefault();
+      dismissed = true;
+    }
   }
 </script>
 
-<Popover.Root bind:open>
-  <Popover.Trigger>
-    {#snippet child({ props })}
-      <Button {...props} {id} variant="outline" class="w-full justify-between gap-2 px-3 font-normal" role="combobox" aria-expanded={open}>
-        {#if selected?.type === "role"}
-          <span class="flex min-w-0 items-center gap-2">
-            <span class="dot" style:background={selected.color ?? undefined}></span>
-            <span class="truncate">{selected.label}</span>
-          </span>
-        {:else if selected}
-          <span class="flex min-w-0 items-center gap-2">
-            <AppAvatar name={selected.label} url={selected.avatarUrl} size="sm" />
-            <span class="truncate">{selected.label}</span>
-          </span>
-        {:else}
-          <span class="text-muted-foreground">選択してください</span>
-        {/if}
-        <ChevronsUpDownIcon class="text-muted-foreground size-4" />
+{#snippet heading(text: string, headingId?: string)}
+  <div id={headingId} class="px-2 pt-1.5 pb-1 text-xs font-medium text-muted-foreground">{text}</div>
+{/snippet}
+
+{#snippet option(subject: GrantSubject, secondLine?: string)}
+  <!-- Focus stays on the input (aria-activedescendant); the keyboard is handled there. -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div
+    id={optionId(subject)}
+    class="pick"
+    role="option"
+    tabindex="-1"
+    aria-selected={subject === active}
+    data-active={subject === active ? "" : undefined}
+    onmousedown={(event) => event.preventDefault()}
+    onmousemove={() => (activeKey = keyOf(subject))}
+    onclick={() => choose(subject)}
+  >
+    {#if subject.type === "role"}
+      <span class="dot" style:background={subject.color ?? undefined}></span>
+      <span class="truncate text-sm">{subject.label}</span>
+    {:else}
+      <AppAvatar name={subject.label} url={subject.avatarUrl} size="md" />
+      <span class="stack">
+        <span class="truncate text-sm">{subject.label}</span>
+        <span class="mono truncate">{secondLine}</span>
+      </span>
+    {/if}
+  </div>
+{/snippet}
+
+<div class="flex flex-col gap-2">
+  <Label id={labelId} for={selected ? undefined : id}>対象</Label>
+  {#if selected}
+    <div
+      role="group"
+      aria-labelledby={labelId}
+      class="flex h-9 min-w-0 items-center gap-2 rounded-md border border-input pr-0.5 pl-2.5 text-sm"
+    >
+      {#if selected.type === "role"}
+        <span class="dot" style:background={selected.color ?? undefined}></span>
+      {:else}
+        <AppAvatar name={selected.label} url={selected.avatarUrl} size="sm" />
+      {/if}
+      <span class="min-w-0 flex-1 truncate">{selected.label}</span>
+      <Button bind:ref={clear} variant="ghost" size="icon-sm" aria-label="選択を解除" onclick={reset}>
+        <XIcon />
       </Button>
-    {/snippet}
-  </Popover.Trigger>
-  <Popover.Content class="w-(--bits-popover-anchor-width) min-w-64 p-0" align="start">
-    <Command.Root shouldFilter={false}>
-      <div class="relative">
-        <Command.Input bind:value={query} placeholder="ロール・名前・@ユーザー名・ID" aria-label="対象を検索" />
-        {#if lookup.loading}
-          <span class="text-muted-foreground absolute top-1/2 right-3.5 -translate-y-1/2" role="status" aria-label="検索中">
-            <LoaderCircleIcon class="size-4 animate-spin" />
-          </span>
+    </div>
+  {:else}
+    <div class="search">
+      <span class="search-icon pointer-events-none" aria-hidden="true"><SearchIcon class="size-4" /></span>
+      <Input
+        bind:ref={input}
+        bind:value={query}
+        {id}
+        type="text"
+        role="combobox"
+        autocomplete="off"
+        spellcheck={false}
+        placeholder="ロール・メンバーを検索"
+        aria-autocomplete="list"
+        aria-expanded={open && options.length > 0}
+        aria-controls={listId}
+        aria-activedescendant={open && active ? optionId(active) : undefined}
+        class="pr-9"
+        oninput={() => (dismissed = false)}
+        {onkeydown}
+      />
+      {#if lookup.loading}
+        <span class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground" role="status" aria-label="検索中">
+          <LoaderCircleIcon class="size-4 animate-spin" />
+        </span>
+      {/if}
+    </div>
+    <div class={["picker", !(open && (options.length > 0 || memberNote)) && "hidden"]}>
+      <div id={listId} role="listbox" aria-labelledby={labelId}>
+        {#if open && roleOptions.length > 0}
+          <div role="group" aria-labelledby={`${id}-roles`}>
+            {@render heading("ロール", `${id}-roles`)}
+            {#each roleOptions as subject (keyOf(subject))}
+              {@render option(subject)}
+            {/each}
+          </div>
+        {/if}
+        {#if open && members.length > 0}
+          <div role="group" aria-labelledby={`${id}-members`}>
+            {@render heading("メンバー", `${id}-members`)}
+            {#each members as member, index (member.id)}
+              {@render option(options[roleOptions.length + index]!, member.secondLine)}
+            {/each}
+          </div>
         {/if}
       </div>
-      <Command.List>
-        {#if matchingRoles.length > 0}
-          <Command.Group heading="ロール">
-            {#each matchingRoles as role (role.id)}
-              <Command.Item
-                value={`role:${role.id}`}
-                data-checked={selected?.type === "role" && selected.id === role.id}
-                onSelect={() => choose({ type: "role", id: role.id, label: role.handle, color: role.color })}
-              >
-                <span class="dot" style:background={role.color ?? undefined}></span>
-                <span class="truncate">{role.handle}</span>
-              </Command.Item>
-            {/each}
-          </Command.Group>
-        {/if}
-        {#if showMembers}
-          <Command.Group heading="メンバー">
-            {#each lookup.members as member (member.id)}
-              <Command.Item
-                value={`user:${member.id}`}
-                data-checked={selected?.type === "user" && selected.id === member.id}
-                onSelect={() => choose({ type: "user", id: member.id, label: member.name, avatarUrl: member.avatarUrl })}
-              >
-                <AppAvatar name={member.name} url={member.avatarUrl} size="md" />
-                <span class="stack">
-                  <span class="truncate">{member.name}</span>
-                  <span class="mono truncate">{member.secondLine}</span>
-                </span>
-              </Command.Item>
-            {:else}
-              <p class={["px-2 py-1.5 text-[13px]", lookup.error ? "text-bad-fg" : "text-muted-foreground"]}>
-                {lookup.error ?? "一致するメンバーはいません"}
-              </p>
-            {/each}
-          </Command.Group>
-        {/if}
-      </Command.List>
-    </Command.Root>
-  </Popover.Content>
-</Popover.Root>
+      {#if open && memberNote}
+        <p class={["px-2 py-1.5 text-[13px]", lookup.error ? "text-bad-fg" : "text-muted-foreground"]} role="status">{memberNote}</p>
+      {/if}
+    </div>
+  {/if}
+</div>
