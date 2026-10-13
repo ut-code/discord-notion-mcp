@@ -143,6 +143,12 @@
 		@apply font-sans;
 		-webkit-text-size-adjust: 100%;
 	}
+	/* Native select popups otherwise inherit the select's text color on the OS's light popup background. */
+	option,
+	optgroup {
+		background-color: var(--popover);
+		color: var(--popover-foreground);
+	}
 	body {
 		@apply bg-background text-foreground;
 		min-height: 100vh;
@@ -204,6 +210,11 @@
 	.sidebar {
 		flex: 0 0 240px;
 		max-width: 240px;
+		position: sticky;
+		top: 0;
+		height: 100vh;
+		height: 100dvh;
+		overflow-y: auto;
 		background: var(--sidebar);
 		border-right: 1px solid var(--sidebar-border);
 		padding: 16px 12px;
@@ -330,6 +341,9 @@
 		.sidebar {
 			flex-basis: 100%;
 			max-width: none;
+			position: static;
+			height: auto;
+			overflow-y: visible;
 			flex-direction: row;
 			flex-wrap: wrap;
 			align-items: center;

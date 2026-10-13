@@ -37,7 +37,7 @@
 
 {#if hydrated.current}
   <AlertDialog.Root bind:open>
-    <AlertDialog.Content>
+    <AlertDialog.Content interactOutsideBehavior="close">
       <AlertDialog.Header>
         <AlertDialog.Title>{title}</AlertDialog.Title>
         {#if description}<AlertDialog.Description>{description}</AlertDialog.Description>{/if}
