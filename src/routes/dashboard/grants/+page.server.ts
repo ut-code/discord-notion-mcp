@@ -1,8 +1,11 @@
 import { createGrant, deleteGrant, grantsPage } from "$lib/server/dashboard/grants";
-import { requireViewer, respond } from "$lib/server/dashboard/guard";
+import { requireAdminViewer, requireViewer, respond } from "$lib/server/dashboard/guard";
 import type { Actions, PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async (event) => grantsPage(event.locals.deps, event.url.searchParams, await requireViewer(event));
+export const load: PageServerLoad = async (event) => {
+  await requireAdminViewer(event);
+  return grantsPage(event.locals.deps, event.url.searchParams);
+};
 
 export const actions: Actions = {
   create: async (event) => {

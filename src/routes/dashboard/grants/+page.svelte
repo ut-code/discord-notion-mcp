@@ -8,8 +8,6 @@
   import SubjectCell from "./subject-cell.svelte";
 
   let { data } = $props();
-
-  const manage = $derived(data.form !== null);
 </script>
 
 <PageHeader title="権限" />
@@ -31,7 +29,7 @@
             <Table.Head>対象</Table.Head>
             <Table.Head>権限</Table.Head>
             <Table.Head>付与日</Table.Head>
-            {#if manage}<Table.Head class="actions"><span class="sr-only">操作</span></Table.Head>{/if}
+            <Table.Head class="actions"><span class="sr-only">操作</span></Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -45,21 +43,19 @@
                 </span>
               </Table.Cell>
               <Table.Cell class={row.locked ? "muted" : "secondary"}>{row.grantedAt}</Table.Cell>
-              {#if manage}
-                <Table.Cell class="actions">
-                  {#if row.remove}
-                    <GrantMenu remove={row.remove} {index} />
-                  {:else if row.locked}
-                    <span class="inline-flex w-8 justify-center text-subtle" title={row.locked}>
-                      <LockIcon class="size-4" role="img" aria-label="削除不可" />
-                    </span>
-                  {/if}
-                </Table.Cell>
-              {/if}
+              <Table.Cell class="actions">
+                {#if row.remove}
+                  <GrantMenu remove={row.remove} {index} />
+                {:else if row.locked}
+                  <span class="inline-flex w-8 justify-center text-subtle" title={row.locked}>
+                    <LockIcon class="size-4" role="img" aria-label="削除不可" />
+                  </span>
+                {/if}
+              </Table.Cell>
             </Table.Row>
           {:else}
             <Table.Row>
-              <Table.Cell class="empty" colspan={manage ? 4 : 3}>付与はありません。</Table.Cell>
+              <Table.Cell class="empty" colspan={4}>付与はありません。</Table.Cell>
             </Table.Row>
           {/each}
         </Table.Body>
@@ -67,7 +63,5 @@
     </div>
   </section>
 
-  {#if data.form}
-    <GrantForm form={data.form} filter={data.filter} />
-  {/if}
+  <GrantForm form={data.form} filter={data.filter} />
 </div>

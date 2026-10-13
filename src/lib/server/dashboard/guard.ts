@@ -33,6 +33,15 @@ export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
   return viewer;
 }
 
+/** Pages only admins open (grants). */
+export async function requireAdminViewer(event: GuardEvent): Promise<Viewer> {
+  const viewer = await requireViewer(event);
+  if (!viewer.isAdmin) {
+    error(403, { title: "アクセスできません", message: "このページは管理者だけが開けます。", signedIn: true });
+  }
+  return viewer;
+}
+
 /** Renders the 404 page when the requested entity does not exist (null). */
 export function orNotFound<T>(value: T | null, page: { title: string; message: string }): T {
   if (value === null) error(404, { ...page, signedIn: true });

@@ -36,7 +36,7 @@ export interface GrantTableRow {
   grantedAt: string;
   /** Tooltip of a row that cannot be deleted here. */
   locked: string | null;
-  /** Null for locked rows and for non-admin viewers. */
+  /** Null for locked rows. */
   remove: { permission: Permission; subjectType: SubjectType; subjectId: string; label: string; menuLabel: string; confirm: string } | null;
 }
 
@@ -66,8 +66,7 @@ export interface GrantsPageData {
   filter: Permission | null;
   tabs: Array<{ label: string; count: number | null; href: string; active: boolean }>;
   rows: GrantTableRow[];
-  /** Admins only. */
-  form: GrantFormView | null;
+  form: GrantFormView;
 }
 
 function rolesText(guild: GuildInfo, user: UserSubject): string {
@@ -190,14 +189,14 @@ export async function memberSearchResult(deps: DashboardDeps, rawQuery: string |
   return { status: 200, body: { members: search.candidates.map((user) => candidateView(guild, user)) } };
 }
 
-/** Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId` (admins only). */
-export async function grantsPage(deps: DashboardDeps, params: URLSearchParams, viewer: Viewer): Promise<GrantsPageData> {
+/** Admins only (the route checks). Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId`. */
+export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): Promise<GrantsPageData> {
   const [guild, grants] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants()]);
   const filterParam = params.get("filter") ?? "";
   const filter = isPermission(filterParam) ? filterParam : null;
-  const query = viewer.isAdmin ? (params.get("q")?.trim() ?? "") : "";
+  const query = params.get("q")?.trim() ?? "";
   const userParam = params.get("userId")?.trim() ?? "";
-  const selectedUserId = viewer.isAdmin && isSnowflake(userParam) ? userParam : null;
+  const selectedUserId = isSnowflake(userParam) ? userParam : null;
 
   const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
   const [users, search] = await Promise.all([
@@ -218,8 +217,8 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams, v
       href: value ? `${GRANTS_PATH}?filter=${encodeURIComponent(value)}` : GRANTS_PATH,
       active: filter === value,
     })),
-    rows: viewer.isAdmin ? rows : rows.map((row) => ({ ...row, remove: null })),
-    form: viewer.isAdmin ? grantForm(guild, params, filter, { query, selectedUserId, users, search }) : null,
+    rows,
+    form: grantForm(guild, params, filter, { query, selectedUserId, users, search }),
   };
 }
 

@@ -9,8 +9,10 @@
   import { page } from "$app/state";
   import ActionFeedback from "$lib/components/app/action-feedback.svelte";
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
+  import ConnectGuide from "$lib/components/app/connect-guide.svelte";
   import ThemeToggle from "$lib/components/app/theme-toggle.svelte";
   import { Button } from "$lib/components/ui/button";
+  import * as Dialog from "$lib/components/ui/dialog";
   import { initialOf } from "$lib/initial";
   import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "$lib/paths";
 
@@ -19,10 +21,18 @@
   const nav = $derived([
     { href: DASHBOARD_PATH, label: "概要", icon: LayoutDashboardIcon },
     { href: `${DASHBOARD_PATH}/stats`, label: "統計", icon: ChartColumnIcon },
-    { href: `${DASHBOARD_PATH}/grants`, label: "権限", icon: ShieldIcon },
+    ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: "権限", icon: ShieldIcon }] : []),
     { href: `${DASHBOARD_PATH}/users`, label: "ユーザー", icon: UsersIcon },
     ...(data.viewer.canViewAudit ? [{ href: `${DASHBOARD_PATH}/audit`, label: "Notion 書き込み履歴", icon: HistoryIcon }] : []),
   ]);
+
+  let connectOpen = $state(false);
+
+  function openConnect(event: MouseEvent) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    connectOpen = true;
+  }
 
   const isActive = (href: string) => (href === DASHBOARD_PATH ? page.url.pathname === DASHBOARD_PATH : page.url.pathname.startsWith(href));
 </script>
@@ -45,7 +55,8 @@
       {/each}
     </nav>
     <div class="sidebar-foot">
-      <a class="nav nav-foot" href={CONNECT_PATH} title="接続方法">
+      <!-- Without JavaScript the link opens the connection page instead of the dialog. -->
+      <a class="nav nav-foot" href={CONNECT_PATH} title="接続方法" onclick={openConnect}>
         <PlugIcon class="size-4 shrink-0" />
         <span class="nav-foot-label">接続方法</span>
       </a>
@@ -72,3 +83,12 @@
     {@render children()}
   </main>
 </div>
+
+<Dialog.Root bind:open={connectOpen}>
+  <Dialog.Content class="sm:max-w-[480px]">
+    <Dialog.Header>
+      <Dialog.Title>接続方法</Dialog.Title>
+    </Dialog.Header>
+    <ConnectGuide mcpUrl={data.mcpUrl} heading="h3" />
+  </Dialog.Content>
+</Dialog.Root>

@@ -3,6 +3,7 @@ import { ADMIN_ONLY, checkViewer, signInRedirect, type Viewer } from "../../src/
 import { auditDetail, auditList, revertAudit } from "../../src/lib/server/dashboard/audit";
 import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
 import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
+import { requireAdminViewer } from "../../src/lib/server/dashboard/guard";
 import { MemberSearch } from "../../src/lib/server/dashboard/member-search";
 import { overview } from "../../src/lib/server/dashboard/overview";
 import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/dashboard/session";
@@ -227,7 +228,7 @@ describe("grants", () => {
       subjectId: ROLE_MOD,
       by: OWNER_ID,
     });
-    const row = (await grantsPage(deps, params(), owner)).rows.find((candidate) => candidate.key === `role:${ROLE_MOD}:discord:read`);
+    const row = (await grantsPage(deps, params())).rows.find((candidate) => candidate.key === `role:${ROLE_MOD}:discord:read`);
     expect(row?.subject).toMatchObject({ name: "@Moderator", color: "#3498db", secondary: "ロール" });
     expect(row?.remove).toMatchObject({
       label: "@Moderator の Discord 読み取りを削除",
@@ -293,7 +294,7 @@ describe("grants", () => {
     for (const subjectId of [MEMBER, STRANGER, "399999999999999999"]) {
       await createGrant(deps, form({ permission: "notion:read", subjectType: "user", subjectId }), owner);
     }
-    const data = await grantsPage(deps, params(), owner);
+    const data = await grantsPage(deps, params());
     const subjects = data.rows.map((row) => row.subject);
     expect(subjects).toContainEqual(
       expect.objectContaining({ name: "Mina", secondary: "@mina · Moderator", title: `Discord ID ${MEMBER}` }),
@@ -305,7 +306,7 @@ describe("grants", () => {
   });
 
   test("implicit admins are listed as locked rows under すべて and 管理者", async () => {
-    const all = await grantsPage(deps, params(), owner);
+    const all = await grantsPage(deps, params());
     expect(all.rows[0]).toMatchObject({
       subject: { name: "@Staff" },
       permissionLabel: "管理者",
@@ -315,10 +316,10 @@ describe("grants", () => {
     expect(all.rows[1]).toMatchObject({ subject: { name: "The Owner" }, locked: "サーバーオーナーは常に管理者です" });
     expect(all.tabs[0]).toMatchObject({ label: "すべて", count: all.rows.length, active: true });
 
-    const admins = await grantsPage(deps, params("filter=admin"), owner);
+    const admins = await grantsPage(deps, params("filter=admin"));
     expect(admins.rows.some((row) => row.key.startsWith("owner:"))).toBe(true);
     expect(admins.tabs.find((tab) => tab.active)).toMatchObject({ href: "/dashboard/grants?filter=admin", label: "管理者" });
-    const readers = await grantsPage(deps, params("filter=notion%3Aread"), owner);
+    const readers = await grantsPage(deps, params("filter=notion%3Aread"));
     expect(readers.rows.some((row) => row.key.startsWith("owner:"))).toBe(false);
     expect(readers.rows.some((row) => row.subject.secondary === "@mina · Moderator")).toBe(true);
     expect(readers.form?.permission).toBe("notion:read");
@@ -328,7 +329,7 @@ describe("grants", () => {
     await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
     await h.composed.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
     await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
-    const badges = (await grantsPage(deps, params(), owner)).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []));
+    const badges = (await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []));
     expect(badges).toContainEqual({
       label: "@Moderator で付与済み",
       tone: "warn",
@@ -339,25 +340,25 @@ describe("grants", () => {
     await h.composed.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
     await h.composed.grants.removeGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
     await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "user", subjectId: ADMIN_MEMBER });
-    expect((await grantsPage(deps, params(), owner)).rows.some((row) => row.redundancy)).toBe(false);
+    expect((await grantsPage(deps, params())).rows.some((row) => row.redundancy)).toBe(false);
   });
 
   test("member search lists matches; a preselected user labels the submit button", async () => {
-    const search = await grantsPage(deps, params("q=min&permission=notion%3Awrite"), owner);
+    const search = await grantsPage(deps, params("q=min&permission=notion%3Awrite"));
     expect(search.form).toMatchObject({ permission: "notion:write", subjectType: "user", query: "min" });
     expect(search.form?.candidates.map((candidate) => candidate.id)).toContain(MEMBER);
     expect(search.form?.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
       "ページの作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
     );
 
-    const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`), owner);
+    const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`));
     expect(preselected.form?.selectedUserId).toBe(MEMBER);
     expect(preselected.form?.candidates[0]?.id).toBe(MEMBER);
     expect(preselected.form?.submitLabel).toBe("Mina に Notion 書き込みを付与");
 
-    expect((await grantsPage(deps, params(`q=${STRANGER}`), owner)).form?.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
-    expect((await grantsPage(deps, params("q=zzz"), owner)).form?.candidates).toEqual([]);
-    const plain = await grantsPage(deps, params(), owner);
+    expect((await grantsPage(deps, params(`q=${STRANGER}`))).form?.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
+    expect((await grantsPage(deps, params("q=zzz"))).form?.candidates).toEqual([]);
+    const plain = await grantsPage(deps, params());
     expect(plain.form).toMatchObject({ subjectType: "role", roleId: ROLE_ADMIN, submitLabel: "@Staff に Discord 読み取りを付与" });
     expect(plain.form?.roles.find((role) => role.id === ROLE_MOD)).toEqual({
       id: ROLE_MOD,
@@ -423,21 +424,14 @@ describe("grants", () => {
 });
 
 describe("read-only members", () => {
-  test("the grants page lists grants without the form, delete actions or member search", async () => {
-    const member = await viewerFor(MEMBER);
-    await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
-    let searched = false;
-    const data = await grantsPage(
-      { ...deps, memberSearch: { search: async () => ((searched = true), []) } },
-      params(`q=min&userId=${MEMBER}`),
-      member,
-    );
-    expect(data.form).toBeNull();
-    expect(searched).toBe(false);
-    expect(data.rows.length).toBe((await grantsPage(deps, params(), owner)).rows.length);
-    expect(data.rows.some((row) => row.subject.name === "@Moderator")).toBe(true);
-    expect(data.rows.every((row) => row.remove === null)).toBe(true);
-    await h.composed.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
+  test("the grants page is for admins only", async () => {
+    const guardEvent = (viewer: Viewer) => ({
+      locals: { viewer: async () => ({ kind: "viewer", viewer }) } as unknown as App.Locals,
+      url: new URL("http://x/dashboard/grants"),
+      request: new Request("http://x/dashboard/grants"),
+    });
+    await expect(requireAdminViewer(guardEvent(await viewerFor(MEMBER)))).rejects.toMatchObject({ status: 403 });
+    expect(await requireAdminViewer(guardEvent(owner))).toBe(owner);
   });
 
   test("the users page hides grant links and revocation, and audit links without notion:read", async () => {
