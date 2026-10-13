@@ -1,0 +1,14 @@
+pre-commit:
+  parallel: true
+  jobs:
+    - name: format
+      glob: "*.{js,ts,svelte,css,html,json,md,yml,yaml}"
+      run: bunx prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
+    - name: lint
+      glob: "*.{js,ts,svelte}"
+      run: bunx eslint {staged_files}
+    - name: typecheck
+      run: bun run typecheck
+    - name: test
+      run: bun test
