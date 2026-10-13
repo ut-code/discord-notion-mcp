@@ -47,4 +47,15 @@ describe("TtlCache", () => {
     await expect(cache.getOrLoad("k", async () => Promise.reject(new Error("down")))).rejects.toThrow("down");
     expect(await cache.getOrLoad("k", async () => 3)).toBe(3);
   });
+
+  test("maxEntries drops the least recently stored entries", () => {
+    const cache = new TtlCache<string, number>(1000, () => 0, 2);
+    cache.set("a", 1);
+    cache.set("b", 2);
+    cache.set("a", 3);
+    cache.set("c", 4);
+    expect(cache.get("b")).toBeUndefined();
+    expect(cache.get("a")).toBe(3);
+    expect(cache.get("c")).toBe(4);
+  });
 });

@@ -9,11 +9,11 @@ import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
 import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle } from "./format";
 import { formString, type ActionResult } from "./shared";
-import { grantableRoles, heldRoles, subjectFromMember, type UserSubject } from "./subjects";
+import { grantableRoles, heldRoles, type UserSubject } from "./subjects";
 import { buildGrantRows, type GrantRowView, type Redundancy } from "./views";
 
 export const GRANTS_PATH = `${DASHBOARD_PATH}/grants`;
-const SEARCH_LIMIT = 10;
+export const MEMBER_QUERY_MAX_LENGTH = 100;
 
 export interface SubjectView {
   kind: "role" | "user";
@@ -53,8 +53,9 @@ export interface GrantFormView {
   permissions: Array<{ value: Permission; label: string; hint: string }>;
   permission: Permission;
   subjectType: SubjectType;
-  roles: Array<{ id: string; name: string; handle: string }>;
+  roles: Array<{ id: string; name: string; handle: string; color: string | null }>;
   roleId: string;
+  preselectedRoleId: string | null;
   query: string;
   /** Search results, with a preselected user first. */
   candidates: CandidateView[];
@@ -167,20 +168,31 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
   };
 }
 
-/** Member search for the grant form: a Discord id resolves directly, anything else is a name prefix. */
 async function searchCandidates(deps: DashboardDeps, query: string): Promise<{ candidates: UserSubject[]; error: string | null }> {
-  const needle = query.replace(/^@/, "");
-  if (isSnowflake(needle)) {
-    const subject = await deps.subjects.resolveUser(needle);
-    return { candidates: subject.displayName ? [subject] : [], error: null };
-  }
   try {
-    const members = await deps.discord.searchMembers(needle, SEARCH_LIMIT);
-    return { candidates: members.map(subjectFromMember), error: null };
+    return { candidates: await deps.memberSearch.search(query), error: null };
   } catch (error) {
     deps.logError({ event: "admin_lookup_failed", lookup: "member_search", error: errorMessage(error) });
     return { candidates: [], error: "メンバー検索に失敗しました。しばらくしてから再試行してください。" };
   }
+}
+
+function candidateView(guild: GuildInfo, user: UserSubject): CandidateView {
+  return { id: user.id, name: user.displayName ?? user.id, secondLine: userSecondLine(guild, user), avatarUrl: user.avatarUrl };
+}
+
+export type MemberSearchResult = { status: 200; body: { members: CandidateView[] } } | { status: 400 | 403 | 502; body: { error: string } };
+
+/** JSON member search behind the grant form's inline picker (`GET members?q=`); admins only. */
+export async function memberSearchResult(deps: DashboardDeps, rawQuery: string | null, viewer: Viewer): Promise<MemberSearchResult> {
+  if (!viewer.isAdmin) return { status: 403, body: { error: ADMIN_ONLY.message ?? "" } };
+  const query = rawQuery?.trim() ?? "";
+  if (query.length < 1 || query.length > MEMBER_QUERY_MAX_LENGTH) {
+    return { status: 400, body: { error: `検索語は 1〜${MEMBER_QUERY_MAX_LENGTH} 文字で入力してください。` } };
+  }
+  const [guild, search] = await Promise.all([deps.directory.fetchGuild(), searchCandidates(deps, query)]);
+  if (search.error) return { status: 502, body: { error: search.error } };
+  return { status: 200, body: { members: search.candidates.map((user) => candidateView(guild, user)) } };
 }
 
 /** Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId` (admins only). */
@@ -239,12 +251,7 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
 
   const permission = isPermission(permissionParam) ? permissionParam : (filter ?? "discord:read");
   const role = roles.find((candidate) => candidate.id === roleParam) ?? roles[0];
-  const candidateViews = candidates.map((user) => ({
-    id: user.id,
-    name: user.displayName ?? user.id,
-    secondLine: userSecondLine(guild, user),
-    avatarUrl: user.avatarUrl,
-  }));
+  const candidateViews = candidates.map((user) => candidateView(guild, user));
   // Candidates always carry a resolved display name.
   const selectedName = candidateViews.find((candidate) => candidate.id === selectedUserId)?.name ?? null;
   const target = subjectType === "role" ? (role ? roleHandle(role.name) : null) : selectedName;
@@ -253,8 +260,15 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
     permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
     permission,
     subjectType,
-    roles: roles.map((candidate) => ({ id: candidate.id, name: candidate.name, handle: roleHandle(candidate.name) })),
+    roles: roles.map((candidate) => ({
+      id: candidate.id,
+      name: candidate.name,
+      handle: roleHandle(candidate.name),
+      color: roleColor(candidate.color) ?? null,
+    })),
     roleId: role?.id ?? "",
+    // Only an explicitly requested role preselects the picker; the no-JS select needs `roleId` regardless.
+    preselectedRoleId: roles.some((candidate) => candidate.id === roleParam) ? roleParam : null,
     query,
     candidates: candidateViews,
     selectedUserId,

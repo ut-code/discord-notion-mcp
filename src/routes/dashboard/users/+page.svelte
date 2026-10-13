@@ -7,19 +7,54 @@
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import { Input } from "$lib/components/ui/input";
   import * as Table from "$lib/components/ui/table";
+  import { afterNavigate, goto } from "$app/navigation";
+  import { useHydrated } from "$lib/hydrated.svelte";
   import { DASHBOARD_PATH } from "$lib/paths";
   import UserMenu from "./user-menu.svelte";
 
   let { data } = $props();
+
+  const SEARCH_DEBOUNCE_MS = 300;
+  const hydrated = useHydrated();
+  // Local so results arriving mid-typing do not overwrite newer keystrokes; other navigations resync it.
+  // svelte-ignore state_referenced_locally
+  let query = $state(data.query);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  afterNavigate(({ type }) => {
+    if (type !== "goto") query = data.query;
+  });
+  $effect(() => () => clearTimeout(timer));
+
+  function searchAsYouType() {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const q = query.trim();
+      if (q === data.query) return;
+      void goto(`${DASHBOARD_PATH}/users${q ? `?q=${encodeURIComponent(q)}` : ""}`, { keepFocus: true, noScroll: true, replaceState: true });
+    }, SEARCH_DEBOUNCE_MS);
+  }
 </script>
 
 <PageHeader title="ユーザー" />
 
 <div class="footer-row">
   <form class="search min-w-[220px] flex-[0_1_320px]" method="get" action={`${DASHBOARD_PATH}/users`} role="search">
-    <button class="search-icon" type="submit" aria-label="検索"><SearchIcon class="size-4" /></button>
+    {#if hydrated.current}
+      <span class="search-icon pointer-events-none" aria-hidden="true"><SearchIcon class="size-4" /></span>
+    {:else}
+      <button class="search-icon" type="submit" aria-label="検索"><SearchIcon class="size-4" /></button>
+    {/if}
     <label for="user-q" class="sr-only">ユーザーを検索</label>
-    <Input id="user-q" name="q" type="search" value={data.query} placeholder="名前・@ユーザー名・ID で検索" autocomplete="off" />
+    <Input
+      id="user-q"
+      name="q"
+      type="search"
+      bind:value={query}
+      oninput={searchAsYouType}
+      placeholder="名前・@ユーザー名・ID で検索"
+      autocomplete="off"
+    />
   </form>
   <span class="text-muted-foreground text-[13px]">{data.total} 人</span>
 </div>

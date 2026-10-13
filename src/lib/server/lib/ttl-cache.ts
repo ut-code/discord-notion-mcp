@@ -9,6 +9,7 @@ interface Entry<V> {
 
 /**
  * In-memory TTL map. Concurrent loads for the same key share one in-flight promise.
+ * With `maxEntries`, the least recently stored entries are dropped first.
  */
 export class TtlCache<K, V> {
   private readonly entries = new Map<K, Entry<V>>();
@@ -17,6 +18,7 @@ export class TtlCache<K, V> {
   constructor(
     private readonly ttlMs: number,
     private readonly clock: Clock = systemClock,
+    private readonly maxEntries = Number.POSITIVE_INFINITY,
   ) {}
 
   get(key: K): V | undefined {
@@ -30,7 +32,12 @@ export class TtlCache<K, V> {
   }
 
   set(key: K, value: V): void {
+    this.entries.delete(key);
     this.entries.set(key, { value, expiresAt: this.clock() + this.ttlMs });
+    for (const oldest of this.entries.keys()) {
+      if (this.entries.size <= this.maxEntries) break;
+      this.entries.delete(oldest);
+    }
   }
 
   delete(key: K): void {

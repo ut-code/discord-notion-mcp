@@ -2,13 +2,13 @@ import type { Auth } from "../auth/auth";
 import type { DiscordIdentityStore } from "../auth/identity";
 import type { TokenRevocationService } from "../auth/revocation";
 import type { LoginUserStore } from "../auth/users";
-import type { DiscordApi } from "../discord/api";
 import type { GuildDirectory } from "../discord/directory";
 import type { ErrorSink, EventSink } from "../lib/log";
 import type { NotionAuditService } from "../notion/changes/audit-service";
 import type { GrantStore } from "../permissions/grants";
 import type { PermissionResolver } from "../permissions/resolver";
 import type { UsageStats } from "../usage/usage-stats";
+import type { MemberSearch } from "./member-search";
 import type { SubjectResolver } from "./subjects";
 
 /** Everything the browser-facing pages (dashboard, sign-in, consent) read or change. */
@@ -20,8 +20,9 @@ export interface DashboardDeps {
   resolver: Pick<PermissionResolver, "resolve">;
   /** Cached guild/member lookups. */
   directory: GuildDirectory;
-  discord: Pick<DiscordApi, "searchMembers" | "fetchUser">;
   subjects: SubjectResolver;
+  /** Grant form member search (briefly cached). */
+  memberSearch: Pick<MemberSearch, "search">;
   grants: GrantStore;
   users: LoginUserStore;
   audit: NotionAuditService;

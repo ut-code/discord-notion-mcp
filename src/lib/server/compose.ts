@@ -5,6 +5,7 @@ import { TokenRevocationService } from "./auth/revocation";
 import { LoginUserStore } from "./auth/users";
 import type { Config } from "./config";
 import type { DashboardDeps } from "./dashboard/deps";
+import { MemberSearch } from "./dashboard/member-search";
 import { SubjectResolver } from "./dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "./db/client";
 import { ChannelAccess, ChannelDirectory } from "./discord/access";
@@ -107,14 +108,15 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   const toolCalls = new ToolCallStore(database.db);
   startToolCallRetention({ store: toolCalls, log: reportEvent, logError: reportError });
   startClientCleanup({ db: database.db, log: reportEvent, logError: reportError });
+  const subjects = new SubjectResolver(directory, discord, reportError);
   const dashboard: DashboardDeps = {
     auth,
     mcpUrl: config.mcpResource,
     identity,
     resolver,
     directory,
-    discord,
-    subjects: new SubjectResolver(directory, discord, reportError),
+    subjects,
+    memberSearch: new MemberSearch(discord, subjects),
     grants,
     users: new LoginUserStore(database.db),
     audit: notionAudit,

@@ -10,22 +10,37 @@
   import { Label } from "$lib/components/ui/label";
   import * as NativeSelect from "$lib/components/ui/native-select";
   import { grantSubmitLabel } from "$lib/grant-label";
+  import { useHydrated } from "$lib/hydrated.svelte";
   import { DASHBOARD_PATH } from "$lib/paths";
   import type { GrantFormView } from "$lib/server/dashboard/grants";
+  import SubjectPicker, { type GrantSubject } from "./subject-picker.svelte";
 
   let { form, filter }: { form: GrantFormView; filter: string | null } = $props();
+
+  const hydrated = useHydrated();
+
+  function initialSubject(view: GrantFormView): GrantSubject | null {
+    const user = view.subjectType === "user" ? view.candidates.find((candidate) => candidate.id === view.selectedUserId) : undefined;
+    if (user) return { type: "user", id: user.id, label: user.name, avatarUrl: user.avatarUrl };
+    const role = view.roles.find((candidate) => candidate.id === view.preselectedRoleId);
+    return role ? { type: "role", id: role.id, label: role.handle, color: role.color } : null;
+  }
 
   // Form state follows the server data (e.g. after a member search) and the user's choices.
   let permission = $derived(form.permission);
   let subjectType = $derived(form.subjectType);
   let roleId = $derived(form.roleId);
   let userId = $derived(form.selectedUserId ?? "");
+  // The inline picker that replaces the controls below once JavaScript runs.
+  let subject = $derived(initialSubject(form));
 
   const permissionOption = $derived(form.permissions.find((option) => option.value === permission) ?? form.permissions[0]!);
   const target = $derived(
-    subjectType === "role"
-      ? (form.roles.find((role) => role.id === roleId)?.handle ?? null)
-      : (form.candidates.find((candidate) => candidate.id === userId)?.name ?? null),
+    hydrated.current
+      ? (subject?.label ?? null)
+      : subjectType === "role"
+        ? (form.roles.find((role) => role.id === roleId)?.handle ?? null)
+        : (form.candidates.find((candidate) => candidate.id === userId)?.name ?? null),
   );
   const submitLabel = $derived(grantSubmitLabel(permissionOption.label, target));
 </script>
@@ -44,58 +59,69 @@
       <span class="text-muted-foreground text-xs" id="grant-hint">{permissionOption.hint}</span>
     </div>
 
-    <fieldset class="m-0 min-w-0 border-0 p-0">
-      <legend class="mb-2 p-0 text-sm font-medium">対象</legend>
-      <div class="segmented">
-        <label>
-          <input type="radio" id="target-role" name="subjectType" value="role" bind:group={subjectType} />
-          <span class="link-tab">ロール</span>
-        </label>
-        <label>
-          <input type="radio" id="target-user" name="subjectType" value="user" bind:group={subjectType} />
-          <span class="link-tab">ユーザー</span>
-        </label>
+    {#if hydrated.current}
+      <div class="flex flex-col gap-2">
+        <Label for="grant-subject">対象</Label>
+        <SubjectPicker id="grant-subject" roles={form.roles} bind:selected={subject} />
+        {#if subject}
+          <input type="hidden" name="subjectType" value={subject.type} />
+          <input type="hidden" name={subject.type === "role" ? "roleId" : "userId"} value={subject.id} />
+        {/if}
       </div>
-    </fieldset>
-
-    <div class="only-role flex flex-col gap-2">
-      <Label for="grant-role">ロール</Label>
-      <NativeSelect.Root id="grant-role" name="roleId" class="w-full" bind:value={roleId}>
-        {#each form.roles as role (role.id)}
-          <option value={role.id}>{role.name}</option>
-        {/each}
-      </NativeSelect.Root>
-    </div>
-
-    <div class="only-user flex flex-col gap-2">
-      <Label for="grant-q">メンバーを検索</Label>
-      <div class="search">
-        <button class="search-icon" type="submit" formmethod="get" formaction={`${DASHBOARD_PATH}/grants`} formnovalidate aria-label="検索">
-          <SearchIcon class="size-4" />
-        </button>
-        <Input id="grant-q" name="q" type="search" value={form.query} autocomplete="off" placeholder="名前・@ユーザー名・ID" />
-      </div>
-      {#if form.searchError}
-        <div class="picker"><p class="text-bad-fg px-2 py-2.5 text-[13px]">{form.searchError}</p></div>
-      {:else if form.candidates.length > 0}
-        <div class="picker" role="radiogroup" aria-label="付与するユーザー">
-          {#each form.candidates as user (user.id)}
-            <label class="pick">
-              <input type="radio" name="userId" value={user.id} bind:group={userId} />
-              <AppAvatar name={user.name} url={user.avatarUrl} size="md" />
-              <span class="stack">
-                <span class="text-sm font-medium">{user.name}</span>
-                <span class="mono">{user.secondLine}</span>
-              </span>
-              <span class="pick-check"><CheckIcon class="size-4" /></span>
-            </label>
-          {/each}
+    {:else}
+      <fieldset class="m-0 min-w-0 border-0 p-0">
+        <legend class="mb-2 p-0 text-sm font-medium">対象</legend>
+        <div class="segmented">
+          <label>
+            <input type="radio" id="target-role" name="subjectType" value="role" bind:group={subjectType} />
+            <span class="link-tab">ロール</span>
+          </label>
+          <label>
+            <input type="radio" id="target-user" name="subjectType" value="user" bind:group={subjectType} />
+            <span class="link-tab">ユーザー</span>
+          </label>
         </div>
-      {:else if form.query}
-        <div class="picker"><p class="text-muted-foreground px-2 py-2.5 text-[13px]">「{form.query}」に一致するメンバーはいません。</p></div>
-      {/if}
-    </div>
+      </fieldset>
 
-    <Button type="submit" class="w-full">{submitLabel}</Button>
+      <div class="only-role flex flex-col gap-2">
+        <Label for="grant-role">ロール</Label>
+        <NativeSelect.Root id="grant-role" name="roleId" class="w-full" bind:value={roleId}>
+          {#each form.roles as role (role.id)}
+            <option value={role.id}>{role.name}</option>
+          {/each}
+        </NativeSelect.Root>
+      </div>
+
+      <div class="only-user flex flex-col gap-2">
+        <Label for="grant-q">メンバーを検索</Label>
+        <div class="search">
+          <button class="search-icon" type="submit" formmethod="get" formaction={`${DASHBOARD_PATH}/grants`} formnovalidate aria-label="検索">
+            <SearchIcon class="size-4" />
+          </button>
+          <Input id="grant-q" name="q" type="search" value={form.query} autocomplete="off" placeholder="名前・@ユーザー名・ID" />
+        </div>
+        {#if form.searchError}
+          <div class="picker"><p class="text-bad-fg px-2 py-2.5 text-[13px]">{form.searchError}</p></div>
+        {:else if form.candidates.length > 0}
+          <div class="picker" role="radiogroup" aria-label="付与するユーザー">
+            {#each form.candidates as user (user.id)}
+              <label class="pick">
+                <input type="radio" name="userId" value={user.id} bind:group={userId} />
+                <AppAvatar name={user.name} url={user.avatarUrl} size="md" />
+                <span class="stack">
+                  <span class="text-sm font-medium">{user.name}</span>
+                  <span class="mono">{user.secondLine}</span>
+                </span>
+                <span class="pick-check"><CheckIcon class="size-4" /></span>
+              </label>
+            {/each}
+          </div>
+        {:else if form.query}
+          <div class="picker"><p class="text-muted-foreground px-2 py-2.5 text-[13px]">「{form.query}」に一致するメンバーはいません。</p></div>
+        {/if}
+      </div>
+    {/if}
+
+    <Button type="submit" class="w-full" disabled={hydrated.current && !subject}>{submitLabel}</Button>
   </form>
 </section>

@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ADMIN_ONLY, checkViewer, signInRedirect, type Viewer } from "../../src/lib/server/dashboard/access";
 import { auditDetail, auditList, revertAudit } from "../../src/lib/server/dashboard/audit";
 import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
-import { createGrant, deleteGrant, grantsPage } from "../../src/lib/server/dashboard/grants";
+import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
+import { MemberSearch } from "../../src/lib/server/dashboard/member-search";
 import { overview } from "../../src/lib/server/dashboard/overview";
 import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/dashboard/session";
 import { revokeTokens, USER_SEARCH_SCAN_LIMIT, usersPage, type UserTableRow } from "../../src/lib/server/dashboard/users";
@@ -321,6 +322,55 @@ describe("grants", () => {
     expect((await grantsPage(deps, params("q=zzz"), owner)).form?.candidates).toEqual([]);
     const plain = await grantsPage(deps, params(), owner);
     expect(plain.form).toMatchObject({ subjectType: "role", roleId: ROLE_ADMIN, submitLabel: "@Staff に Discord 読み取りを付与" });
+    expect(plain.form?.roles.find((role) => role.id === ROLE_MOD)).toEqual({ id: ROLE_MOD, name: "Moderator", handle: "@Moderator", color: "#3498db" });
+  });
+
+  test("the inline member search returns candidates for admins and validates the query", async () => {
+    expect(await memberSearchResult(deps, "mi", owner)).toEqual({
+      status: 200,
+      body: { members: [{ id: MEMBER, name: "Mina", secondLine: "@mina · Moderator", avatarUrl: null }] },
+    });
+    expect((await memberSearchResult(deps, `@${STRANGER}`, owner)).body).toMatchObject({ members: [{ id: STRANGER, name: "Stranger" }] });
+    expect(await memberSearchResult(deps, "zzz", owner)).toEqual({ status: 200, body: { members: [] } });
+    for (const query of [null, "", "   ", "x".repeat(101)]) {
+      expect(await memberSearchResult(deps, query, owner)).toEqual({ status: 400, body: { error: "検索語は 1〜100 文字で入力してください。" } });
+    }
+    expect((await memberSearchResult(deps, ` ${"x".repeat(100)} `, owner)).status).toBe(200);
+
+    let searched = false;
+    const spied = { ...deps, memberSearch: { search: async () => ((searched = true), []) } };
+    expect(await memberSearchResult(spied, "mi", await viewerFor(MEMBER))).toEqual({ status: 403, body: { error: "この操作は管理者だけが行えます。" } });
+    expect(searched).toBe(false);
+  });
+
+  test("member search results are cached briefly per normalized query; failures are not", async () => {
+    let now = 0;
+    const queries: string[] = [];
+    let failing = false;
+    const discord = {
+      searchMembers: async (query: string, limit: number) => {
+        queries.push(query);
+        if (failing) throw new Error("discord down");
+        return [makeMember(MEMBER, [ROLE_MOD])].slice(0, limit);
+      },
+    };
+    const search = new MemberSearch(discord, deps.subjects, () => now);
+    const cached = { ...deps, memberSearch: search, logError: () => {} };
+
+    for (const query of ["ta", " Ta ", "@ta"]) expect((await memberSearchResult(cached, query, owner)).status).toBe(200);
+    expect(queries).toEqual(["ta"]);
+    await Promise.all([search.search("tan"), search.search("TAN")]);
+    expect(queries).toEqual(["ta", "tan"]);
+
+    now = 30_000;
+    failing = true;
+    expect(await memberSearchResult(cached, "ta", owner)).toEqual({
+      status: 502,
+      body: { error: "メンバー検索に失敗しました。しばらくしてから再試行してください。" },
+    });
+    failing = false;
+    expect((await memberSearchResult(cached, "ta", owner)).status).toBe(200);
+    expect(queries).toEqual(["ta", "tan", "ta", "ta"]);
   });
 });
 
@@ -329,11 +379,7 @@ describe("read-only members", () => {
     const member = await viewerFor(MEMBER);
     await h.composed.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
     let searched = false;
-    const data = await grantsPage(
-      { ...deps, discord: { searchMembers: async () => ((searched = true), []), fetchUser: (id) => deps.discord.fetchUser(id) } },
-      params(`q=min&userId=${MEMBER}`),
-      member,
-    );
+    const data = await grantsPage({ ...deps, memberSearch: { search: async () => ((searched = true), []) } }, params(`q=min&userId=${MEMBER}`), member);
     expect(data.form).toBeNull();
     expect(searched).toBe(false);
     expect(data.rows.length).toBe((await grantsPage(deps, params(), owner)).rows.length);

@@ -16,6 +16,14 @@ export async function requireViewer({ locals, url, request }: GuardEvent): Promi
   return gate.viewer;
 }
 
+/** Dashboard JSON endpoints: like requireViewer, but 401 instead of a sign-in redirect. */
+export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): Promise<Viewer> {
+  const gate = await locals.viewer();
+  if (gate.kind === "signed-out") error(401, { message: "ログインが必要です。" });
+  if (gate.kind === "denied") error(gate.status, { title: gate.title, message: gate.message });
+  return gate.viewer;
+}
+
 /** The write history shows Notion content: notion:read or admin. */
 export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
   const viewer = await requireViewer(event);

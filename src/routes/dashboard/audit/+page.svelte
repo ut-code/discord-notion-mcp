@@ -12,11 +12,22 @@
   import { Button } from "$lib/components/ui/button";
   import * as NativeSelect from "$lib/components/ui/native-select";
   import * as Table from "$lib/components/ui/table";
+  import { goto } from "$app/navigation";
+  import { useHydrated } from "$lib/hydrated.svelte";
   import { DASHBOARD_PATH } from "$lib/paths";
 
   let { data } = $props();
 
+  const hydrated = useHydrated();
   const activeFilters = $derived(Object.values(data.filters).filter(Boolean).length);
+
+  /** Applies a changed filter right away (the submit button is the no-JavaScript path). */
+  function applyFilters(event: Event & { currentTarget: HTMLFormElement }) {
+    const params = new URLSearchParams();
+    for (const [key, value] of new FormData(event.currentTarget)) if (typeof value === "string" && value) params.set(key, value);
+    const query = params.toString();
+    void goto(`${DASHBOARD_PATH}/audit${query ? `?${query}` : ""}`, { keepFocus: true, noScroll: true });
+  }
 </script>
 
 {#snippet filterFields(idPrefix: string, selectClass: string)}
@@ -41,8 +52,8 @@
       <option value={option.value}>{option.label}</option>
     {/each}
   </NativeSelect.Root>
-  <Button type="submit" variant="outline">絞り込む</Button>
-  <Button variant="ghost" class="text-text-4" href={`${DASHBOARD_PATH}/audit`}>リセット</Button>
+  {#if !hydrated.current}<Button type="submit" variant="outline">絞り込む</Button>{/if}
+  <Button variant="ghost" class="text-text-4 justify-self-start" href={`${DASHBOARD_PATH}/audit`}>リセット</Button>
 {/snippet}
 
 <PageHeader title="Notion 書き込み履歴" />
@@ -55,11 +66,11 @@
     {#if activeFilters > 0}<span class="filter-count" aria-label={`${activeFilters} 件適用中`}>{activeFilters}</span>{/if}
     <ChevronDownIcon class="filter-chevron size-4" />
   </summary>
-  <form class="filter-stack" method="get" action={`${DASHBOARD_PATH}/audit`}>
+  <form class="filter-stack" method="get" action={`${DASHBOARD_PATH}/audit`} onchange={applyFilters}>
     {@render filterFields("m-", "w-full")}
   </form>
 </details>
-<form class="filter-bar" method="get" action={`${DASHBOARD_PATH}/audit`}>
+<form class="filter-bar" method="get" action={`${DASHBOARD_PATH}/audit`} onchange={applyFilters}>
   {@render filterFields("", "")}
 </form>
 
