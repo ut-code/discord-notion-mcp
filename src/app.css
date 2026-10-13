@@ -991,30 +991,6 @@
 	width: 100%;
 	padding-left: 34px;
 }
-/* Written against layerchart 2.7.0; recheck the server-rendered stats chart after upgrading. */
-/* LayerChart's server output drops the container's `position: relative`. */
-.stacked-bars .lc-root-container {
-	position: relative;
-}
-/* Server-rendered chart (before hydration or without JavaScript): scale the fixed-size SVG. */
-.stacked-bars.ssr .lc-root-container,
-.stacked-bars.ssr .lc-tooltip-context,
-.stacked-bars.ssr .lc-tooltip-context-container {
-	position: relative !important;
-	inset: auto !important;
-	width: 100% !important;
-	height: auto !important;
-}
-.stacked-bars.ssr svg.lc-layout-svg {
-	position: static;
-	display: block;
-	width: 100%;
-	height: auto;
-}
-.stacked-bars.ssr svg.lc-layout-svg ~ svg.lc-layout-svg {
-	position: absolute;
-	inset: 0;
-}
 .data-table th {
 	font-weight: 500;
 	color: var(--muted-foreground);
