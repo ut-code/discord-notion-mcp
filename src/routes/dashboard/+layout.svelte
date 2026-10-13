@@ -9,6 +9,7 @@
   import { page } from "$app/state";
   import ActionFeedback from "$lib/components/app/action-feedback.svelte";
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
+  import ThemeToggle from "$lib/components/app/theme-toggle.svelte";
   import { Button } from "$lib/components/ui/button";
   import { initialOf } from "$lib/initial";
   import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "$lib/paths";
@@ -43,10 +44,13 @@
         </a>
       {/each}
     </nav>
-    <a class="nav nav-foot" href={CONNECT_PATH} title="接続方法">
-      <PlugIcon class="size-4 shrink-0" />
-      <span class="nav-foot-label">接続方法</span>
-    </a>
+    <div class="sidebar-foot">
+      <a class="nav nav-foot" href={CONNECT_PATH} title="接続方法">
+        <PlugIcon class="size-4 shrink-0" />
+        <span class="nav-foot-label">接続方法</span>
+      </a>
+      <ThemeToggle />
+    </div>
     <div class="account">
       <AppAvatar name={data.viewer.displayName} url={data.viewer.avatarUrl} />
       <div class="stack">

@@ -1,6 +1,7 @@
 import type { ViewerGate } from "$lib/server/dashboard/access";
 import type { DashboardDeps } from "$lib/server/dashboard/deps";
 import type { Preview } from "$lib/server/preview";
+import type { Theme } from "$lib/theme";
 
 declare global {
   namespace App {
@@ -17,6 +18,8 @@ declare global {
       viewer: () => Promise<ViewerGate>;
       /** Only under `bun run preview`. */
       preview: Preview | null;
+      /** From the `theme` cookie. */
+      theme: Theme;
     }
   }
 }

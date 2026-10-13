@@ -3,6 +3,7 @@ import { checkViewer, type ViewerGate } from "$lib/server/dashboard/access";
 import { isCrossOriginWrite, withSecurityHeaders } from "$lib/server/http";
 import { errorMessage } from "$lib/server/lib/errors";
 import { runtime } from "$lib/server/runtime";
+import { THEME_COOKIE, themeFromCookie, withThemeClass } from "$lib/server/theme";
 
 export const init: ServerInit = async () => {
   await runtime();
@@ -22,7 +23,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.deps = composed.dashboard;
   event.locals.viewer = () => (gate ??= checkViewer(composed.dashboard, event.request.headers));
   event.locals.preview = preview;
-  return withSecurityHeaders(await resolve(event));
+  const theme = themeFromCookie(event.cookies.get(THEME_COOKIE));
+  event.locals.theme = theme;
+  return withSecurityHeaders(await resolve(event, { transformPageChunk: ({ html }) => withThemeClass(html, theme) }));
 };
 
 export const handleError: HandleServerError = async ({ error, event, status }) => {

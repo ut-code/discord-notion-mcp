@@ -7,6 +7,8 @@ export const NOT_MEMBER_PATH = "/not-member";
 /** Public page explaining how to register the MCP server in a client. */
 export const CONNECT_PATH = "/";
 export const DASHBOARD_PATH = "/dashboard";
+/** POST endpoint that stores the color theme cookie. */
+export const THEME_PATH = "/theme";
 
 export function dashboardAuditPath(auditId: number): string {
   return `${DASHBOARD_PATH}/audit/${auditId}`;
