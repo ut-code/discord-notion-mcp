@@ -55,16 +55,23 @@ function auditTitle(row: NotionAuditRow): string {
   return typeof requested === "string" && requested ? requested : "Notion ページ";
 }
 
-/** `compact` shows one badge (a reverted write reads 取り消し済み); otherwise 成功 + 取り消し済み. */
-function statusBadges(row: NotionAuditRow, compact = false): BadgeView[] {
+/** Full status of the detail page: 成功 + 取り消し済み for a reverted write. */
+function statusBadges(row: NotionAuditRow): BadgeView[] {
   if (row.status === "failed") return [{ label: "失敗", tone: "destructive" }];
   if (row.status === "pending") return [{ label: "処理中", tone: "secondary" }];
   if (!row.revertedAt) return [{ label: "成功", tone: "success" }];
-  if (compact) return [{ label: "取り消し済み", tone: "secondary" }];
   return [
     { label: "成功", tone: "success" },
     { label: "取り消し済み", tone: "secondary" },
   ];
+}
+
+/** Lists flag only exceptions; a plain successful write has no badge. */
+function exceptionBadge(row: NotionAuditRow): BadgeView | null {
+  if (row.status === "failed") return { label: "失敗", tone: "destructive" };
+  if (row.status === "pending") return { label: "処理中", tone: "secondary" };
+  if (row.revertedAt) return { label: "取り消し済み", tone: "secondary" };
+  return null;
 }
 
 export interface AuditRowView {
@@ -77,22 +84,26 @@ export interface AuditRowView {
   revertOf: number | null;
   title: string;
   targetUrl: string | null;
-  badges: BadgeView[];
-  compactBadges: BadgeView[];
+  badge: BadgeView | null;
+  /** One-line summary under the title in compact lists: "操作 · ユーザー · 日時". */
+  meta: string;
 }
 
 export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> = new Map()): AuditRowView {
+  const createdAt = formatShortJst(row.createdAt);
+  const action =
+    row.operation === "revert" && row.revertOfAuditId !== null ? `#${row.revertOfAuditId} を取り消し` : AUDIT_OPERATION_LABELS[row.operation];
   return {
     id: row.id,
     href: dashboardAuditPath(row.id),
-    createdAt: formatShortJst(row.createdAt),
+    createdAt,
     user: { id: row.discordUserId, name: row.discordDisplayName, avatarUrl: avatars.get(row.discordUserId) ?? null },
     operation: AUDIT_OPERATION_LABELS[row.operation],
     revertOf: row.revertOfAuditId,
     title: auditTitle(row),
     targetUrl: row.targetUrl,
-    badges: statusBadges(row),
-    compactBadges: statusBadges(row, true),
+    badge: exceptionBadge(row),
+    meta: [action, row.discordDisplayName, createdAt].join(" · "),
   };
 }
 

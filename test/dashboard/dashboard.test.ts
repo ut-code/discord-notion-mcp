@@ -189,7 +189,7 @@ describe("overview", () => {
     await expect(writes.editContent(MEMBER_ACTOR, { pageId: page.id, edits: [{ old_str: "missing", new_str: "x" }], request: {} })).rejects.toThrow();
     const data = await overview(deps, owner);
     expect(data.recentFailures).toBe(1);
-    expect(data.recent?.[0]).toMatchObject({ operation: "本文を編集", title: "Failing page", compactBadges: [{ label: "失敗", tone: "destructive" }] });
+    expect(data.recent?.[0]).toMatchObject({ operation: "本文を編集", title: "Failing page", badge: { label: "失敗", tone: "destructive" } });
   });
 
   test("members without notion:read see neither failures nor recent writes", async () => {
@@ -613,13 +613,15 @@ describe("audit log", () => {
     const row = list.rows.find((candidate) => candidate.id === created.auditId);
     expect(row).toMatchObject({ href: `/dashboard/audit/${created.auditId}`, operation: "ページを作成", user: { name: "Mina" }, title: "Listed" });
     expect(row?.targetUrl).toBeString();
+    expect(row?.badge).toBeNull();
+    expect(row?.meta).toMatch(/^ページを作成 · Mina · \d{2}\/\d{2} \d{2}:\d{2}$/);
     expect(list.userOptions).toContainEqual({ value: MEMBER, label: "Mina" });
     expect(list.range).toMatch(/^\d+ 件中 1–\d+ 件$/);
 
     expect((await auditList(deps, params("operation=append_content"))).rows.some((candidate) => candidate.id === created.auditId)).toBe(false);
     const failed = await auditList(deps, params("status=failed"));
     expect(failed.rows.some((candidate) => candidate.id === created.auditId)).toBe(false);
-    expect(failed.rows[0]?.badges).toEqual([{ label: "失敗", tone: "destructive" }]);
+    expect(failed.rows[0]?.badge).toEqual({ label: "失敗", tone: "destructive" });
     expect(failed.filters.status).toBe("failed");
     expect((await auditList(deps, params("user=abc"))).error).toBe("ユーザー ID は Discord の数値 ID で指定してください。");
     expect((await auditList(deps, params(`user=${STRANGER}`))).userOptions).toContainEqual({ value: STRANGER, label: STRANGER });
@@ -692,7 +694,10 @@ describe("audit log", () => {
     const revertRow = (await auditDetail(deps, String(row.revertAuditId), owner))!;
     expect(revertRow.change).toEqual({ kind: "revert", of: { id: created.auditId, href: `/dashboard/audit/${created.auditId}` } });
     expect(revertRow.revert).toBeNull();
-    expect((await auditList(deps, params("status=reverted"))).rows.some((candidate) => candidate.id === created.auditId)).toBe(true);
+    const reverted = (await auditList(deps, params("status=reverted"))).rows.find((candidate) => candidate.id === created.auditId);
+    expect(reverted?.badge).toEqual({ label: "取り消し済み", tone: "secondary" });
+    const revertListRow = (await auditList(deps, params())).rows.find((candidate) => candidate.id === row.revertAuditId);
+    expect(revertListRow?.meta).toStartWith(`#${created.auditId} を取り消し · `);
     expect(await revertAudit(deps, "99999", form({ confirm: "yes" }), owner)).toBeNull();
   });
 

@@ -1,8 +1,8 @@
 <script lang="ts">
   import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
   import PlusIcon from "@lucide/svelte/icons/plus";
+  import AuditList from "$lib/components/app/audit-list.svelte";
   import PageHeader from "$lib/components/app/page-header.svelte";
-  import StatusBadges from "$lib/components/app/status-badges.svelte";
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Table from "$lib/components/ui/table";
@@ -36,7 +36,8 @@
       <h2 id="recent-heading">最近の書き込み</h2>
       <Button variant="outline" size="sm" href={`${DASHBOARD_PATH}/audit`}>すべて見る</Button>
     </div>
-    <Table.Root class="data-table">
+    <AuditList rows={data.recent} empty="まだ書き込みはありません。" />
+    <Table.Root class="data-table audit-table">
       <Table.Header>
         <Table.Row>
           <Table.Head>#</Table.Head>
@@ -53,7 +54,7 @@
             <Table.Cell><ToneBadge badge={{ label: row.operation, tone: "outline" }} /></Table.Cell>
             <Table.Cell>{row.user.name}</Table.Cell>
             <Table.Cell class="primary">{row.title}</Table.Cell>
-            <Table.Cell><StatusBadges badges={row.compactBadges} /></Table.Cell>
+            <Table.Cell>{#if row.badge}<ToneBadge badge={row.badge} />{/if}</Table.Cell>
           </Table.Row>
         {:else}
           <Table.Row>
