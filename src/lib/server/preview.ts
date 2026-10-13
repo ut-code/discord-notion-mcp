@@ -207,7 +207,9 @@ export async function startPreview(): Promise<Runtime> {
     if (!userId) return null;
     const session = await authContext.internalAdapter.createSession(userId);
     const value = encodeURIComponent(`${session.token}.${await makeSignature(session.token, SECRET)}`);
-    return `${authContext.authCookies.sessionToken.name}=${value}; Path=/; HttpOnly; SameSite=Lax`;
+    const { name, attributes } = authContext.authCookies.sessionToken;
+    // Over https (e.g. tailscale serve) the name carries the __Secure- prefix, which browsers only accept with Secure.
+    return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax${attributes.secure ? "; Secure" : ""}`;
   };
 
   console.log(`preview ready: ${config.publicUrl}/dev`);
