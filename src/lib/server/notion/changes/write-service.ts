@@ -8,6 +8,7 @@ import { assertNoChildObjects, stripUserMentionLabels } from "../content/enhance
 import {
   mayBeTruncated,
   pageTitle,
+  propertyWriteRefusalText,
   titlePropertyName,
   toWritablePropertyValue,
   valueFromPropertyItems,
@@ -15,6 +16,7 @@ import {
 } from "../content/properties";
 import { literalRichText } from "../content/rich-text";
 import { postComment, writeCommentText, type Actor, type WriteOperation } from "./attribution";
+import { revertBlockerText, type RevertBlocker } from "./revert-reasons";
 import {
   ArchivePageResultSchema,
   ArchivePageSnapshotSchema,
@@ -28,6 +30,7 @@ import {
   UpdatePropertiesSnapshotSchema,
   type ContentSnapshot,
   type ContentWriteResult,
+  type WriteWarning,
   type PropertySnapshotEntry,
 } from "./audit-records";
 import type { NotionAuditStore } from "./audit-store";
@@ -40,7 +43,20 @@ export interface WriteOutcome {
   url: string;
   commentError: string | null;
   /** Set when the write was only partially applied or cannot be reverted automatically (still recorded). */
-  warning: string | null;
+  warning: WriteWarning | null;
+}
+
+export function writeWarningText(warning: WriteWarning): string {
+  switch (warning.kind) {
+    case "content_failed":
+      return `Page created, but adding its content failed: ${warning.error}`;
+    case "revert_blocked":
+      return warning.blocker === ("truncated_after_write" satisfies RevertBlocker)
+        ? `The change was applied, but automatic revert may not be possible: ${revertBlockerText(warning.blocker)}.`
+        : `The change was applied, but automatic revert is not possible: ${revertBlockerText(warning.blocker)}.`;
+    default:
+      throw new Error(`Unknown write warning: ${warning satisfies never}`);
+  }
 }
 export type ContentWriteOutcome = WriteOutcome & ContentWriteResult;
 
@@ -100,14 +116,14 @@ export class NotionWriteService {
     base: AuditBase & { targetPageId: string },
     result: Record<string, unknown>,
     fallbackLastEdited: string | null,
-    warning: string | null,
+    warning: WriteWarning | null,
   ): Promise<WriteOutcome> {
     const row = await this.audit.insert({
       ...this.actorColumns(actor),
       ...base,
       result,
       status: "ok",
-      error: warning,
+      error: warning ? JSON.stringify(warning) : null,
       resultLastEditedTime: fallbackLastEdited,
     });
     const commentError = await postComment(this.api, base.targetPageId, writeCommentText(actor, base.operation, row.id));
@@ -165,7 +181,7 @@ export class NotionWriteService {
       return this.recordFailure(actor, { ...base, targetPageId: null, targetUrl: null }, error);
     }
 
-    let warning: string | null = null;
+    let warning: WriteWarning | null = null;
     if (content) {
       try {
         await this.api.updatePageMarkdown(page.id, {
@@ -173,7 +189,7 @@ export class NotionWriteService {
           insert_content: { content, position: { type: "end" } },
         });
       } catch (error) {
-        warning = `Page created, but adding its content failed: ${errorMessage(toToolError(error))}`;
+        warning = { kind: "content_failed", error: errorMessage(toToolError(error)) };
       }
     }
     return this.recordSuccess(
@@ -260,10 +276,10 @@ export class NotionWriteService {
     }
 
     const snapshot: ContentSnapshot = { beforeSha256, afterSha256: null, inverse: null, revertBlocker: null, hunks: [] };
-    let warning: string | null = null;
+    let warning: WriteWarning | null = null;
     if (after.truncated) {
-      snapshot.revertBlocker = "Notion returned truncated content after the write, so the change could not be captured";
-      warning = `The change was applied, but automatic revert may not be possible: ${snapshot.revertBlocker}.`;
+      snapshot.revertBlocker = "truncated_after_write" satisfies RevertBlocker;
+      warning = { kind: "revert_blocked", blocker: snapshot.revertBlocker };
     } else {
       snapshot.afterSha256 = sha256(after.markdown);
       const plan = buildRevertPlan(before.markdown, after.markdown);
@@ -272,8 +288,8 @@ export class NotionWriteService {
         snapshot.hunks = plan.hunks;
       } else if (plan.kind === "unsupported") {
         snapshot.hunks = plan.hunks;
-        snapshot.revertBlocker = plan.reason;
-        warning = `The change was applied, but automatic revert is not possible: ${plan.reason}.`;
+        snapshot.revertBlocker = plan.blocker;
+        warning = { kind: "revert_blocked", blocker: plan.blocker };
       }
     }
     const result: ContentWriteResult = { changedHunks: snapshot.hunks.length };
@@ -311,7 +327,9 @@ export class NotionWriteService {
       const full = mayBeTruncated(value) ? valueFromPropertyItems(value, await this.api.retrievePropertyItems(page.id, value.id)) : value;
       const writable = toWritablePropertyValue(full);
       if (!writable.ok) {
-        throw new ToolError(`Property "${name}" cannot be changed because the change could not be reverted: ${writable.reason}.`);
+        throw new ToolError(
+          `Property "${name}" cannot be changed because the change could not be reverted: ${propertyWriteRefusalText(writable.refusal)}.`,
+        );
       }
       entries.push({ name, id: value.id, type: value.type, value: full });
     }

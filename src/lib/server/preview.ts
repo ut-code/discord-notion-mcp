@@ -234,6 +234,12 @@ export async function startPreview(): Promise<Runtime> {
     await server.notionAudit.revert(editId, { actorDiscordUserId: OWNER_ID, actorDisplayName: "きなこもち", actorUsername: "kinako" });
   }
   await run("notion_archive_page", { page: notion.addPage({ title: "古いメモ" }).id }, tanaka);
+  // Leaves only whitespace, so the revert card explains why it cannot be undone automatically.
+  await run(
+    "notion_edit_content",
+    { page: notion.addPage({ title: "下書き", markdown: "下書き" }).id, edits: [{ old_str: "下書き", new_str: " " }] },
+    suzuki,
+  );
   seedToolCalls(server.toolCalls);
 
   const sessionCookie = async (discordUserId: string): Promise<string | null> => {

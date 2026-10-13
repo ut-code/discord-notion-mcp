@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { defineTool, type AnyToolDefinition } from "../../mcp/registry";
 import { actorOf } from "../changes/attribution";
-import { MAX_CONTENT_EDITS, type WriteOutcome } from "../changes/write-service";
+import { MAX_CONTENT_EDITS, writeWarningText, type WriteOutcome } from "../changes/write-service";
 import { requireNotionId } from "../client/ids";
 import { idOrUrl, withNotionErrors, type NotionToolDeps } from "./shared";
 
@@ -26,7 +26,7 @@ const NO_CHILD_OBJECTS = "Content must not contain <page>, <database> or <data-s
 
 function outcomeLines(outcome: WriteOutcome): string[] {
   const lines: string[] = [];
-  if (outcome.warning) lines.push(`Warning: ${outcome.warning}`);
+  if (outcome.warning) lines.push(`Warning: ${writeWarningText(outcome.warning)}`);
   if (outcome.commentError) lines.push(`Note: the attribution comment could not be posted (${outcome.commentError}).`);
   return lines;
 }

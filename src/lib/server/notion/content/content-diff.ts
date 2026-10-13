@@ -129,10 +129,13 @@ function inverseUpdates(a: string[], b: string[], raw: Hunk[], after: string): C
   return groups.map((g) => ({ old_str: b.slice(g.bStart, g.bEnd).join("\n"), new_str: a.slice(g.aStart, g.aEnd).join("\n") }));
 }
 
+/** Why no inverse edit exists: nothing left to anchor it on, or no unique one. */
+export type RevertPlanBlocker = "no_anchor" | "ambiguous_inverse";
+
 export type RevertPlan =
   | { kind: "unchanged" }
   | { kind: "revertible"; inverse: PageMarkdownUpdate; hunks: ContentHunk[] }
-  | { kind: "unsupported"; reason: string; hunks: ContentHunk[] };
+  | { kind: "unsupported"; blocker: RevertPlanBlocker; hunks: ContentHunk[] };
 
 /** Computes how to turn `after` back into `before` with Notion's markdown endpoint. */
 export function buildRevertPlan(before: string, after: string): RevertPlan {
@@ -145,7 +148,7 @@ export function buildRevertPlan(before: string, after: string): RevertPlan {
   // Nothing left to anchor an update on: put the old content back instead.
   if (after.trim() === "") {
     if (before.trim() === "") return { kind: "unchanged" };
-    if (after !== "") return { kind: "unsupported", reason: "the page has no text left to anchor a revert on", hunks };
+    if (after !== "") return { kind: "unsupported", blocker: "no_anchor", hunks };
     return {
       kind: "revertible",
       inverse: { type: "insert_content", insert_content: { content: before, position: { type: "start" } } },
@@ -160,6 +163,6 @@ export function buildRevertPlan(before: string, after: string): RevertPlan {
   } catch {
     restored = null;
   }
-  if (restored !== before) return { kind: "unsupported", reason: "no unambiguous inverse edit could be computed", hunks };
+  if (restored !== before) return { kind: "unsupported", blocker: "ambiguous_inverse", hunks };
   return { kind: "revertible", inverse: { type: "update_content", update_content: { content_updates: updates } }, hunks };
 }

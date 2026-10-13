@@ -10,7 +10,10 @@ import { revokeTokens, USER_SEARCH_SCAN_LIMIT, usersPage, type UserTableRow } fr
 import type { LoginUser } from "../../src/lib/server/auth/users";
 import { ADMINISTRATOR } from "../../src/lib/server/discord/permissions";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
+import { storedNoteText } from "../../src/lib/server/dashboard/revert-text";
+import { NotionAuditService } from "../../src/lib/server/notion/changes/audit-service";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
+import type { RevertNote } from "../../src/lib/server/notion/changes/revert-reasons";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { FakeDiscordApi, makeGuild, makeMember, OWNER_ID } from "../support/fakes";
 import {
@@ -697,6 +700,18 @@ describe("audit log", () => {
     expect((await auditList(deps, params(`user=${STRANGER}`))).userOptions).toContainEqual({ value: STRANGER, label: STRANGER });
   });
 
+  test("a page past the end links back to the last page", async () => {
+    const parent = h.notion.addPage({ title: "Pager root" });
+    await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Paged", request: {} });
+    const { total } = await auditList(deps, params("status=ok"));
+    const lastPage = Math.ceil(total / 50);
+    const past = await auditList(deps, params(`status=ok&page=${lastPage + 5}`));
+    expect(past.rows).toEqual([]);
+    expect(past.range).toBeNull();
+    expect(past.nextHref).toBeNull();
+    expect(past.prevHref).toBe(lastPage > 1 ? `/dashboard/audit?status=ok&page=${lastPage}` : "/dashboard/audit?status=ok");
+  });
+
   test("details show the change and offer a revert", async () => {
     const parent = h.notion.addPage({ title: "Detail root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Detailed", request: { title: "Detailed" } });
@@ -763,7 +778,7 @@ describe("audit log", () => {
     expect((await h.server.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
 
     expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({
-      result: { kind: "ok", message: `取り消しました。Reverted audit #${created.auditId}.` },
+      result: { kind: "ok", message: "取り消しました。" },
       conflict: false,
     });
     const row = (await h.server.notionAudit.getAudit(created.auditId))!;
@@ -804,14 +819,39 @@ describe("audit log", () => {
 
     const forced = await revertAudit(deps, id, form({ confirm: "yes", force: "true" }), owner);
     expect(forced?.result.kind).toBe("ok");
-    expect(forced?.result.message).toContain("forced despite later edits");
+    expect(forced?.result.message).toStartWith("後からの編集があるまま取り消しました。");
     expect((await h.server.notionAudit.getAudit(appended.auditId))!.revertedAt).not.toBeNull();
   });
 
   test("without Notion a revert is not offered", async () => {
     const parent = h.notion.addPage({ title: "Disabled root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Kept", request: {} });
-    const detail = await auditDetail({ ...deps, notionEnabled: false }, String(created.auditId), owner);
+    const detail = await auditDetail({ ...deps, audit: new NotionAuditService(store, null) }, String(created.auditId), owner);
     expect(detail?.revert).toEqual({ state: "disabled" });
+  });
+
+  test("a row the service would refuse shows why instead of a revert button", async () => {
+    const parent = h.notion.addPage({ title: "Unreadable root" });
+    const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Broken", request: {} });
+    await store.update(created.auditId, { result: { url: "https://example.invalid" } });
+    expect((await auditDetail(deps, String(created.auditId), owner))?.revert).toEqual({
+      state: "unavailable",
+      reason: "記録の形式を読み取れないため、自動では取り消せません。",
+    });
+  });
+
+  test("stored notes are shown in Japanese; older English notes as is", () => {
+    const note: RevertNote = {
+      kind: "properties_partial",
+      restored: ["Count"],
+      skipped: [{ name: "Files", refusal: { kind: "hosted_files", files: ["a.png"] } }],
+    };
+    expect(storedNoteText(JSON.stringify(note))).toBe(
+      "「Count」を戻しました。「Files」（Notion にアップロードされたファイル（a.png）は API で設定し直せません）は戻せませんでした。",
+    );
+    expect(storedNoteText(JSON.stringify({ kind: "revert_blocked", blocker: "no_anchor" }))).toBe(
+      "書き込みは反映しましたが、自動では取り消せません: ページに文字が残っておらず、元に戻す位置を決められません。",
+    );
+    expect(storedNoteText("The page was already in the trash.")).toBe("The page was already in the trash.");
   });
 });

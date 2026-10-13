@@ -118,7 +118,7 @@ describe("toWritablePropertyValue", () => {
       v({ type: "files", files: [{ name: "upload.png", type: "file", file: { url: "https://s3/x", expiry_time: "" } }] }),
     );
     expect(result.ok).toBe(false);
-    expect((result as { reason: string }).reason).toContain("upload.png");
+    expect(result).toEqual({ ok: false, refusal: { kind: "hosted_files", files: ["upload.png"] } });
   });
 
   test("read-only types are rejected", () => {

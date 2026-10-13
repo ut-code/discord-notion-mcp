@@ -31,6 +31,8 @@
       </div>
     {:else if revert.state === "disabled"}
       <p class="text-muted-foreground">NOTION_TOKEN が未設定のため取り消せません。</p>
+    {:else if revert.state === "unavailable"}
+      <p class="text-muted-foreground">{revert.reason}</p>
     {:else if conflict}
       <form method="post" {action} class="stack gap-4" use:enhance>
         <input type="hidden" name="force" value="true" />

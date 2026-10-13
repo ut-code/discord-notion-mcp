@@ -8,7 +8,7 @@ import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
 import { formatJst, formatShortJst, PERMISSION_LABELS } from "./format";
 import { GRANTS_PATH } from "./grants";
-import { pageParam, type ActionResult } from "./shared";
+import { pageLinks, pageParam, type ActionResult } from "./shared";
 import { buildUserRow, matchesUserQuery, type UserRowView } from "./views";
 
 const USERS_PAGE_SIZE = 50;
@@ -138,14 +138,14 @@ export async function usersPage(
     total = count;
     rows = await Promise.all(users.map(toRow));
   }
-  const hasNext = offset + rows.length < total;
+  const { prevHref, nextHref } = pageLinks(page, USERS_PAGE_SIZE, total, rows.length, (target) => usersHref(query, target));
   return {
     rows: rows.map((row) => userTableRow(row, viewer)),
     canRevoke: viewer.isAdmin,
     query,
     total,
-    prevHref: page > 1 ? usersHref(query, page - 1) : null,
-    nextHref: hasNext ? usersHref(query, page + 1) : null,
+    prevHref,
+    nextHref,
     empty: query ? `「${query}」に一致するユーザーはいません。` : "まだログインしたユーザーはいません。",
   };
 }

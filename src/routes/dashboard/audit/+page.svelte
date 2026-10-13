@@ -125,9 +125,9 @@
   </Table.Root>
 </div>
 
-{#if data.range}
+{#if data.range || data.prevHref}
   <div class="footer-row">
-    <span class="text-[13px] text-muted-foreground">{data.range}</span>
+    <span class="text-[13px] text-muted-foreground">{data.range ?? ""}</span>
     <Pager prev={data.prevHref} next={data.nextHref} />
   </div>
 {/if}

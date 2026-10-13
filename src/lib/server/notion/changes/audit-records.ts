@@ -15,6 +15,8 @@ export const ContentUpdateSchema = z.object({ old_str: z.string(), new_str: z.st
 export const AppendContentRequestSchema = z.object({ content: z.string() });
 /** Entries are checked one by one with ContentUpdateSchema so one malformed edit does not hide the rest. */
 export const EditContentRequestSchema = z.object({ edits: z.array(z.unknown()) });
+/** The requested values of update_properties, keyed by property name or id. */
+export const UpdatePropertiesRequestSchema = z.object({ properties: z.record(z.string(), z.unknown()) });
 
 const pageMarkdownUpdateSchema = z.discriminatedUnion("type", [
   z.object({
@@ -49,7 +51,7 @@ export const ContentSnapshotSchema = z.object({
   afterSha256: z.string().nullable(),
   /** The update that restores the previous content; null when there is nothing to restore or it cannot be computed. */
   inverse: pageMarkdownUpdateSchema.nullable(),
-  /** Set when the change cannot be reverted automatically. */
+  /** Set when the change cannot be reverted automatically: a RevertBlocker code (English text on older rows). */
   revertBlocker: z.string().nullable(),
   hunks: z.array(contentHunkSchema),
 });
@@ -78,6 +80,24 @@ export const ArchivePageSnapshotSchema = z.object({ inTrash: z.boolean() });
 export type ArchivePageSnapshot = z.infer<typeof ArchivePageSnapshotSchema>;
 
 export const ArchivePageResultSchema = z.object({ inTrash: z.boolean() });
+
+/** Why a successful write carries a note; stored as JSON in the `error` column of ok rows. */
+export const WriteWarningSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("content_failed"), error: z.string() }),
+  /** A RevertBlocker code (revert-reasons.ts). */
+  z.object({ kind: z.literal("revert_blocked"), blocker: z.string() }),
+]);
+export type WriteWarning = z.infer<typeof WriteWarningSchema>;
+
+/** Parses JSON kept in a text column; null for empty values and for the plain English text of older rows. */
+export function parseStoredJson<T>(schema: z.ZodType<T>, raw: string | null): T | null {
+  if (!raw) return null;
+  try {
+    return schema.safeParse(JSON.parse(raw)).data ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** Validates a value against its column schema and returns it as stored JSON. */
 export function toAuditJson<S extends z.ZodType<Record<string, unknown>>>(schema: S, value: z.input<S>): Record<string, unknown> {

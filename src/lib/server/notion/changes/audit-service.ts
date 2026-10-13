@@ -14,6 +14,15 @@ import {
   type UpdatePropertiesSnapshot,
 } from "./audit-records";
 import type { AuditActor, AuditListQuery, AuditListResult, NotionAuditStore } from "./audit-store";
+import {
+  revertFailureText,
+  type PropertySkip,
+  type RevertConflict,
+  type RevertFailure,
+  type RevertNote,
+  type RevertReason,
+  type RevertResult,
+} from "./revert-reasons";
 
 const MAX_AUDIT_PAGE_SIZE = 200;
 
@@ -29,19 +38,10 @@ export interface RevertOptions {
   force?: boolean;
 }
 
-export interface RevertResult {
-  ok: boolean;
-  /** Some property values could not be restored; the rest were. */
-  partial?: boolean;
-  /** Refused because the page changed after the write; retrying with `force` reverts anyway. */
-  conflict?: boolean;
-  message: string;
-  revertAuditId?: number;
-}
-
 interface Executed {
   result: Record<string, unknown>;
-  note: string | null;
+  note: RevertNote | null;
+  /** Some property values could not be restored; the rest were. */
   partial: boolean;
   commentError: string | null;
   lastEditedTime: string | null;
@@ -53,6 +53,13 @@ type RevertRecord =
   | { operation: "append_content" | "edit_content"; snapshot: ContentSnapshot }
   | { operation: "update_properties"; snapshot: UpdatePropertiesSnapshot }
   | { operation: "archive_page" };
+
+/** Thrown by execute() for failures that have a reason of their own. */
+class RevertFailed extends Error {
+  constructor(readonly failure: RevertFailure) {
+    super(failure.kind);
+  }
+}
 
 function parseRevertRecord(row: NotionAuditRow): RevertRecord | null {
   switch (row.operation) {
@@ -85,39 +92,35 @@ function parseRevertRecord(row: NotionAuditRow): RevertRecord | null {
  * (or something) edited the page afterwards. Edits within the same minute as our
  * write cannot be detected.
  */
-function describeConflict(row: NotionAuditRow, current: NotionPage): string | null {
-  if (!row.resultLastEditedTime) {
-    return `Audit #${row.id} has no recorded last_edited_time, so later edits cannot be ruled out.`;
-  }
+function detectConflict(row: NotionAuditRow, current: NotionPage): RevertConflict | null {
+  if (!row.resultLastEditedTime) return { kind: "no_recorded_time" };
   const recorded = Date.parse(row.resultLastEditedTime);
   const now = Date.parse(current.last_edited_time);
   if (Number.isNaN(recorded) || Number.isNaN(now) || now <= recorded) return null;
-  return `The page was edited after audit #${row.id} (last_edited_time ${row.resultLastEditedTime} at the time of the write, now ${current.last_edited_time}); reverting may undo or conflict with those later changes.`;
+  return { kind: "edited_after", recorded: row.resultLastEditedTime, now: current.last_edited_time };
 }
 
-type ContentCheck = { refusal: string } | { refusal: null; conflict: string | null };
+type ContentCheck = { refusal: RevertReason } | { refusal: null; conflict: RevertConflict | null };
 
 /**
  * Content writes are compared by content hash instead of last_edited_time: the inverse
  * edit is only guaranteed to apply to exactly the markdown our write produced.
  */
-async function checkContent(api: NotionApi, row: NotionAuditRow, snapshot: ContentSnapshot, pageId: string): Promise<ContentCheck> {
-  if (snapshot.revertBlocker) return { refusal: `Audit #${row.id} cannot be reverted automatically: ${snapshot.revertBlocker}.` };
+async function checkContent(api: NotionApi, snapshot: ContentSnapshot, pageId: string): Promise<ContentCheck> {
   if (!snapshot.inverse) return { refusal: null, conflict: null };
   let current: PageMarkdown;
   try {
     current = await api.retrievePageMarkdown(pageId);
   } catch (error) {
-    if (isNotionMiss(error)) return { refusal: "The page is no longer accessible to the integration." };
+    if (isNotionMiss(error)) return { refusal: { kind: "page_inaccessible" } };
     throw error;
   }
-  if (current.truncated) return { refusal: `The page is now too large to revert audit #${row.id} automatically.` };
+  if (current.truncated) return { refusal: { kind: "too_large" } };
   if (sha256(current.markdown) === snapshot.afterSha256) return { refusal: null, conflict: null };
-  return {
-    refusal: null,
-    conflict: `The page content changed after audit #${row.id}; reverting may fail or undo those later changes.`,
-  };
+  return { refusal: null, conflict: { kind: "content_changed" } };
 }
+
+type Prepared = { reason: RevertReason } | { reason: null; api: NotionApi; record: RevertRecord; pageId: string };
 
 /** Audit log queries and revert, used by the dashboard and the change tools. */
 export class NotionAuditService {
@@ -149,8 +152,30 @@ export class NotionAuditService {
     return this.store.failPendingBefore(new Date(now.getTime() - STALE_PENDING_MS), INTERRUPTED_ERROR);
   }
 
+  /**
+   * Why `row` cannot be reverted, judged from the stored row alone (no Notion calls);
+   * null when a revert can be tried. The page may still refuse it (conflict, access).
+   */
+  revertability(row: NotionAuditRow): RevertReason | null {
+    return this.prepare(row).reason;
+  }
+
+  private prepare(row: NotionAuditRow): Prepared {
+    if (row.operation === "revert") return { reason: { kind: "is_revert" } };
+    if (row.status !== "ok") return { reason: { kind: "not_ok", status: row.status } };
+    if (row.revertedAt) return { reason: { kind: "already_reverted", revertedAt: row.revertedAt, revertAuditId: row.revertAuditId } };
+    if (!this.api) return { reason: { kind: "notion_disabled" } };
+    if (!row.targetPageId) return { reason: { kind: "no_target" } };
+    const record = parseRevertRecord(row);
+    if (!record) return { reason: { kind: "unrecognized_snapshot" } };
+    if ((record.operation === "append_content" || record.operation === "edit_content") && record.snapshot.revertBlocker) {
+      return { reason: { kind: "blocked", blocker: record.snapshot.revertBlocker } };
+    }
+    return { reason: null, api: this.api, record, pageId: row.targetPageId };
+  }
+
   async revert(id: number, options: RevertOptions): Promise<RevertResult> {
-    if (this.inFlight.has(id)) return { ok: false, message: `A revert of audit #${id} is already in progress.` };
+    if (this.inFlight.has(id)) return { ok: false, reason: { kind: "in_progress" } };
     this.inFlight.add(id);
     try {
       return await this.revertOnce(id, options);
@@ -160,64 +185,49 @@ export class NotionAuditService {
   }
 
   private async revertOnce(id: number, options: RevertOptions): Promise<RevertResult> {
-    const api = this.api;
-    if (!api) return { ok: false, message: "Notion is not configured (NOTION_TOKEN is not set)." };
     const row = await this.store.get(id);
-    if (!row) return { ok: false, message: `Audit #${id} not found.` };
-    if (row.operation === "revert") return { ok: false, message: "Reverting a revert is not supported." };
-    if (row.status !== "ok") {
-      return {
-        ok: false,
-        message: `Audit #${id} is ${row.status === "failed" ? "a failed write" : "still pending"}; there is nothing to revert.`,
-      };
-    }
-    if (row.revertedAt) {
-      return {
-        ok: false,
-        message: `Audit #${id} was already reverted at ${row.revertedAt.toISOString()} (revert audit #${row.revertAuditId ?? "?"}).`,
-      };
-    }
-    if (!row.targetPageId) return { ok: false, message: `Audit #${id} has no target page.` };
-    const record = parseRevertRecord(row);
-    if (!record) {
-      return { ok: false, message: `Audit #${id} has an unrecognized snapshot format; it cannot be reverted automatically.` };
-    }
+    if (!row) return { ok: false, reason: { kind: "not_found" } };
+    const prepared = this.prepare(row);
+    if (prepared.reason) return { ok: false, reason: prepared.reason };
+    const { api, record, pageId } = prepared;
 
     let current: NotionPage;
     try {
-      current = await api.retrievePage(row.targetPageId);
+      current = await api.retrievePage(pageId);
     } catch (error) {
-      if (isNotionMiss(error)) return { ok: false, message: "The page is no longer accessible to the integration." };
+      if (isNotionMiss(error)) return { ok: false, reason: { kind: "page_inaccessible" } };
       throw error;
     }
-    let conflict: string | null;
+    let conflict: RevertConflict | null;
     if (record.operation === "append_content" || record.operation === "edit_content") {
-      const check = await checkContent(api, row, record.snapshot, current.id);
-      if (check.refusal !== null) return { ok: false, message: check.refusal };
+      const check = await checkContent(api, record.snapshot, current.id);
+      if (check.refusal !== null) return { ok: false, reason: check.refusal };
       conflict = check.conflict;
     } else {
-      conflict = describeConflict(row, current);
+      conflict = detectConflict(row, current);
     }
-    if (conflict && !options.force) return { ok: false, conflict: true, message: conflict };
+    if (conflict && !options.force) return { ok: false, reason: { kind: "conflict", conflict } };
 
     const comment = revertCommentText(options.actorDisplayName, row.id);
     let executed: Executed;
     try {
-      executed = await this.execute(api, row, record, current, comment);
+      executed = await this.execute(api, record, current, comment);
     } catch (error) {
-      await this.store.insert({
+      const failure: RevertFailure = error instanceof RevertFailed ? error.failure : { kind: "error", message: errorMessage(error) };
+      const failedRow = await this.store.insert({
         ...this.revertColumns(row, options),
         status: "failed",
-        error: errorMessage(error),
+        error: revertFailureText(row.id, failure),
       });
-      return { ok: false, message: `Revert of audit #${id} failed: ${errorMessage(error)}` };
+      return { ok: false, reason: { kind: "failed", failure, revertAuditId: failedRow.id } };
     }
 
+    const note = executed.note ? JSON.stringify(executed.note) : null;
     const revertRow = await this.store.insert({
       ...this.revertColumns(row, options),
       result: executed.result,
       status: "ok",
-      error: executed.partial ? executed.note : null,
+      error: executed.partial ? note : null,
       commentError: executed.commentError,
       resultLastEditedTime: executed.lastEditedTime,
     });
@@ -225,11 +235,9 @@ export class NotionAuditService {
       revertedAt: new Date(),
       revertedBy: options.actorDiscordUserId,
       revertAuditId: revertRow.id,
-      revertNote: executed.note,
+      revertNote: note,
     });
-    const forced = conflict ? " (forced despite later edits)" : "";
-    const message = executed.note ? `Reverted audit #${id}${forced}: ${executed.note}` : `Reverted audit #${id}${forced}.`;
-    return { ok: true, ...(executed.partial ? { partial: true } : {}), message, revertAuditId: revertRow.id };
+    return { ok: true, revertAuditId: revertRow.id, forced: conflict !== null, partial: executed.partial, note: executed.note };
   }
 
   private revertColumns(row: NotionAuditRow, options: RevertOptions) {
@@ -246,13 +254,7 @@ export class NotionAuditService {
     };
   }
 
-  private async execute(
-    api: NotionApi,
-    row: NotionAuditRow,
-    record: RevertRecord,
-    current: NotionPage,
-    comment: string,
-  ): Promise<Executed> {
+  private async execute(api: NotionApi, record: RevertRecord, current: NotionPage, comment: string): Promise<Executed> {
     const pageId = current.id;
     switch (record.operation) {
       case "create_page": {
@@ -261,7 +263,7 @@ export class NotionAuditService {
         if (current.in_trash) {
           return {
             result: { inTrash: true },
-            note: "The page was already in the trash.",
+            note: { kind: "already_in_trash" },
             partial: false,
             commentError,
             lastEditedTime: current.last_edited_time,
@@ -277,7 +279,7 @@ export class NotionAuditService {
           const commentError = await postComment(api, pageId, comment);
           return {
             result: { restored: false },
-            note: "The change did not alter the page content; nothing to restore.",
+            note: { kind: "nothing_to_restore" },
             partial: false,
             commentError,
             lastEditedTime: await this.lastEdited(api, pageId),
@@ -288,19 +290,14 @@ export class NotionAuditService {
           restored = await api.updatePageMarkdown(pageId, snapshot.inverse);
         } catch (error) {
           if (error instanceof NotionRequestError && error.status === 400) {
-            throw new Error(
-              `The page no longer contains the text written by audit #${row.id} in its original form, so it cannot be reverted automatically; restore it by hand. (Notion: ${error.message})`,
-              { cause: error },
-            );
+            throw new RevertFailed({ kind: "text_gone", notionMessage: error.message });
           }
           throw error;
         }
         const commentError = await postComment(api, pageId, comment);
         const contentSha256 = restored.truncated ? null : sha256(restored.markdown);
-        const note =
-          contentSha256 !== null && contentSha256 !== snapshot.beforeSha256
-            ? "The restored content is not identical to the content before the change (later edits or Notion formatting)."
-            : null;
+        const note: RevertNote | null =
+          contentSha256 !== null && contentSha256 !== snapshot.beforeSha256 ? { kind: "content_differs" } : null;
         return {
           result: { restored: true, contentSha256 },
           note,
@@ -312,21 +309,21 @@ export class NotionAuditService {
       case "update_properties": {
         const properties: Record<string, unknown> = {};
         const restored: string[] = [];
-        const skipped: string[] = [];
+        const skipped: PropertySkip[] = [];
         for (const entry of record.snapshot.properties) {
           const writable = toWritablePropertyValue(entry.value);
           if (writable.ok) {
             properties[entry.id] = writable.value;
             restored.push(entry.name);
           } else {
-            skipped.push(`"${entry.name}" (${writable.reason})`);
+            skipped.push({ name: entry.name, refusal: writable.refusal });
           }
         }
-        if (restored.length === 0) throw new Error(`No property could be restored: ${skipped.join("; ")}`);
+        if (restored.length === 0) throw new RevertFailed({ kind: "nothing_restorable", skipped });
         const updated = await api.updatePage({ pageId, properties });
         const commentError = await postComment(api, pageId, comment);
         const partial = skipped.length > 0;
-        const note = partial ? `Restored ${restored.join(", ")}; could not restore ${skipped.join("; ")}.` : null;
+        const note: RevertNote | null = partial ? { kind: "properties_partial", restored, skipped } : null;
         return {
           result: { restored, skipped },
           note,
@@ -339,7 +336,7 @@ export class NotionAuditService {
         if (!current.in_trash) {
           return {
             result: { inTrash: false },
-            note: "The page was already restored from the trash.",
+            note: { kind: "already_restored" },
             partial: false,
             commentError: null,
             lastEditedTime: current.last_edited_time,

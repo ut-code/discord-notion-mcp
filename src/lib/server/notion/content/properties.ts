@@ -166,7 +166,21 @@ function toRichTextRequest(item: RichTextItemResponse): RichTextRequest {
   }
 }
 
-export type WritableResult = { ok: true; value: Record<string, unknown> } | { ok: false; reason: string };
+/** Why a read value cannot be written back as is. */
+export type PropertyWriteRefusal = { kind: "hosted_files"; files: string[] } | { kind: "unsupported_type"; type: string };
+
+export type WritableResult = { ok: true; value: Record<string, unknown> } | { ok: false; refusal: PropertyWriteRefusal };
+
+export function propertyWriteRefusalText(refusal: PropertyWriteRefusal): string {
+  switch (refusal.kind) {
+    case "hosted_files":
+      return `contains Notion-hosted file(s) (${refusal.files.join(", ")}) that cannot be re-set through the API`;
+    case "unsupported_type":
+      return `property type "${refusal.type}" is read-only or not supported for writes`;
+    default:
+      throw new Error(`Unknown property write refusal: ${refusal satisfies never}`);
+  }
+}
 
 /** Converts a page-format (read) property value into the format pages.update accepts. */
 export function toWritablePropertyValue(value: PagePropertyValue): WritableResult {
@@ -205,10 +219,7 @@ export function toWritablePropertyValue(value: PagePropertyValue): WritableResul
     case "files": {
       const hosted = v.files.filter((file: { type: string }) => file.type !== "external");
       if (hosted.length > 0) {
-        return {
-          ok: false,
-          reason: `contains Notion-hosted file(s) (${hosted.map((file: { name: string }) => file.name).join(", ")}) that cannot be re-set through the API`,
-        };
+        return { ok: false, refusal: { kind: "hosted_files", files: hosted.map((file: { name: string }) => file.name) } };
       }
       return {
         ok: true,
@@ -222,6 +233,6 @@ export function toWritablePropertyValue(value: PagePropertyValue): WritableResul
       };
     }
     default:
-      return { ok: false, reason: `property type "${v.type}" is read-only or not supported for writes` };
+      return { ok: false, refusal: { kind: "unsupported_type", type: v.type } };
   }
 }

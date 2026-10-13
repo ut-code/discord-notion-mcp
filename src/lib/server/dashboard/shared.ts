@@ -17,6 +17,25 @@ export function pageParam(value: string | null | undefined): number {
   return Number.isFinite(page) && page >= 1 ? page : 1;
 }
 
+export interface PageLinks {
+  /** "N 件中 a–b 件"; null when the page shows no rows. */
+  range: string | null;
+  prevHref: string | null;
+  nextHref: string | null;
+}
+
+/** Pager of a list page; past the last page, "prev" jumps back to the last page with rows. */
+export function pageLinks(page: number, pageSize: number, total: number, shown: number, href: (page: number) => string): PageLinks {
+  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const first = (page - 1) * pageSize + 1;
+  const last = first + shown - 1;
+  return {
+    range: shown > 0 ? `${total} 件中 ${first}–${last} 件` : null,
+    prevHref: page > 1 ? href(Math.min(page - 1, lastPage)) : null,
+    nextHref: shown > 0 && last < total ? href(page + 1) : null,
+  };
+}
+
 export function formString(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";

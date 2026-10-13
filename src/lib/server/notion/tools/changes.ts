@@ -6,6 +6,7 @@ import { defineTool, type AnyToolDefinition } from "../../mcp/registry";
 import { dashboardAuditPath } from "../../../paths";
 import { actorOf } from "../changes/attribution";
 import type { NotionAuditService } from "../changes/audit-service";
+import { revertConflictText, revertReasonText, revertSuccessText } from "../changes/revert-reasons";
 
 export interface NotionChangeToolDeps {
   audit: NotionAuditService;
@@ -79,13 +80,13 @@ export function createNotionChangeTools(deps: NotionChangeToolDeps): AnyToolDefi
         actorDisplayName: actor.displayName,
         actorUsername: actor.username,
       });
-      if (result.ok) return result.message;
-      if (result.conflict) {
+      if (result.ok) return revertSuccessText(row.id, result);
+      if (result.reason.kind === "conflict") {
         throw new ToolError(
-          `Not reverted: the page changed after the write. ${result.message} An admin can force the revert from the dashboard at ${auditUrl(row.id)}.`,
+          `Not reverted: the page changed after the write. ${revertConflictText(row.id, result.reason.conflict)} An admin can force the revert from the dashboard at ${auditUrl(row.id)}.`,
         );
       }
-      throw new ToolError(result.message);
+      throw new ToolError(revertReasonText(row.id, result.reason));
     },
   });
 

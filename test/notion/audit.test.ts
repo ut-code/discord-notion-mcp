@@ -5,7 +5,14 @@ import { NotionRequestError, type NotionPage } from "../../src/lib/server/notion
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
 import { NotionAuditService } from "../../src/lib/server/notion/changes/audit-service";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
-import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
+import { parseStoredJson, WriteWarningSchema, type WriteWarning } from "../../src/lib/server/notion/changes/audit-records";
+import {
+  RevertNoteSchema,
+  revertSuccessText,
+  type RevertNote,
+  type RevertResult,
+} from "../../src/lib/server/notion/changes/revert-reasons";
+import { NotionWriteService, writeWarningText } from "../../src/lib/server/notion/changes/write-service";
 import { sha256 } from "../../src/lib/server/notion/content/content-diff";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 import { FakeNotionApi, titleValue } from "../support/notion-fakes";
@@ -125,8 +132,12 @@ describe("NotionWriteService", () => {
   test("create_page whose content insert fails is still recorded (and revertible by trashing)", async () => {
     api.failNext("updatePageMarkdown", new NotionRequestError("Content too long", 400, "validation_error"));
     const outcome = await writes.createPage(ACTOR, { parentId: parent.id, title: "Half", content: "Body", request: {} });
-    expect(outcome.warning).toContain("Page created, but adding its content failed");
-    expect(await store.get(outcome.auditId)).toMatchObject({ status: "ok", error: expect.stringContaining("Content too long") });
+    const warning: WriteWarning = { kind: "content_failed", error: expect.stringContaining("Content too long") };
+    expect(outcome.warning).toEqual(warning);
+    expect(writeWarningText(outcome.warning!)).toStartWith("Page created, but adding its content failed: ");
+    const stored = (await store.get(outcome.auditId))!;
+    expect(stored.status).toBe("ok");
+    expect(parseStoredJson(WriteWarningSchema, stored.error)).toEqual(warning);
     expect((await audit.revert(outcome.auditId, ADMIN)).ok).toBe(true);
     expect(api.pages.get(outcome.pageId)!.in_trash).toBe(true);
   });
@@ -248,11 +259,13 @@ describe("NotionWriteService", () => {
     const original = api.updatePageMarkdown.bind(api);
     api.updatePageMarkdown = async (pageId, update) => ({ ...(await original(pageId, update)), truncated: true });
     const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "More", request: {} });
-    expect(outcome.warning).toContain("automatic revert may not be possible");
+    expect(outcome.warning).toEqual({ kind: "revert_blocked", blocker: "truncated_after_write" });
+    expect(writeWarningText(outcome.warning!)).toContain("automatic revert may not be possible");
     const row = (await store.get(outcome.auditId))!;
-    expect(row).toMatchObject({ status: "ok", snapshot: { afterSha256: null, inverse: null } });
+    expect(row).toMatchObject({ status: "ok", snapshot: { afterSha256: null, inverse: null, revertBlocker: "truncated_after_write" } });
+    expect(audit.revertability(row)).toEqual({ kind: "blocked", blocker: "truncated_after_write" });
     const result = await audit.revert(outcome.auditId, ADMIN);
-    expect(result).toMatchObject({ ok: false, message: expect.stringContaining("cannot be reverted automatically") });
+    expect(result).toEqual({ ok: false, reason: { kind: "blocked", blocker: "truncated_after_write" } });
   });
 
   test("update_properties snapshots only the changed keys (fetching truncated values in full)", async () => {
@@ -364,7 +377,7 @@ describe("NotionAuditService.revert", () => {
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "Oops", request: {} });
     const result = await audit.revert(created.auditId, ADMIN);
 
-    expect(result).toEqual({ ok: true, message: `Reverted audit #${created.auditId}.`, revertAuditId: 2 });
+    expect(result).toEqual({ ok: true, revertAuditId: 2, forced: false, partial: false, note: null });
     expect(api.pages.get(created.pageId)!.in_trash).toBe(true);
     expect(api.comments.at(-1)).toEqual({ pageId: created.pageId, text: `↩️ Admin が audit #${created.auditId} を取り消しました` });
     const original = (await store.get(created.auditId))!;
@@ -384,7 +397,7 @@ describe("NotionAuditService.revert", () => {
     api.markdown.set(parent.id, "keep");
     const appended = await writes.appendContent(ACTOR, { pageId: parent.id, content: "- a\n\t- a1\n- b", request: {} });
     const result = await audit.revert(appended.auditId, ADMIN);
-    expect(result).toEqual({ ok: true, message: `Reverted audit #${appended.auditId}.`, revertAuditId: 2 });
+    expect(result).toEqual({ ok: true, revertAuditId: 2, forced: false, partial: false, note: null });
     expect(api.markdown.get(parent.id)).toBe("keep");
     const reverts = api.callsOf("updatePageMarkdown").slice(1);
     expect(reverts.length).toBe(1);
@@ -423,13 +436,11 @@ describe("NotionAuditService.revert", () => {
     api.setMarkdown(parent.id, "Intro\nmine\nsomeone else");
 
     const refused = await audit.revert(appended.auditId, ADMIN);
-    expect(refused).toMatchObject({ ok: false, conflict: true });
-    expect(refused.message).toContain("content changed after audit #1");
+    expect(refused).toEqual({ ok: false, reason: { kind: "conflict", conflict: { kind: "content_changed" } } });
     expect(api.callsOf("updatePageMarkdown").length).toBe(1);
 
     const forced = await audit.revert(appended.auditId, { ...ADMIN, force: true });
-    expect(forced.ok).toBe(true);
-    expect(forced.message).toContain("forced");
+    expect(forced).toMatchObject({ ok: true, forced: true });
     expect(api.markdown.get(parent.id)).toBe("Intro\nsomeone else");
     expect(await store.get(2)).toMatchObject({ request: { auditId: 1, force: true }, status: "ok" });
   });
@@ -440,12 +451,21 @@ describe("NotionAuditService.revert", () => {
     api.setMarkdown(parent.id, "Intro\nrewritten by someone");
 
     const forced = await audit.revert(appended.auditId, { ...ADMIN, force: true });
-    expect(forced.ok).toBe(false);
-    expect(forced.message).toContain("cannot be reverted automatically");
-    expect(forced.message).toContain("No matches found");
+    expect(forced).toMatchObject({
+      ok: false,
+      reason: {
+        kind: "failed",
+        failure: { kind: "text_gone", notionMessage: expect.stringContaining("No matches found") },
+        revertAuditId: 2,
+      },
+    });
     expect(api.markdown.get(parent.id)).toBe("Intro\nrewritten by someone");
     expect((await store.get(appended.auditId))!.revertedAt).toBeNull();
-    expect(await store.get(2)).toMatchObject({ operation: "revert", status: "failed" });
+    expect(await store.get(2)).toMatchObject({
+      operation: "revert",
+      status: "failed",
+      error: expect.stringContaining("restore it by hand"),
+    });
     for (const call of api.callsOf("updatePageMarkdown")) {
       expect(JSON.stringify(call.update)).not.toContain("allow_deleting_content");
     }
@@ -469,8 +489,7 @@ describe("NotionAuditService.revert", () => {
       request: {},
     });
     const result = await audit.revert(updated.auditId, ADMIN);
-    expect(result.ok).toBe(true);
-    expect(result.partial).toBeUndefined();
+    expect(result).toMatchObject({ ok: true, partial: false, note: null });
     expect(api.callsOf("updatePage").at(-1)).toEqual({
       pageId: row.id,
       properties: { cnt: { number: 1 }, tg: { multi_select: [{ id: "o1" }] } },
@@ -492,14 +511,11 @@ describe("NotionAuditService.revert", () => {
     api.touch(row.id);
 
     const refused = await audit.revert(updated.auditId, ADMIN);
-    expect(refused.ok).toBe(false);
-    expect(refused).toMatchObject({ ok: false, conflict: true });
-    expect(refused.message).toContain("edited after audit #1");
+    expect(refused).toMatchObject({ ok: false, reason: { kind: "conflict", conflict: { kind: "edited_after" } } });
     expect(api.callsOf("updatePage").length).toBe(1);
 
     const forced = await audit.revert(updated.auditId, { ...ADMIN, force: true });
-    expect(forced.ok).toBe(true);
-    expect(forced.message).toContain("forced");
+    expect(forced).toMatchObject({ ok: true, forced: true });
     expect(await store.get(2)).toMatchObject({ request: { auditId: 1, force: true } });
   });
 
@@ -516,16 +532,15 @@ describe("NotionAuditService.revert", () => {
     expect((await audit.revert(created.auditId, ADMIN)).ok).toBe(true);
 
     const again = await audit.revert(created.auditId, ADMIN);
-    expect(again).toMatchObject({ ok: false, message: expect.stringContaining("already reverted") });
+    expect(again).toMatchObject({ ok: false, reason: { kind: "already_reverted", revertAuditId: 2 } });
 
-    const ofRevert = await audit.revert(2, ADMIN);
-    expect(ofRevert).toEqual({ ok: false, message: "Reverting a revert is not supported." });
+    expect(await audit.revert(2, ADMIN)).toEqual({ ok: false, reason: { kind: "is_revert" } });
 
     api.failNext("createPage", new NotionRequestError("nope", 400, "validation_error"));
     await writes.createPage(ACTOR, { parentId: parent.id, title: "B", request: {} }).catch(() => {});
-    expect(await audit.revert(3, ADMIN)).toMatchObject({ ok: false, message: expect.stringContaining("failed write") });
+    expect(await audit.revert(3, ADMIN)).toEqual({ ok: false, reason: { kind: "not_ok", status: "failed" } });
 
-    expect(await audit.revert(999, ADMIN)).toEqual({ ok: false, message: "Audit #999 not found." });
+    expect(await audit.revert(999, ADMIN)).toEqual({ ok: false, reason: { kind: "not_found" } });
   });
 
   test("restores what it can and reports a partial result", async () => {
@@ -553,21 +568,28 @@ describe("NotionAuditService.revert", () => {
       resultLastEditedTime: row.last_edited_time,
     });
 
+    const note: RevertNote = {
+      kind: "properties_partial",
+      restored: ["Count"],
+      skipped: [{ name: "Files", refusal: { kind: "hosted_files", files: ["a.png"] } }],
+    };
     const result = await audit.revert(inserted.id, ADMIN);
-    expect(result.ok).toBe(true);
-    expect(result.partial).toBe(true);
-    expect(result.message).toContain("Restored Count");
-    expect(result.message).toContain("a.png");
+    expect(result).toMatchObject({ ok: true, partial: true, note });
     expect(api.callsOf("updatePage").at(-1).properties).toEqual({ cnt: { number: 1 } });
-    expect((await store.get(inserted.id))!.revertNote).toContain("could not restore");
+    expect(parseStoredJson(RevertNoteSchema, (await store.get(inserted.id))!.revertNote)).toEqual(note);
+    expect(revertSuccessText(inserted.id, result as Extract<RevertResult, { ok: true }>)).toBe(
+      `Reverted audit #${inserted.id}: Restored Count; could not restore "Files" (contains Notion-hosted file(s) (a.png) that cannot be re-set through the API).`,
+    );
   });
 
   test("a Notion error during revert is recorded as a failed revert and leaves the original revertible", async () => {
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "A", request: {} });
     api.failNext("updatePage", new NotionRequestError("service unavailable", 503, "service_unavailable"));
     const result = await audit.revert(created.auditId, ADMIN);
-    expect(result.ok).toBe(false);
-    expect(result.message).toContain("service unavailable");
+    expect(result).toEqual({
+      ok: false,
+      reason: { kind: "failed", failure: { kind: "error", message: "service unavailable" }, revertAuditId: 2 },
+    });
     expect(await store.get(2)).toMatchObject({ operation: "revert", status: "failed", revertOfAuditId: created.auditId });
     expect((await store.get(created.auditId))!.revertedAt).toBeNull();
     expect((await audit.revert(created.auditId, ADMIN)).ok).toBe(true);
@@ -586,10 +608,7 @@ describe("NotionAuditService.revert", () => {
 
     for (const id of [appended.auditId, updated.auditId, created.auditId]) {
       const result = await audit.revert(id, ADMIN);
-      expect(result).toEqual({
-        ok: false,
-        message: `Audit #${id} has an unrecognized snapshot format; it cannot be reverted automatically.`,
-      });
+      expect(result).toEqual({ ok: false, reason: { kind: "unrecognized_snapshot" } });
       expect((await store.get(id))!.revertedAt).toBeNull();
     }
     const writesAfter = api.calls.filter((call) => ["updatePage", "updatePageMarkdown", "createComment"].includes(call.method)).length;

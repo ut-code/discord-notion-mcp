@@ -32,7 +32,6 @@ export interface DashboardDeps {
   /** Permission each MCP tool requires; groups usage in the stats chart. */
   toolPermissions: ReadonlyMap<string, Permission>;
   revocation: TokenRevocationService;
-  notionEnabled: boolean;
   /** Admin actions. */
   log: EventSink;
   /** Lookup and sign-out failures. */

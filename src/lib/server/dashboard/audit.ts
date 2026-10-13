@@ -7,8 +7,10 @@ import {
   ContentSnapshotSchema,
   ContentUpdateSchema,
   EditContentRequestSchema,
+  UpdatePropertiesRequestSchema,
   UpdatePropertiesSnapshotSchema,
 } from "../notion/changes/audit-records";
+import type { RevertResult } from "../notion/changes/revert-reasons";
 import type { ContentHunk } from "../notion/content/content-diff";
 import { renderPropertyValue } from "../notion/content/properties";
 import { ADMIN_ONLY, type Viewer } from "./access";
@@ -23,7 +25,8 @@ import {
   renderRequestedPropertyValue,
   type AuditStatusFilter,
 } from "./format";
-import { formString, pageParam, type ActionResult, type Option } from "./shared";
+import { revertReasonText, revertSuccessText, storedNoteText } from "./revert-text";
+import { formString, pageLinks, pageParam, type ActionResult, type Option } from "./shared";
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -55,23 +58,23 @@ function auditTitle(row: NotionAuditRow): string {
   return typeof requested === "string" && requested ? requested : "Notion ページ";
 }
 
+const BADGES = {
+  failed: { label: "失敗", tone: "destructive" },
+  pending: { label: "処理中", tone: "secondary" },
+  ok: { label: "成功", tone: "success" },
+  reverted: { label: "取り消し済み", tone: "secondary" },
+} as const satisfies Record<string, BadgeView>;
+
 /** Full status of the detail page: 成功 + 取り消し済み for a reverted write. */
 function statusBadges(row: NotionAuditRow): BadgeView[] {
-  if (row.status === "failed") return [{ label: "失敗", tone: "destructive" }];
-  if (row.status === "pending") return [{ label: "処理中", tone: "secondary" }];
-  if (!row.revertedAt) return [{ label: "成功", tone: "success" }];
-  return [
-    { label: "成功", tone: "success" },
-    { label: "取り消し済み", tone: "secondary" },
-  ];
+  if (row.status !== "ok") return [BADGES[row.status]];
+  return row.revertedAt ? [BADGES.ok, BADGES.reverted] : [BADGES.ok];
 }
 
 /** Lists flag only exceptions; a plain successful write has no badge. */
 function exceptionBadge(row: NotionAuditRow): BadgeView | null {
-  if (row.status === "failed") return { label: "失敗", tone: "destructive" };
-  if (row.status === "pending") return { label: "処理中", tone: "secondary" };
-  if (row.revertedAt) return { label: "取り消し済み", tone: "secondary" };
-  return null;
+  if (row.status !== "ok") return BADGES[row.status];
+  return row.revertedAt ? BADGES.reverted : null;
 }
 
 export interface AuditRowView {
@@ -112,7 +115,7 @@ export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, s
 export interface AuditListData {
   rows: AuditRowView[];
   total: number;
-  /** "N 件中 a–b 件"; null when empty. */
+  /** "N 件中 a–b 件"; null when the page shows no rows. */
   range: string | null;
   prevHref: string | null;
   nextHref: string | null;
@@ -150,8 +153,6 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
     deps.audit.listActors(),
   ]);
   const avatars = await deps.subjects.memberAvatars(rows.map((row) => row.discordUserId));
-  const first = (page - 1) * AUDIT_PAGE_SIZE + 1;
-  const last = first + rows.length - 1;
   // Keep a filtered user selectable even when it has no rows any more.
   const userOptions = actors.map((actor) => ({ value: actor.discordUserId, label: actor.displayName }));
   if (filters.user && !userOptions.some((option) => option.value === filters.user)) {
@@ -160,9 +161,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
   return {
     rows: rows.map((row) => auditRowView(row, avatars)),
     total,
-    range: total > 0 ? `${total} 件中 ${first}–${last} 件` : null,
-    prevHref: page > 1 ? auditListHref(filters, page - 1) : null,
-    nextHref: last < total ? auditListHref(filters, page + 1) : null,
+    ...pageLinks(page, AUDIT_PAGE_SIZE, total, rows.length, (target) => auditListHref(filters, target)),
     filters: { user: filters.user ?? "", operation: filters.operation ?? "", status: filters.status ?? "" },
     userOptions,
     operationOptions: NOTION_AUDIT_OPERATIONS.map((value) => ({ value, label: AUDIT_OPERATION_LABELS[value] })),
@@ -252,7 +251,7 @@ function changeView(row: NotionAuditRow): ChangeView {
     }
     case "update_properties": {
       const snapshot = UpdatePropertiesSnapshotSchema.safeParse(row.snapshot);
-      const requested = (row.request.properties ?? {}) as Record<string, unknown>;
+      const requested = UpdatePropertiesRequestSchema.safeParse(row.request).data?.properties ?? {};
       const entries = (snapshot.success ? snapshot.data.properties : []).map((entry) => {
         const raw = requested[entry.name] ?? requested[entry.id];
         return {
@@ -278,7 +277,11 @@ function changeView(row: NotionAuditRow): ChangeView {
 }
 
 export type RevertView =
-  { state: "reverted"; revert: { id: number; href: string } | null; note: string | null } | { state: "disabled" } | { state: "ready" };
+  | { state: "reverted"; revert: { id: number; href: string } | null; note: string | null }
+  | { state: "disabled" }
+  /** Revertible kind of write, but this row cannot be reverted automatically. */
+  | { state: "unavailable"; reason: string }
+  | { state: "ready" };
 
 export interface AuditDetailData {
   id: number;
@@ -296,7 +299,7 @@ export interface AuditDetailData {
     comment: { kind: "error"; text: string } | { kind: "posted" } | { kind: "none" };
     error: { label: string; text: string; failed: boolean } | null;
   };
-  /** Null when the row cannot be reverted (failed writes, reverts) and for non-admin viewers. */
+  /** Null for rows that are never revertible (failed or pending writes, reverts) and for non-admin viewers. */
   revert: RevertView | null;
 }
 
@@ -309,19 +312,6 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
   const row = id === null ? null : await deps.audit.getAudit(id);
   if (!row) return null;
   const avatars = await deps.subjects.memberAvatars([row.discordUserId]);
-  const revertible = viewer.isAdmin && row.operation !== "revert" && row.status === "ok";
-  let revert: RevertView | null = null;
-  if (revertible) {
-    if (row.revertedAt) {
-      revert = {
-        state: "reverted",
-        revert: row.revertAuditId !== null ? { id: row.revertAuditId, href: dashboardAuditPath(row.revertAuditId) } : null,
-        note: row.revertNote,
-      };
-    } else {
-      revert = deps.notionEnabled ? { state: "ready" } : { state: "disabled" };
-    }
-  }
   return {
     id: row.id,
     operation: AUDIT_OPERATION_LABELS[row.operation],
@@ -336,10 +326,35 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
       targetUrl: row.targetUrl,
       createdAt: formatJst(row.createdAt),
       comment: row.commentError ? { kind: "error", text: row.commentError } : row.status === "ok" ? { kind: "posted" } : { kind: "none" },
-      error: row.error ? { label: row.status === "failed" ? "エラー" : "注記", text: row.error, failed: row.status === "failed" } : null,
+      error: row.error
+        ? row.status === "failed"
+          ? { label: "エラー", text: row.error, failed: true }
+          : { label: "注記", text: storedNoteText(row.error), failed: false }
+        : null,
     },
-    revert,
+    revert: viewer.isAdmin ? revertView(deps, row) : null,
   };
+}
+
+/** The revert card; the service decides what can be reverted, so the card never offers a refused revert. */
+function revertView(deps: DashboardDeps, row: NotionAuditRow): RevertView | null {
+  const reason = deps.audit.revertability(row);
+  if (reason === null) return { state: "ready" };
+  switch (reason.kind) {
+    case "already_reverted":
+      return {
+        state: "reverted",
+        revert: reason.revertAuditId !== null ? { id: reason.revertAuditId, href: dashboardAuditPath(reason.revertAuditId) } : null,
+        note: row.revertNote ? storedNoteText(row.revertNote) : null,
+      };
+    case "notion_disabled":
+      return { state: "disabled" };
+    case "is_revert":
+    case "not_ok":
+      return null;
+    default:
+      return { state: "unavailable", reason: revertReasonText(reason) };
+  }
 }
 
 /** `conflict` asks the page to offer a forced revert (the page changed after the write). */
@@ -357,7 +372,7 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
   if (formString(form, "confirm") !== "yes") {
     return { result: { kind: "error", message: "確認のチェックを入れてから取り消してください。" }, conflict: force };
   }
-  let outcome;
+  let outcome: RevertResult;
   try {
     outcome = await deps.audit.revert(id, {
       actorDiscordUserId: actor.discordUserId,
@@ -369,12 +384,21 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
     deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: false, error: errorMessage(error) });
     return { result: { kind: "error", message: `取り消しに失敗しました: ${errorMessage(error)}` }, conflict: false };
   }
-  deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: outcome.ok, revertAuditId: outcome.revertAuditId });
   if (outcome.ok) {
-    const prefix = outcome.partial ? "一部のみ取り消しました。" : "取り消しました。";
-    return { result: { kind: outcome.partial ? "warn" : "ok", message: `${prefix}${outcome.message}` }, conflict: false };
+    deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: true, revertAuditId: outcome.revertAuditId });
+    return { result: { kind: outcome.partial ? "warn" : "ok", message: revertSuccessText(outcome) }, conflict: false };
   }
+  const { reason } = outcome;
+  deps.log({
+    event: "audit_revert",
+    auditId: id,
+    by: actor.discordUserId,
+    force,
+    ok: false,
+    error: reason.kind,
+    ...(reason.kind === "failed" ? { revertAuditId: reason.revertAuditId } : {}),
+  });
   // The page explains the conflict and offers a forced revert instead of a message.
-  if (outcome.conflict) return { result: { kind: "warn", message: null }, conflict: true };
-  return { result: { kind: "error", message: `取り消せませんでした: ${outcome.message}` }, conflict: false };
+  if (reason.kind === "conflict") return { result: { kind: "warn", message: null }, conflict: true };
+  return { result: { kind: "error", message: revertReasonText(reason) }, conflict: false };
 }
