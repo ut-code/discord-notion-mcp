@@ -4,6 +4,10 @@ import type { GuildDirectory } from "../discord/directory";
 import type { GrantLookup } from "./grants";
 import { PERMISSIONS, type Permission } from "./permissions";
 
+/**
+ * What a Discord user may do. Admins hold every permission, so callers check
+ * `permissions.has(...)` alone and never special-case `isAdmin` for a permission.
+ */
 export type EffectiveAccess =
   | { isMember: false; discordUserId: string; guild: GuildInfo; permissions: ReadonlySet<Permission>; isAdmin: false }
   | {

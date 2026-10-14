@@ -16,7 +16,7 @@ export interface Viewer {
   guildName: string;
   /** Grants, revocations and reverts. */
   isAdmin: boolean;
-  /** The write history shows Notion content: notion:read (admins hold every permission). */
+  /** The write history shows Notion content: notion:read. */
   canViewAudit: boolean;
 }
 
