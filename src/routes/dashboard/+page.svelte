@@ -5,8 +5,9 @@
   import * as Table from "$lib/components/ui/table";
   import { m } from "$lib/paraglide/messages.js";
   import StackedBars from "./stacked-bars.svelte";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 
   const summary = $derived([
     { label: m.stats_calls(), value: data.summary.calls.toLocaleString("ja-JP") },

@@ -1,8 +1,9 @@
 <script lang="ts">
   import AuthLayout from "$lib/components/app/auth-layout.svelte";
   import { m } from "$lib/paraglide/messages.js";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 </script>
 
 <AuthLayout title="Preview">

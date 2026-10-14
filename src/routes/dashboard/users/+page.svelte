@@ -10,10 +10,11 @@
   import { afterNavigate, goto } from "$app/navigation";
   import { useHydrated } from "$lib/hydrated.svelte";
   import { m } from "$lib/paraglide/messages.js";
+  import type { PageProps } from "./$types";
   import { DASHBOARD_PATH } from "$lib/paths";
   import UserMenu from "./user-menu.svelte";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 
   const SEARCH_DEBOUNCE_MS = 300;
   const hydrated = useHydrated();

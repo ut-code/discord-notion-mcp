@@ -12,7 +12,7 @@
     "test": "bun test",
     "typecheck": "bun scripts/compile-messages.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo",
     "lint": "eslint .",
-    "lint:typed": "eslint -c eslint.typed.config.js 'src/**/*.ts'",
+    "lint:typed": "SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 eslint -c eslint.typed.config.js src",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate"

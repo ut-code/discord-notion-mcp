@@ -16,8 +16,9 @@
   import { useHydrated } from "$lib/hydrated.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 
   const hydrated = useHydrated();
   const activeFilters = $derived(Object.values(data.filters).filter(Boolean).length);

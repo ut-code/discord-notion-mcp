@@ -5,8 +5,9 @@
   import { Button } from "$lib/components/ui/button";
   import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 </script>
 
 <AuthLayout title={`${m.connect_title()} — Discord × Notion MCP`} wide>

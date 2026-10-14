@@ -8,8 +8,9 @@
   import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
   import RevertCard from "./revert-card.svelte";
+  import type { PageProps } from "./$types";
 
-  let { data, form } = $props();
+  let { data, form }: PageProps = $props();
 
   const change = $derived(data.change);
   const details = $derived(data.details);

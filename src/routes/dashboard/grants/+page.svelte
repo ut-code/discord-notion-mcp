@@ -7,8 +7,9 @@
   import GrantForm from "./grant-form.svelte";
   import GrantMenu from "./grant-menu.svelte";
   import SubjectCell from "./subject-cell.svelte";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 </script>
 
 <PageHeader title={m.grants_title()} />

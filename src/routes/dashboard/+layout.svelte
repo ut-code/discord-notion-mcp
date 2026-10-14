@@ -15,8 +15,10 @@
   import { initialOf } from "$lib/initial";
   import { m } from "$lib/paraglide/messages.js";
   import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "$lib/paths";
+  import { actionResultOf } from "$lib/action-result";
+  import type { LayoutProps } from "./$types";
 
-  let { data, children } = $props();
+  let { data, children }: LayoutProps = $props();
 
   const nav = $derived([
     { href: DASHBOARD_PATH, label: m.stats_title(), icon: ChartColumnIcon },
@@ -85,7 +87,7 @@
     </div>
   </aside>
   <main class="main">
-    <ActionFeedback result={page.form?.result} />
+    <ActionFeedback result={actionResultOf(page.form)} />
     {@render children()}
   </main>
 </div>

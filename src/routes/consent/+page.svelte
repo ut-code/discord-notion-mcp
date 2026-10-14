@@ -8,8 +8,10 @@
   import { Button } from "$lib/components/ui/button";
   import { m } from "$lib/paraglide/messages.js";
   import { SIGN_OUT_PATH } from "$lib/paths";
+  import { jsonStrings } from "$lib/json-strings";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 
   const ICONS = { "discord:read": EyeIcon, "notion:read": FileTextIcon, "notion:write": PenLineIcon, admin: SettingsIcon };
 
@@ -26,7 +28,7 @@
         credentials: "same-origin",
         body: JSON.stringify({ accept, oauth_query: data.oauthQuery }),
       });
-      const result = await res.json().catch(() => ({}));
+      const result = await jsonStrings(res);
       const target = result.url || result.redirect_uri;
       if (res.ok && target) {
         window.location.href = target;

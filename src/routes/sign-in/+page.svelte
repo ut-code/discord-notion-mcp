@@ -5,8 +5,10 @@
   import { Button } from "$lib/components/ui/button";
   import { initialOf } from "$lib/initial";
   import { m } from "$lib/paraglide/messages.js";
+  import { jsonStrings } from "$lib/json-strings";
+  import type { PageProps } from "./$types";
 
-  let { data } = $props();
+  let { data }: PageProps = $props();
 
   let busy = $state(false);
   let status = $state("");
@@ -24,7 +26,7 @@
         credentials: "same-origin",
         body: JSON.stringify(body),
       });
-      const result = await res.json().catch(() => ({}));
+      const result = await jsonStrings(res);
       if (res.ok && result.url) {
         window.location.href = result.url;
         return;
