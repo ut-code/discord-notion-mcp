@@ -1,4 +1,5 @@
 import { DASHBOARD_PATH, SIGN_IN_PATH } from "../../paths";
+import { isGuildOwner } from "../discord/permissions";
 import type { EffectiveAccess } from "../permissions/resolver";
 import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
@@ -49,7 +50,6 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
     };
   }
   if (!access.isMember) return { kind: "denied", status: 403, ...NOT_MEMBER };
-  const isOwner = access.member.userId === access.guild.ownerId;
   return {
     kind: "viewer",
     viewer: {
@@ -57,7 +57,7 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
       displayName: displayName(access.member),
       username: access.member.username,
       avatarUrl: access.member.avatarUrl,
-      roleLabel: isOwner ? "オーナー" : access.isAdmin ? "管理者" : "メンバー",
+      roleLabel: isGuildOwner(access.guild, access.member) ? "オーナー" : access.isAdmin ? "管理者" : "メンバー",
       guildName: access.guild.name,
       isAdmin: access.isAdmin,
       canViewAudit: access.permissions.has("notion:read"),

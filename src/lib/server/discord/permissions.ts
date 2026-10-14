@@ -29,9 +29,13 @@ export function toOverwrite(raw: APIOverwrite): PermissionOverwrite {
   };
 }
 
+export function isGuildOwner(guild: GuildInfo, member: MemberInfo): boolean {
+  return member.userId === guild.ownerId;
+}
+
 /** Guild-level permissions: @everyone role OR member roles, with owner/ADMINISTRATOR short-circuits. */
 export function computeBasePermissions(guild: GuildInfo, member: MemberInfo): bigint {
-  if (member.userId === guild.ownerId) return ALL_PERMISSIONS;
+  if (isGuildOwner(guild, member)) return ALL_PERMISSIONS;
   const roleById = new Map(guild.roles.map((role) => [role.id, role]));
   let permissions = roleById.get(guild.id)?.permissions ?? 0n;
   for (const roleId of member.roles) {

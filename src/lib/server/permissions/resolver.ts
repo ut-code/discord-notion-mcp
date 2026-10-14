@@ -44,6 +44,5 @@ export class PermissionResolver {
 
 /** Guild owner, or any held role (including @everyone) carrying ADMINISTRATOR. */
 export function isGuildAdmin(guild: GuildInfo, member: MemberInfo): boolean {
-  if (member.userId === guild.ownerId) return true;
   return hasPermission(computeBasePermissions(guild, member), ADMINISTRATOR);
 }
