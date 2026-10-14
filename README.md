@@ -94,6 +94,7 @@ bun run preview    # 偽データで UI 確認: http://localhost:3920/dev
 bun test
 bun run typecheck
 bun run lint
+bun run lint:typed # 型情報を使う lint（.ts のみ、CI で実行）
 bun run format
 bun run build && bun run start
 ```

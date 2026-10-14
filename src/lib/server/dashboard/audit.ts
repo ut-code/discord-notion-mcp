@@ -47,7 +47,9 @@ function isAuditOperation(value: string | null): value is NotionAuditOperation {
 
 export function auditListHref(filters: AuditFilters, page = 1): string {
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
+  if (filters.user) params.set("user", filters.user);
+  if (filters.operation) params.set("operation", filters.operation);
+  if (filters.status) params.set("status", filters.status);
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
   return query ? `${DASHBOARD_PATH}/audit?${query}` : `${DASHBOARD_PATH}/audit`;

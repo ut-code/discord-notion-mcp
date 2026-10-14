@@ -113,7 +113,7 @@ export function renderRequestedPropertyValue(type: string, raw: unknown): string
     case "rich_text":
       return richTextContent(value);
     case "number":
-      return value === null || value === undefined ? "" : String(value);
+      return typeof value === "number" || typeof value === "string" ? String(value) : "";
     case "checkbox":
       return value ? "true" : "false";
     case "select":
