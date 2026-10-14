@@ -6,6 +6,7 @@ import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
 import {
   AppendContentRequestSchema,
+  CreatePageRequestSchema,
   ContentSnapshotSchema,
   ContentUpdateSchema,
   EditContentRequestSchema,
@@ -58,8 +59,8 @@ export function auditListHref(filters: AuditFilters, page = 1): string {
 /** Title recorded with the write; older rows fall back to the requested title or a generic label. */
 function auditTitle(row: NotionAuditRow): string {
   if (row.targetTitle) return row.targetTitle;
-  const requested = row.operation === "create_page" ? row.request.title : undefined;
-  return typeof requested === "string" && requested ? requested : m.audit_untitled_page();
+  const requested = row.operation === "create_page" ? CreatePageRequestSchema.safeParse(row.request).data?.title : undefined;
+  return requested || m.audit_untitled_page();
 }
 
 const BADGES = {

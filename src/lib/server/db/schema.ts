@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { PERMISSIONS, SUBJECT_TYPES } from "../permissions/permissions";
 
@@ -47,9 +48,10 @@ export const notionAudit = sqliteTable(
     targetUrl: text("target_url"),
     /** Page title when the write was made, for display. */
     targetTitle: text("target_title"),
-    request: text("request", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
-    snapshot: text("snapshot", { mode: "json" }).$type<Record<string, unknown>>(),
-    result: text("result", { mode: "json" }).$type<Record<string, unknown>>(),
+    // JSON written by earlier versions too: read it through the schemas in notion/changes/audit-records.ts.
+    request: text("request", { mode: "json" }).$type<unknown>().notNull(),
+    snapshot: text("snapshot", { mode: "json" }).$type<unknown>(),
+    result: text("result", { mode: "json" }).$type<unknown>(),
     status: text("status", { enum: NOTION_AUDIT_STATUSES }).notNull(),
     error: text("error"),
     commentError: text("comment_error"),
@@ -61,7 +63,14 @@ export const notionAudit = sqliteTable(
     /** On a `revert` row: the audit id it reverted. */
     revertOfAuditId: integer("revert_of_audit_id"),
   },
-  (table) => [index("notion_audit_created_at_idx").on(table.createdAt), index("notion_audit_discord_user_idx").on(table.discordUserId)],
+  (table) => [
+    index("notion_audit_created_at_idx").on(table.createdAt),
+    index("notion_audit_discord_user_idx").on(table.discordUserId),
+    // At most one revert of a row is pending or done; failed attempts do not count.
+    uniqueIndex("notion_audit_one_revert_idx")
+      .on(table.revertOfAuditId)
+      .where(sql`${table.status} <> 'failed'`),
+  ],
 );
 
 export type NotionAuditRow = typeof notionAudit.$inferSelect;

@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, isNull, lt, max, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, lt, max, or, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../../db/client";
 import {
   notionAudit,
@@ -7,6 +7,9 @@ import {
   type NotionAuditRow,
   type NotionAuditStatus,
 } from "../../db/schema";
+
+/** The error of a pending row given up on at startup; a guess that the real outcome may still replace. */
+export const INTERRUPTED_ERROR = "interrupted (server restarted)";
 
 export interface AuditListQuery {
   limit: number;
@@ -33,23 +36,25 @@ export interface AuditListResult {
 /** A new row; the database assigns the id and the store's clock the creation time. */
 export type AuditInsert = Omit<NewNotionAuditRow, "id" | "createdAt">;
 
-/** What changes after insert: the outcome of the write, then its revert. Who did what stays as recorded. */
-export type AuditPatch = Partial<
-  Pick<
-    NewNotionAuditRow,
-    | "status"
-    | "error"
-    | "commentError"
-    | "result"
-    | "resultLastEditedTime"
-    | "targetUrl"
-    | "revertedAt"
-    | "revertedBy"
-    | "revertAuditId"
-    | "revertNote"
-  >
->;
+/** Details known only after a successful write: the attribution comment and the final page state. */
+export type AuditAttribution = Pick<NewNotionAuditRow, "commentError" | "targetUrl" | "resultLastEditedTime">;
 
+/** How a pending write ended. */
+export type PendingOutcome =
+  | ({ status: "ok" } & Pick<NewNotionAuditRow, "result" | "error" | "commentError" | "resultLastEditedTime">)
+  | ({ status: "failed"; error: string } & Pick<NewNotionAuditRow, "commentError">);
+
+/** What the original row records about its revert. */
+export type RevertMark = Pick<NewNotionAuditRow, "revertedBy" | "revertNote">;
+
+/** Still open: pending, or given up on at startup while the write may have gone on. */
+const stillOpen = (id: number) =>
+  and(eq(notionAudit.id, id), or(eq(notionAudit.status, "pending"), eq(notionAudit.error, INTERRUPTED_ERROR)));
+
+/**
+ * The audit log. Rows are written once and then only move forward: a pending write ends
+ * once, and a write is reverted at most once. Who did what, and when, never changes.
+ */
 export class NotionAuditStore {
   constructor(private readonly db: AppDatabase) {}
 
@@ -59,18 +64,51 @@ export class NotionAuditStore {
     return inserted;
   }
 
-  async update(id: number, patch: AuditPatch): Promise<void> {
-    await this.db.update(notionAudit).set(patch).where(eq(notionAudit.id, id));
+  async recordAttribution(id: number, attribution: AuditAttribution): Promise<void> {
+    await this.db.update(notionAudit).set(attribution).where(eq(notionAudit.id, id));
   }
 
-  /** Marks rows still `pending` that were created before `cutoff` as failed; returns how many. */
-  async failPendingBefore(cutoff: Date, error: string): Promise<number> {
+  /** Ends a pending write; false when it already ended (a real outcome is never replaced). */
+  async finishPending(id: number, outcome: PendingOutcome): Promise<boolean> {
+    const updated = await this.db.update(notionAudit).set(outcome).where(stillOpen(id)).returning({ id: notionAudit.id });
+    return updated.length > 0;
+  }
+
+  /** Marks rows still `pending` that were created before `cutoff` as interrupted; returns how many. */
+  async failPendingBefore(cutoff: Date): Promise<number> {
     const updated = await this.db
       .update(notionAudit)
-      .set({ status: "failed", error })
+      .set({ status: "failed", error: INTERRUPTED_ERROR })
       .where(and(eq(notionAudit.status, "pending"), lt(notionAudit.createdAt, cutoff)))
       .returning({ id: notionAudit.id });
     return updated.length;
+  }
+
+  /**
+   * Records a revert as pending before it touches Notion; null when another revert of the same
+   * row is pending or done (the unique index on revert_of_audit_id decides, across processes).
+   */
+  async startRevert(row: Omit<AuditInsert, "status"> & { operation: "revert"; revertOfAuditId: number }): Promise<NotionAuditRow | null> {
+    const [inserted] = await this.db
+      .insert(notionAudit)
+      .values({ ...row, status: "pending" })
+      .onConflictDoNothing()
+      .returning();
+    return inserted ?? null;
+  }
+
+  /** Ends a pending revert successfully and marks the original reverted, atomically; false when it already ended. */
+  finishRevert(revertId: number, originalId: number, outcome: PendingOutcome & { status: "ok" }, mark: RevertMark): Promise<boolean> {
+    const finished = this.db.transaction((tx) => {
+      const ended = tx.update(notionAudit).set(outcome).where(stillOpen(revertId)).returning({ id: notionAudit.id }).all();
+      if (ended.length === 0) return false;
+      tx.update(notionAudit)
+        .set({ ...mark, revertedAt: new Date(), revertAuditId: revertId })
+        .where(and(eq(notionAudit.id, originalId), isNull(notionAudit.revertedAt)))
+        .run();
+      return true;
+    });
+    return Promise.resolve(finished);
   }
 
   async get(id: number): Promise<NotionAuditRow | null> {
@@ -78,8 +116,8 @@ export class NotionAuditStore {
     return row ?? null;
   }
 
-  /** Newest first. */
-  async list(query: AuditListQuery): Promise<AuditListResult> {
+  /** Newest first; the page and the total come from one snapshot. */
+  list(query: AuditListQuery): Promise<AuditListResult> {
     const conditions: SQL[] = [];
     if (query.discordUserId) conditions.push(eq(notionAudit.discordUserId, query.discordUserId));
     if (query.operation) conditions.push(eq(notionAudit.operation, query.operation));
@@ -88,15 +126,12 @@ export class NotionAuditStore {
       conditions.push(query.reverted ? isNotNull(notionAudit.revertedAt) : isNull(notionAudit.revertedAt));
     }
     const where = conditions.length > 0 ? and(...conditions) : undefined;
-    const rows = await this.db
-      .select()
-      .from(notionAudit)
-      .where(where)
-      .orderBy(desc(notionAudit.id))
-      .limit(query.limit)
-      .offset(query.offset);
-    const [totals] = await this.db.select({ total: count() }).from(notionAudit).where(where);
-    return { rows, total: totals?.total ?? 0 };
+    const result = this.db.transaction((tx) => {
+      const rows = tx.select().from(notionAudit).where(where).orderBy(desc(notionAudit.id)).limit(query.limit).offset(query.offset).all();
+      const totals = tx.select({ total: count() }).from(notionAudit).where(where).get();
+      return { rows, total: totals?.total ?? 0 };
+    });
+    return Promise.resolve(result);
   }
 
   /** Every actor once, named as on their latest row, sorted by display name. */

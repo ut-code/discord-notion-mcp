@@ -585,6 +585,18 @@ describe("NotionAuditService.revert", () => {
     );
   });
 
+  test("two processes reverting the same row at once touch Notion once", async () => {
+    const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "Race", request: {} });
+    const other = new NotionAuditService(store, api);
+    const results = await Promise.all([audit.revert(created.auditId, ADMIN), other.revert(created.auditId, ADMIN)]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.find((result) => !result.ok)).toMatchObject({
+      reason: { kind: expect.stringMatching(/^(in_progress|already_reverted)$/) },
+    });
+    expect(api.callsOf("updatePage").filter((call) => call.inTrash === true)).toHaveLength(1);
+    expect((await audit.listAudit({ operation: "revert" })).total).toBe(1);
+  });
+
   test("a Notion error during revert is recorded as a failed revert and leaves the original revertible", async () => {
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "A", request: {} });
     api.failNext("updatePage", new NotionRequestError("service unavailable", 503, "service_unavailable"));
@@ -642,19 +654,38 @@ describe("NotionAuditService.failInterruptedWrites", () => {
   });
 });
 
-describe("NotionAuditStore types", () => {
+describe("NotionAuditStore", () => {
+  const archiveRow = {
+    discordUserId: ACTOR.discordUserId,
+    discordDisplayName: ACTOR.displayName,
+    operation: "archive_page" as const,
+    request: {},
+    snapshot: { inTrash: false },
+  };
+
   test("who did what and when cannot be written through the store", () => {
-    const row = { discordUserId: "1", discordDisplayName: "a", operation: "archive_page" as const, request: {}, status: "ok" as const };
     // Type-only: these calls are never made.
     const rejected = [
       // @ts-expect-error the store's clock sets createdAt
-      () => store.insert({ ...row, createdAt: new Date(0) }),
+      () => store.insert({ ...archiveRow, status: "ok", createdAt: new Date(0) }),
       // @ts-expect-error the actor stays as recorded
-      () => store.update(1, { discordUserId: "2" }),
+      () => store.recordAttribution(1, { commentError: null, targetUrl: null, resultLastEditedTime: null, discordUserId: "2" }),
       // @ts-expect-error the operation and its request stay as recorded
-      () => store.update(1, { request: {} }),
+      () => store.finishPending(1, { status: "failed", error: "x", request: {} }),
     ];
     expect(rejected).toHaveLength(3);
+  });
+
+  test("a pending write ends once; a late real outcome replaces only the interruption guess", async () => {
+    const pending = await store.insert({ ...archiveRow, status: "pending" });
+    expect(await store.finishPending(pending.id, { status: "failed", error: "nope" })).toBe(true);
+    expect(await store.finishPending(pending.id, { status: "ok", result: {} })).toBe(false);
+    expect(await store.get(pending.id)).toMatchObject({ status: "failed", error: "nope" });
+
+    const old = await insertAuditRow(db, { ...archiveRow, status: "pending", createdAt: new Date(Date.now() - 11 * 60_000) });
+    expect(await audit.failInterruptedWrites()).toBe(1);
+    expect(await store.finishPending(old.id, { status: "ok", result: {}, error: null })).toBe(true);
+    expect(await store.get(old.id)).toMatchObject({ status: "ok", error: null });
   });
 });
 

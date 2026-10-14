@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `notion_audit_one_revert_idx` ON `notion_audit` (`revert_of_audit_id`) WHERE "notion_audit"."status" <> 'failed';

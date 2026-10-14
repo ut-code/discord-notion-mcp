@@ -12,6 +12,8 @@ import type { PageMarkdownUpdate } from "../client/types";
 
 export const ContentUpdateSchema = z.object({ old_str: z.string(), new_str: z.string() });
 
+/** The title a create_page call asked for; older rows have no recorded target title. */
+export const CreatePageRequestSchema = z.object({ title: z.string() });
 /** The parts of the `request` column (the tool arguments) shown for failed content writes, which have no hunks. */
 export const AppendContentRequestSchema = z.object({ content: z.string() });
 /** Entries are checked one by one with ContentUpdateSchema so one malformed edit does not hide the rest. */

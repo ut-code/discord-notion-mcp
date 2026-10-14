@@ -28,7 +28,6 @@ const MAX_AUDIT_PAGE_SIZE = 200;
 
 /** Rows still pending after this long belong to a write the server never finished. */
 export const STALE_PENDING_MS = 10 * 60_000;
-export const INTERRUPTED_ERROR = "interrupted (server restarted)";
 
 export interface RevertOptions {
   actorDiscordUserId: string;
@@ -124,8 +123,6 @@ type Prepared = { reason: RevertReason } | { reason: null; api: NotionApi; recor
 
 /** Audit log queries and revert, used by the dashboard and the change tools. */
 export class NotionAuditService {
-  private readonly inFlight = new Set<number>();
-
   constructor(
     private readonly store: NotionAuditStore,
     private readonly api: NotionApi | null,
@@ -149,7 +146,7 @@ export class NotionAuditService {
 
   /** Marks writes left pending by a previous process as failed; returns how many were marked. */
   failInterruptedWrites(now: Date = new Date()): Promise<number> {
-    return this.store.failPendingBefore(new Date(now.getTime() - STALE_PENDING_MS), INTERRUPTED_ERROR);
+    return this.store.failPendingBefore(new Date(now.getTime() - STALE_PENDING_MS));
   }
 
   /**
@@ -175,16 +172,6 @@ export class NotionAuditService {
   }
 
   async revert(id: number, options: RevertOptions): Promise<RevertResult> {
-    if (this.inFlight.has(id)) return { ok: false, reason: { kind: "in_progress" } };
-    this.inFlight.add(id);
-    try {
-      return await this.revertOnce(id, options);
-    } finally {
-      this.inFlight.delete(id);
-    }
-  }
-
-  private async revertOnce(id: number, options: RevertOptions): Promise<RevertResult> {
     const row = await this.store.get(id);
     if (!row) return { ok: false, reason: { kind: "not_found" } };
     const prepared = this.prepare(row);
@@ -208,35 +195,39 @@ export class NotionAuditService {
     }
     if (conflict && !options.force) return { ok: false, reason: { kind: "conflict", conflict } };
 
+    // Claimed in the database before Notion is touched: a second revert of the row, from any
+    // process, finds this pending row and is refused.
+    const revertRow = await this.store.startRevert(this.revertColumns(row, options));
+    if (!revertRow) {
+      const latest = await this.store.get(row.id);
+      return latest?.revertedAt
+        ? { ok: false, reason: { kind: "already_reverted", revertedAt: latest.revertedAt, revertAuditId: latest.revertAuditId } }
+        : { ok: false, reason: { kind: "in_progress" } };
+    }
+
     const comment = revertCommentText(options.actorDisplayName, row.id);
     let executed: Executed;
     try {
       executed = await this.execute(api, record, current, comment);
     } catch (error) {
       const failure: RevertFailure = error instanceof RevertFailed ? error.failure : { kind: "error", message: errorMessage(error) };
-      const failedRow = await this.store.insert({
-        ...this.revertColumns(row, options),
-        status: "failed",
-        error: revertFailureText(row.id, failure),
-      });
-      return { ok: false, reason: { kind: "failed", failure, revertAuditId: failedRow.id } };
+      await this.store.finishPending(revertRow.id, { status: "failed", error: revertFailureText(row.id, failure) });
+      return { ok: false, reason: { kind: "failed", failure, revertAuditId: revertRow.id } };
     }
 
     const note = executed.note ? JSON.stringify(executed.note) : null;
-    const revertRow = await this.store.insert({
-      ...this.revertColumns(row, options),
-      result: executed.result,
-      status: "ok",
-      error: executed.partial ? note : null,
-      commentError: executed.commentError,
-      resultLastEditedTime: executed.lastEditedTime,
-    });
-    await this.store.update(row.id, {
-      revertedAt: new Date(),
-      revertedBy: options.actorDiscordUserId,
-      revertAuditId: revertRow.id,
-      revertNote: note,
-    });
+    await this.store.finishRevert(
+      revertRow.id,
+      row.id,
+      {
+        status: "ok",
+        result: executed.result,
+        error: executed.partial ? note : null,
+        commentError: executed.commentError,
+        resultLastEditedTime: executed.lastEditedTime,
+      },
+      { revertedBy: options.actorDiscordUserId, revertNote: note },
+    );
     return { ok: true, revertAuditId: revertRow.id, forced: conflict !== null, partial: executed.partial, note: executed.note };
   }
 

@@ -129,7 +129,7 @@ export class NotionWriteService {
     const commentError = await postComment(this.api, base.targetPageId, writeCommentText(actor, base.operation, row.id));
     const final = await this.api.retrievePage(base.targetPageId).catch(() => null);
     const url = final?.url ?? base.targetUrl ?? notionUrlFor(base.targetPageId);
-    await this.audit.update(row.id, {
+    await this.audit.recordAttribution(row.id, {
       commentError,
       targetUrl: url,
       resultLastEditedTime: final?.last_edited_time ?? fallbackLastEdited,
@@ -378,12 +378,12 @@ export class NotionWriteService {
     try {
       trashed = await this.api.updatePage({ pageId: page.id, inTrash: true });
     } catch (error) {
-      await this.audit.update(row.id, { status: "failed", error: errorMessage(error), commentError });
+      await this.audit.finishPending(row.id, { status: "failed", error: errorMessage(error), commentError });
       const mapped = toToolError(error);
       if (mapped instanceof ToolError) throw new ToolError(`${mapped.message} (audit #${row.id})`);
       throw error;
     }
-    await this.audit.update(row.id, {
+    await this.audit.finishPending(row.id, {
       status: "ok",
       result: toAuditJson(ArchivePageResultSchema, { inTrash: true }),
       commentError,
