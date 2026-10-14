@@ -1,3 +1,4 @@
+import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import type { LoginUser } from "../auth/users";
 import { errorMessage } from "../lib/errors";
@@ -61,14 +62,17 @@ function usersHref(query: string, page: number): string {
 
 function rolesLine(row: UserRowView): UserTableRow["roles"] {
   const plain = (text: string) => ({ text, title: null });
-  if (row.membership === "not_member") return plain("サーバー未参加");
-  if (row.membership === "unlinked") return plain("Discord 未連携");
-  if (row.membership === "unknown") return plain("確認できません");
-  if (row.implicitAdmin) return plain("管理者");
+  if (row.membership === "not_member") return plain(m.users_roles_not_member());
+  if (row.membership === "unlinked") return plain(m.users_roles_unlinked());
+  if (row.membership === "unknown") return plain(m.users_roles_unknown());
+  if (row.implicitAdmin) return plain(m.role_admin());
   const names = row.roles.map((role) => role.name);
-  if (names.length === 0) return plain("ロールなし");
+  if (names.length === 0) return plain(m.common_no_roles());
   if (names.length <= VISIBLE_ROLES) return plain(names.join(", "));
-  return { text: `${names.slice(0, VISIBLE_ROLES).join(", ")} 他 ${names.length - VISIBLE_ROLES}`, title: names.join(", ") };
+  return {
+    text: m.users_roles_more({ roles: names.slice(0, VISIBLE_ROLES).join(", "), count: names.length - VISIBLE_ROLES }),
+    title: names.join(", "),
+  };
 }
 
 function permissionBadges(row: UserRowView): UserTableRow["permissions"] {
@@ -76,7 +80,7 @@ function permissionBadges(row: UserRowView): UserTableRow["permissions"] {
   const badge = (permission: keyof typeof PERMISSION_LABELS, dark: boolean) => ({
     label: PERMISSION_LABELS[permission],
     tone: dark ? ("dark" as const) : ("secondary" as const),
-    title: individual.has(permission) ? "個人に付与" : undefined,
+    title: individual.has(permission) ? m.users_individual_grant() : undefined,
     individual: individual.has(permission),
   });
   if (row.isAdmin) return [badge("admin", true)];
@@ -99,7 +103,7 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
     permissions: permissionBadges(row),
     lastLogin: formatShortJst(row.user.lastLoginAt),
     revoked: wasRevokedSinceLogin(row.user)
-      ? { label: "失効済み", tone: "secondary", title: `${formatJst(row.user.revokedAt)} に失効` }
+      ? { label: m.users_revoked(), tone: "secondary", title: m.users_revoked_at({ time: formatJst(row.user.revokedAt) }) }
       : null,
     grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
     auditHref: discordUserId && viewer.canViewAudit ? auditListHref({ user: discordUserId }) : null,
@@ -146,14 +150,14 @@ export async function usersPage(
     total,
     prevHref,
     nextHref,
-    empty: query ? `「${query}」に一致するユーザーはいません。` : "まだログインしたユーザーはいません。",
+    empty: query ? m.users_empty_query({ query }) : m.users_empty(),
   };
 }
 
 export async function revokeTokens(deps: DashboardDeps, userId: string, actor: Viewer): Promise<ActionResult> {
   if (!actor.isAdmin) return ADMIN_ONLY;
   const user = userId ? await deps.users.find(userId) : null;
-  if (!user) return { kind: "error", message: "ユーザーが見つかりません。" };
+  if (!user) return { kind: "error", message: m.users_not_found() };
   const result = deps.revocation.revoke(user.userId);
   deps.log({
     event: "tokens_revoked",
@@ -163,5 +167,5 @@ export async function revokeTokens(deps: DashboardDeps, userId: string, actor: V
     refreshTokens: result.refreshTokens,
     accessTokens: result.accessTokens,
   });
-  return { kind: "ok", message: `${user.name} のトークンを失効しました。` };
+  return { kind: "ok", message: m.users_revoked_tokens({ name: user.name }) };
 }

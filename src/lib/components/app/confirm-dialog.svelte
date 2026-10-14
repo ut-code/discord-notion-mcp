@@ -6,6 +6,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { useHydrated } from "$lib/hydrated.svelte";
+  import { m } from "$lib/paraglide/messages.js";
 
   let {
     id,
@@ -53,7 +54,7 @@
       >
         {@render fields()}
         <AlertDialog.Footer>
-          <AlertDialog.Cancel type="button">キャンセル</AlertDialog.Cancel>
+          <AlertDialog.Cancel type="button">{m.common_cancel()}</AlertDialog.Cancel>
           <Button type="submit" {variant}>{submitLabel}</Button>
         </AlertDialog.Footer>
       </form>
@@ -65,7 +66,7 @@
     {#if description}<p class="text-sm text-muted-foreground">{description}</p>{/if}
     <form method="post" action={url} class="mt-4 flex justify-end gap-2">
       {@render fields()}
-      <Button variant="outline" popovertarget={id} popovertargetaction="hide">キャンセル</Button>
+      <Button variant="outline" popovertarget={id} popovertargetaction="hide">{m.common_cancel()}</Button>
       <Button type="submit" {variant}>{submitLabel}</Button>
     </form>
   </div>

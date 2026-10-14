@@ -3,6 +3,7 @@
   import CopyIcon from "@lucide/svelte/icons/copy";
   import { onMount } from "svelte";
   import { Button } from "$lib/components/ui/button";
+  import { m } from "$lib/paraglide/messages.js";
 
   let { text, label }: { text: string; label: string } = $props();
 
@@ -24,7 +25,7 @@
 </script>
 
 {#if available}
-  <Button variant="outline" size="icon-sm" onclick={copy} aria-label={copied ? "コピーしました" : label} title={label}>
+  <Button variant="outline" size="icon-sm" onclick={copy} aria-label={copied ? m.copy_done() : label} title={label}>
     {#if copied}<CheckIcon />{:else}<CopyIcon />{/if}
   </Button>
 {/if}

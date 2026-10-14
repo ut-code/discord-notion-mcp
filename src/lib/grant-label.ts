@@ -1,4 +1,6 @@
-/** Submit label of the grant form, e.g. "@Staff に Discord 読み取りを付与". */
+import { m } from "./paraglide/messages.js";
+
+/** Submit label of the grant form, naming the target and permission once a target is chosen. */
 export function grantSubmitLabel(permissionLabel: string, target: string | null | undefined): string {
-  return target ? `${target} に ${permissionLabel}を付与` : "付与する";
+  return target ? m.grants_submit_target({ target, permission: permissionLabel }) : m.grants_submit();
 }

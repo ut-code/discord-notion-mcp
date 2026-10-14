@@ -3,6 +3,7 @@
   import PageHeader from "$lib/components/app/page-header.svelte";
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import * as Table from "$lib/components/ui/table";
+  import { m } from "$lib/paraglide/messages.js";
   import GrantForm from "./grant-form.svelte";
   import GrantMenu from "./grant-menu.svelte";
   import SubjectCell from "./subject-cell.svelte";
@@ -10,11 +11,11 @@
   let { data } = $props();
 </script>
 
-<PageHeader title="権限" />
+<PageHeader title={m.grants_title()} />
 
 <div class="columns">
-  <section class="col-main gap-3" aria-label="付与の一覧">
-    <nav class="link-tabs" aria-label="権限で絞り込み">
+  <section class="col-main gap-3" aria-label={m.grants_list_label()}>
+    <nav class="link-tabs" aria-label={m.grants_filter_label()}>
       {#each data.tabs as tab (tab.href)}
         <a class="link-tab" href={tab.href} aria-current={tab.active ? "page" : undefined}>
           {tab.label}
@@ -26,10 +27,10 @@
       <Table.Root class="data-table table-roomy">
         <Table.Header>
           <Table.Row>
-            <Table.Head>対象</Table.Head>
-            <Table.Head>権限</Table.Head>
-            <Table.Head>付与日</Table.Head>
-            <Table.Head class="actions"><span class="sr-only">操作</span></Table.Head>
+            <Table.Head>{m.grants_subject()}</Table.Head>
+            <Table.Head>{m.common_permission()}</Table.Head>
+            <Table.Head>{m.grants_granted_at()}</Table.Head>
+            <Table.Head class="actions"><span class="sr-only">{m.common_actions()}</span></Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -48,14 +49,14 @@
                   <GrantMenu remove={row.remove} {index} />
                 {:else if row.locked}
                   <span class="inline-flex w-8 justify-center text-subtle" title={row.locked}>
-                    <LockIcon class="size-4" role="img" aria-label="削除不可" />
+                    <LockIcon class="size-4" role="img" aria-label={m.grants_locked_icon()} />
                   </span>
                 {/if}
               </Table.Cell>
             </Table.Row>
           {:else}
             <Table.Row>
-              <Table.Cell class="empty" colspan={4}>付与はありません。</Table.Cell>
+              <Table.Cell class="empty" colspan={4}>{m.grants_empty()}</Table.Cell>
             </Table.Row>
           {/each}
         </Table.Body>

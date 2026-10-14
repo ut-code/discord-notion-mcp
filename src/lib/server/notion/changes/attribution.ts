@@ -1,3 +1,4 @@
+import { m } from "../../../paraglide/messages.js";
 import type { NotionAuditOperation } from "../../db/schema";
 import { displayName } from "../../lib/display-name";
 import { errorMessage } from "../../lib/errors";
@@ -20,20 +21,20 @@ export function actorOf(principal: Principal): Actor {
 }
 
 export const OPERATION_LABELS: Record<WriteOperation, string> = {
-  create_page: "ページを作成",
-  append_content: "内容を追記",
-  edit_content: "本文を編集",
-  update_properties: "プロパティを更新",
-  archive_page: "ページをアーカイブ",
+  create_page: m.operation_create_page(),
+  append_content: m.operation_append_content(),
+  edit_content: m.operation_edit_content(),
+  update_properties: m.operation_update_properties(),
+  archive_page: m.operation_archive_page(),
 };
 
 export function writeCommentText(actor: Actor, operation: WriteOperation, auditId: number): string {
   const handle = actor.username ? ` (@${actor.username}, Discord)` : " (Discord)";
-  return `🤖 ${actor.displayName}${handle} が MCP 経由で${OPERATION_LABELS[operation]}しました — audit #${auditId}`;
+  return m.notion_comment_write({ actor: actor.displayName, handle, operation: OPERATION_LABELS[operation], auditId });
 }
 
 export function revertCommentText(actorDisplayName: string, auditId: number): string {
-  return `↩️ ${actorDisplayName} が audit #${auditId} を取り消しました`;
+  return m.notion_comment_revert({ actor: actorDisplayName, auditId });
 }
 
 /** Posts a page comment; returns the error message instead of throwing (writes must not fail on comments). */

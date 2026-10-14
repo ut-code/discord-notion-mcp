@@ -13,15 +13,16 @@
   import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
   import { initialOf } from "$lib/initial";
+  import { m } from "$lib/paraglide/messages.js";
   import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "$lib/paths";
 
   let { data, children } = $props();
 
   const nav = $derived([
-    { href: DASHBOARD_PATH, label: "統計", icon: ChartColumnIcon },
-    ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: "権限", icon: ShieldIcon }] : []),
-    { href: `${DASHBOARD_PATH}/users`, label: "ユーザー", icon: UsersIcon },
-    ...(data.viewer.canViewAudit ? [{ href: `${DASHBOARD_PATH}/audit`, label: "Notion 書き込み履歴", icon: HistoryIcon }] : []),
+    { href: DASHBOARD_PATH, label: m.stats_title(), icon: ChartColumnIcon },
+    ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: m.grants_title(), icon: ShieldIcon }] : []),
+    { href: `${DASHBOARD_PATH}/users`, label: m.users_title(), icon: UsersIcon },
+    ...(data.viewer.canViewAudit ? [{ href: `${DASHBOARD_PATH}/audit`, label: m.audit_title(), icon: HistoryIcon }] : []),
   ]);
 
   let connectOpen = $state(false);
@@ -44,7 +45,7 @@
         <span class="sub">Discord × Notion MCP</span>
       </div>
     </div>
-    <nav aria-label="メニュー" class="nav-list">
+    <nav aria-label={m.nav_label()} class="nav-list">
       {#each nav as item (item.href)}
         <a class="nav" href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
           <item.icon class="size-4 shrink-0" />
@@ -54,9 +55,9 @@
     </nav>
     <div class="sidebar-foot">
       <!-- Without JavaScript the link opens the connection page instead of the dialog. -->
-      <a class="nav nav-foot" href={CONNECT_PATH} title="接続方法" onclick={openConnect}>
+      <a class="nav nav-foot" href={CONNECT_PATH} title={m.connect_title()} onclick={openConnect}>
         <PlugIcon class="size-4 shrink-0" />
-        <span class="nav-foot-label">接続方法</span>
+        <span class="nav-foot-label">{m.connect_title()}</span>
       </a>
       <ThemeToggle />
     </div>
@@ -70,7 +71,14 @@
         </span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>
-        <Button type="submit" variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label="ログアウト" title="ログアウト">
+        <Button
+          type="submit"
+          variant="ghost"
+          size="icon-sm"
+          class="text-muted-foreground"
+          aria-label={m.common_sign_out()}
+          title={m.common_sign_out()}
+        >
           <LogOutIcon />
         </Button>
       </form>
@@ -85,7 +93,7 @@
 <Dialog.Root bind:open={connectOpen}>
   <Dialog.Content class="sm:max-w-[480px]">
     <Dialog.Header>
-      <Dialog.Title>接続方法</Dialog.Title>
+      <Dialog.Title>{m.connect_title()}</Dialog.Title>
     </Dialog.Header>
     <ConnectGuide mcpUrl={data.mcpUrl} heading="h3" />
   </Dialog.Content>

@@ -1,4 +1,5 @@
 import { grantSubmitLabel } from "../../grant-label";
+import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import { isPermission, PERMISSIONS, type Permission, type SubjectType } from "../permissions/permissions";
 import type { GuildInfo, RoleInfo } from "../discord/types";
@@ -70,9 +71,9 @@ export interface GrantsPageData {
 }
 
 function rolesText(guild: GuildInfo, user: UserSubject): string {
-  if (!user.member) return "非メンバー";
+  if (!user.member) return m.grants_subject_non_member();
   const names = heldRoles(guild, user.member).map((role) => role.name);
-  return names.length > 0 ? names.join(", ") : "ロールなし";
+  return names.length > 0 ? names.join(", ") : m.common_no_roles();
 }
 
 function userSecondLine(guild: GuildInfo, user: UserSubject): string {
@@ -83,7 +84,7 @@ function roleSubject(role: RoleInfo | null, fallbackId: string): SubjectView {
   return {
     kind: "role",
     name: role ? roleHandle(role.name) : fallbackId,
-    secondary: role ? "ロール" : "削除済みロール",
+    secondary: role ? m.common_role() : m.grants_subject_deleted_role(),
     unknown: false,
     color: role ? (roleColor(role.color) ?? null) : null,
     avatarUrl: null,
@@ -93,7 +94,15 @@ function roleSubject(role: RoleInfo | null, fallbackId: string): SubjectView {
 
 function userSubject(guild: GuildInfo, user: UserSubject | null, fallbackId: string): SubjectView {
   if (!user?.displayName) {
-    return { kind: "user", name: fallbackId, secondary: "不明なユーザー", unknown: true, color: null, avatarUrl: null, title: null };
+    return {
+      kind: "user",
+      name: fallbackId,
+      secondary: m.grants_subject_unknown_user(),
+      unknown: true,
+      color: null,
+      avatarUrl: null,
+      title: null,
+    };
   }
   return {
     kind: "user",
@@ -109,11 +118,9 @@ function userSubject(guild: GuildInfo, user: UserSubject | null, fallbackId: str
 function redundancyBadge(redundancy: Redundancy): BadgeView {
   const role = redundancy.kind === "role" ? roleHandle(redundancy.role.name) : null;
   return {
-    label: role ? `${role} で付与済み` : "管理者で付与済み",
+    label: role ? m.grants_redundant_role({ role }) : m.grants_redundant_admin(),
     tone: "warn",
-    title: role
-      ? `この権限は ${role} ロールで既に付与されているため、この個人付与は効果がありません`
-      : "この権限は管理者として既に付与されているため、この個人付与は効果がありません",
+    title: role ? m.grants_redundant_role_title({ role }) : m.grants_redundant_admin_title(),
   };
 }
 
@@ -125,7 +132,7 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
       permissionLabel: PERMISSION_LABELS.admin,
       redundancy: null,
       grantedAt: "—",
-      locked: "Discord 側の権限なのでここでは削除できません",
+      locked: m.grants_locked_admin_role(),
       remove: null,
     };
   }
@@ -136,7 +143,7 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
       permissionLabel: PERMISSION_LABELS.admin,
       redundancy: null,
       grantedAt: "—",
-      locked: "サーバーオーナーは常に管理者です",
+      locked: m.grants_locked_owner(),
       remove: null,
     };
   }
@@ -155,9 +162,9 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
       permission: grant.permission,
       subjectType: grant.subjectType,
       subjectId: grant.subjectId,
-      label: `${subjectLabel} の ${label}を削除`,
-      menuLabel: `${subjectLabel} の ${label}の操作`,
-      confirm: `${subjectLabel} の ${label}を削除しますか？`,
+      label: m.grants_remove_label({ subject: subjectLabel, permission: label }),
+      menuLabel: m.grants_remove_menu_label({ subject: subjectLabel, permission: label }),
+      confirm: m.grants_remove_confirm({ subject: subjectLabel, permission: label }),
     },
   };
 }
@@ -167,7 +174,7 @@ async function searchCandidates(deps: DashboardDeps, query: string): Promise<{ c
     return { candidates: await deps.memberSearch.search(query), error: null };
   } catch (error) {
     deps.logError({ event: "admin_lookup_failed", lookup: "member_search", error: errorMessage(error) });
-    return { candidates: [], error: "メンバー検索に失敗しました。しばらくしてから再試行してください。" };
+    return { candidates: [], error: m.grants_member_search_failed_retry() };
   }
 }
 
@@ -182,7 +189,7 @@ export async function memberSearchResult(deps: DashboardDeps, rawQuery: string |
   if (!viewer.isAdmin) return { status: 403, body: { error: ADMIN_ONLY.message ?? "" } };
   const query = rawQuery?.trim() ?? "";
   if (query.length < 1 || query.length > MEMBER_QUERY_MAX_LENGTH) {
-    return { status: 400, body: { error: `検索語は 1〜${MEMBER_QUERY_MAX_LENGTH} 文字で入力してください。` } };
+    return { status: 400, body: { error: m.grants_member_query_length({ max: MEMBER_QUERY_MAX_LENGTH }) } };
   }
   const [guild, search] = await Promise.all([deps.directory.fetchGuild(), searchCandidates(deps, query)]);
   if (search.error) return { status: 502, body: { error: search.error } };
@@ -212,7 +219,7 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
   return {
     filter,
     tabs: [null, ...PERMISSIONS].map((value) => ({
-      label: value ? PERMISSION_LABELS[value] : "すべて",
+      label: value ? PERMISSION_LABELS[value] : m.grants_tab_all(),
       count: value ? null : allRows.length,
       href: value ? `${GRANTS_PATH}?filter=${encodeURIComponent(value)}` : GRANTS_PATH,
       active: filter === value,
@@ -277,18 +284,19 @@ type ParsedGrantForm = { ok: true; form: GrantForm } | { ok: false; message: str
 async function parseGrantForm(deps: DashboardDeps, body: FormData): Promise<ParsedGrantForm> {
   const permission = formString(body, "permission");
   const subjectType = formString(body, "subjectType");
-  if (!isPermission(permission)) return { ok: false, message: "不明な権限です。" };
-  if (subjectType !== "role" && subjectType !== "user") return { ok: false, message: "対象の種類が不正です。" };
+  if (!isPermission(permission)) return { ok: false, message: m.grants_unknown_permission() };
+  if (subjectType !== "role" && subjectType !== "user") return { ok: false, message: m.grants_invalid_subject_type() };
   const subjectId = formString(body, "subjectId") || formString(body, subjectType === "role" ? "roleId" : "userId");
-  if (!subjectId) return { ok: false, message: subjectType === "role" ? "ロールを選んでください。" : "ユーザーを選んでください。" };
-  if (!isSnowflake(subjectId)) return { ok: false, message: `「${subjectId}」は Discord の ID（15〜22 桁の数字）ではありません。` };
+  if (!subjectId) return { ok: false, message: subjectType === "role" ? m.grants_choose_role() : m.grants_choose_user() };
+  if (!isSnowflake(subjectId)) return { ok: false, message: m.grants_invalid_snowflake({ id: subjectId }) };
   if (subjectType === "user") {
     const user = await deps.subjects.resolveUser(subjectId);
-    const label = user.displayName ? `ユーザー「${user.displayName}」` : `ユーザー ${subjectId}`;
+    const label = user.displayName ? m.grants_subject_user_named({ name: user.displayName }) : m.grants_subject_user_id({ id: subjectId });
     return { ok: true, form: { permission, subjectType, subjectId, label } };
   }
   const role = (await deps.directory.fetchGuild()).roles.find((candidate) => candidate.id === subjectId);
-  return { ok: true, form: { permission, subjectType, subjectId, role, label: role ? `ロール「${role.name}」` : `ロール ${subjectId}` } };
+  const label = role ? m.grants_subject_role_named({ name: role.name }) : m.grants_subject_role_id({ id: subjectId });
+  return { ok: true, form: { permission, subjectType, subjectId, role, label } };
 }
 
 export async function createGrant(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
@@ -297,7 +305,7 @@ export async function createGrant(deps: DashboardDeps, body: FormData, actor: Vi
   if (!parsed.ok) return { kind: "error", message: parsed.message };
   const { form } = parsed;
   if (form.subjectType === "role" && (!form.role || form.role.managed)) {
-    return { kind: "error", message: "このサーバーに存在する（連携用でない）ロールを選んでください。" };
+    return { kind: "error", message: m.grants_role_unavailable() };
   }
   const by = actor.discordUserId;
   const { created } = await deps.grants.createGrant({
@@ -306,9 +314,10 @@ export async function createGrant(deps: DashboardDeps, body: FormData, actor: Vi
     subjectId: form.subjectId,
     createdBy: by,
   });
-  if (!created) return { kind: "warn", message: `${form.label}には既に「${PERMISSION_LABELS[form.permission]}」が付与されています。` };
+  const permission = PERMISSION_LABELS[form.permission];
+  if (!created) return { kind: "warn", message: m.grants_already_granted({ subject: form.label, permission }) };
   deps.log({ event: "grant_added", permission: form.permission, subjectType: form.subjectType, subjectId: form.subjectId, by });
-  return { kind: "ok", message: `${form.label}に「${PERMISSION_LABELS[form.permission]}」を付与しました。` };
+  return { kind: "ok", message: m.grants_granted({ subject: form.label, permission }) };
 }
 
 export async function deleteGrant(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
@@ -317,7 +326,7 @@ export async function deleteGrant(deps: DashboardDeps, body: FormData, actor: Vi
   if (!parsed.ok) return { kind: "error", message: parsed.message };
   const { form } = parsed;
   const removed = await deps.grants.removeGrant(form);
-  if (!removed) return { kind: "warn", message: "この付与は既に削除されています。" };
+  if (!removed) return { kind: "warn", message: m.grants_already_removed() };
   deps.log({
     event: "grant_removed",
     permission: form.permission,
@@ -326,5 +335,5 @@ export async function deleteGrant(deps: DashboardDeps, body: FormData, actor: Vi
     by: actor.discordUserId,
   });
   const subject = form.role ? roleHandle(form.role.name) : form.label;
-  return { kind: "ok", message: `${subject} から「${PERMISSION_LABELS[form.permission]}」を削除しました。` };
+  return { kind: "ok", message: m.grants_removed({ subject, permission: PERMISSION_LABELS[form.permission] }) };
 }

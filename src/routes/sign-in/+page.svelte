@@ -4,6 +4,7 @@
   import AuthLayout from "$lib/components/app/auth-layout.svelte";
   import { Button } from "$lib/components/ui/button";
   import { initialOf } from "$lib/initial";
+  import { m } from "$lib/paraglide/messages.js";
 
   let { data } = $props();
 
@@ -28,7 +29,7 @@
         window.location.href = result.url;
         return;
       }
-      throw new Error(result.message || result.error_description || "ログインを開始できませんでした。");
+      throw new Error(result.message || result.error_description || m.sign_in_start_failed());
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
       busy = false;
@@ -36,12 +37,12 @@
   }
 </script>
 
-<AuthLayout title="ログイン — Discord × Notion MCP">
+<AuthLayout title={`${m.sign_in_title()} — Discord × Notion MCP`}>
   <div class="flex flex-col items-center gap-3.5 text-center">
     <div class="logo logo-lg" aria-hidden="true">{initialOf(data.guildName ?? "MCP")}</div>
     <div class="stack items-center gap-1.5">
       <h1 class="text-[22px]">{data.heading}</h1>
-      <p class="text-sm text-muted-foreground">Discord と Notion を AI から使うためのログイン</p>
+      <p class="text-sm text-muted-foreground">{m.sign_in_lead()}</p>
     </div>
   </div>
   <section class="auth-card">
@@ -52,7 +53,7 @@
       onclick={signIn}
     >
       <LogInIcon />
-      Discord でログイン
+      {m.sign_in_discord()}
     </Button>
     {#if status}
       <p class="text-[13px] text-bad-fg" role="status">{status}</p>
@@ -60,7 +61,7 @@
     {#if data.oauthQuery && data.clientName}
       <div class="flex items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-[13px] text-text-4">
         <LockIcon class="size-4" />
-        <span>接続元: <strong class="font-semibold text-foreground">{data.clientName}</strong></span>
+        <span>{m.sign_in_client()} <strong class="font-semibold text-foreground">{data.clientName}</strong></span>
       </div>
     {/if}
   </section>

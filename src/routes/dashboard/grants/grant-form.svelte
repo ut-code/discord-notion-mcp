@@ -11,6 +11,7 @@
   import * as NativeSelect from "$lib/components/ui/native-select";
   import { grantSubmitLabel } from "$lib/grant-label";
   import { useHydrated } from "$lib/hydrated.svelte";
+  import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
   import type { GrantFormView } from "$lib/server/dashboard/grants";
   import SubjectPicker, { type GrantSubject } from "./subject-picker.svelte";
@@ -49,11 +50,11 @@
 </script>
 
 <section class="panel panel-pad col-side gap-[18px]" aria-labelledby="add-grant">
-  <h2 id="add-grant">権限を付与</h2>
+  <h2 id="add-grant">{m.grants_add()}</h2>
   <form class="grant-form flex flex-col gap-[18px]" method="post" action={actionUrl(page.url, "create")} use:enhance>
     {#if filter}<input type="hidden" name="filter" value={filter} />{/if}
     <div class="flex flex-col gap-2">
-      <Label for="grant-permission">権限</Label>
+      <Label for="grant-permission">{m.common_permission()}</Label>
       <NativeSelect.Root id="grant-permission" name="permission" class="w-full" aria-describedby="grant-hint" bind:value={permission}>
         {#each form.permissions as option (option.value)}
           <option value={option.value}>{option.label}</option>
@@ -70,21 +71,21 @@
       {/if}
     {:else}
       <fieldset class="m-0 min-w-0 border-0 p-0">
-        <legend class="mb-2 p-0 text-sm font-medium">対象</legend>
+        <legend class="mb-2 p-0 text-sm font-medium">{m.grants_subject()}</legend>
         <div class="segmented">
           <label>
             <input type="radio" id="target-role" name="subjectType" value="role" bind:group={subjectType} />
-            <span class="link-tab">ロール</span>
+            <span class="link-tab">{m.common_role()}</span>
           </label>
           <label>
             <input type="radio" id="target-user" name="subjectType" value="user" bind:group={subjectType} />
-            <span class="link-tab">ユーザー</span>
+            <span class="link-tab">{m.common_user()}</span>
           </label>
         </div>
       </fieldset>
 
       <div class="only-role flex flex-col gap-2">
-        <Label for="grant-role">ロール</Label>
+        <Label for="grant-role">{m.common_role()}</Label>
         <NativeSelect.Root id="grant-role" name="roleId" class="w-full" bind:value={roleId}>
           {#each form.roles as role (role.id)}
             <option value={role.id}>{role.name}</option>
@@ -93,7 +94,7 @@
       </div>
 
       <div class="only-user flex flex-col gap-2">
-        <Label for="grant-q">メンバーを検索</Label>
+        <Label for="grant-q">{m.grants_member_search_label()}</Label>
         <div class="search">
           <button
             class="search-icon"
@@ -101,16 +102,23 @@
             formmethod="get"
             formaction={`${DASHBOARD_PATH}/grants`}
             formnovalidate
-            aria-label="検索"
+            aria-label={m.common_search()}
           >
             <SearchIcon class="size-4" />
           </button>
-          <Input id="grant-q" name="q" type="search" value={form.query} autocomplete="off" placeholder="名前・@ユーザー名・ID" />
+          <Input
+            id="grant-q"
+            name="q"
+            type="search"
+            value={form.query}
+            autocomplete="off"
+            placeholder={m.grants_member_search_placeholder()}
+          />
         </div>
         {#if form.searchError}
           <div class="picker"><p class="px-2 py-2.5 text-[13px] text-bad-fg">{form.searchError}</p></div>
         {:else if form.candidates.length > 0}
-          <div class="picker" role="radiogroup" aria-label="付与するユーザー">
+          <div class="picker" role="radiogroup" aria-label={m.grants_member_choices_label()}>
             {#each form.candidates as user (user.id)}
               <label class="pick">
                 <input type="radio" name="userId" value={user.id} bind:group={userId} />
@@ -125,7 +133,7 @@
           </div>
         {:else if form.query}
           <div class="picker">
-            <p class="px-2 py-2.5 text-[13px] text-muted-foreground">「{form.query}」に一致するメンバーはいません。</p>
+            <p class="px-2 py-2.5 text-[13px] text-muted-foreground">{m.grants_member_no_match({ query: form.query })}</p>
           </div>
         {/if}
       </div>

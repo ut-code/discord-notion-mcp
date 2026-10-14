@@ -13,6 +13,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Label } from "$lib/components/ui/label";
+  import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
   import type { CandidateView, GrantFormView } from "$lib/server/dashboard/grants";
   import { MemberLookup } from "./member-lookup.svelte";
@@ -55,7 +56,7 @@
   const open = $derived(needle !== "" && !dismissed);
   const active = $derived(options.find((option) => keyOf(option) === activeKey) ?? options[0]);
   const memberNote = $derived(
-    members.length > 0 || lookup.loading ? null : (lookup.error ?? (roleOptions.length > 0 ? null : "一致するロール・メンバーはいません")),
+    members.length > 0 || lookup.loading ? null : (lookup.error ?? (roleOptions.length > 0 ? null : m.grants_picker_no_match())),
   );
 
   $effect(() => {
@@ -137,7 +138,7 @@
 {/snippet}
 
 <div class="flex flex-col gap-2">
-  <Label id={labelId} for={selected ? undefined : id}>対象</Label>
+  <Label id={labelId} for={selected ? undefined : id}>{m.grants_subject()}</Label>
   {#if selected}
     <div
       role="group"
@@ -150,7 +151,7 @@
         <AppAvatar name={selected.label} url={selected.avatarUrl} size="sm" />
       {/if}
       <span class="min-w-0 flex-1 truncate">{selected.label}</span>
-      <Button bind:ref={clear} variant="ghost" size="icon-sm" aria-label="選択を解除" onclick={reset}>
+      <Button bind:ref={clear} variant="ghost" size="icon-sm" aria-label={m.grants_picker_clear()} onclick={reset}>
         <XIcon />
       </Button>
     </div>
@@ -165,7 +166,7 @@
         role="combobox"
         autocomplete="off"
         spellcheck={false}
-        placeholder="ロール・メンバーを検索"
+        placeholder={m.grants_picker_placeholder()}
         aria-autocomplete="list"
         aria-expanded={open && options.length > 0}
         aria-controls={listId}
@@ -175,7 +176,7 @@
         {onkeydown}
       />
       {#if lookup.loading}
-        <span class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground" role="status" aria-label="検索中">
+        <span class="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground" role="status" aria-label={m.grants_picker_loading()}>
           <LoaderCircleIcon class="size-4 animate-spin" />
         </span>
       {/if}
@@ -184,7 +185,7 @@
       <div id={listId} role="listbox" aria-labelledby={labelId}>
         {#if open && roleOptions.length > 0}
           <div role="group" aria-labelledby={`${id}-roles`}>
-            {@render heading("ロール", `${id}-roles`)}
+            {@render heading(m.common_role(), `${id}-roles`)}
             {#each roleOptions as subject (keyOf(subject))}
               {@render option(subject)}
             {/each}
@@ -192,7 +193,7 @@
         {/if}
         {#if open && members.length > 0}
           <div role="group" aria-labelledby={`${id}-members`}>
-            {@render heading("メンバー", `${id}-members`)}
+            {@render heading(m.grants_picker_members(), `${id}-members`)}
             {#each memberOptions as entry (entry.subject.id)}
               {@render option(entry.subject, entry.secondLine)}
             {/each}

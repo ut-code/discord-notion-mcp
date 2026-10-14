@@ -2,26 +2,31 @@ import type { Permission } from "../permissions/permissions";
 import type { NotionAuditOperation } from "../db/schema";
 import { OPERATION_LABELS } from "../notion/changes/attribution";
 import { isRecord } from "../../guards";
+import { m } from "../../paraglide/messages.js";
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
-  "discord:read": "Discord 読み取り",
-  "notion:read": "Notion 読み取り",
-  "notion:write": "Notion 書き込み",
-  admin: "管理者",
+  "discord:read": m.permission_discord_read(),
+  "notion:read": m.permission_notion_read(),
+  "notion:write": m.permission_notion_write(),
+  admin: m.permission_admin(),
 };
 
 /** One-sentence hints under the permission picker. */
 export const PERMISSION_HINTS: Record<Permission, string> = {
-  "discord:read": "閲覧できるチャンネルのメッセージ・スレッド・イベントを読めます。",
-  "notion:read": "Notion 連携に共有されたページ・データベースを読めます。",
-  "notion:write": "ページの作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
-  admin: "すべての権限に加えて、この管理画面を使えます。",
+  "discord:read": m.permission_hint_discord_read(),
+  "notion:read": m.permission_hint_notion_read(),
+  "notion:write": m.permission_hint_notion_write(),
+  admin: m.permission_hint_admin(),
 };
 
-export const AUDIT_OPERATION_LABELS: Record<NotionAuditOperation, string> = { ...OPERATION_LABELS, revert: "取り消し" };
+export const AUDIT_OPERATION_LABELS: Record<NotionAuditOperation, string> = { ...OPERATION_LABELS, revert: m.operation_revert() };
 
 /** Status filter of the audit list: row status, or rows that were reverted later. */
-export const AUDIT_STATUS_FILTERS = { ok: "成功", failed: "失敗", reverted: "取り消し済み" } as const;
+export const AUDIT_STATUS_FILTERS = {
+  ok: m.audit_status_ok(),
+  failed: m.audit_status_failed(),
+  reverted: m.audit_status_reverted(),
+} as const;
 export type AuditStatusFilter = keyof typeof AUDIT_STATUS_FILTERS;
 
 export function isAuditStatusFilter(value: string | undefined): value is AuditStatusFilter {

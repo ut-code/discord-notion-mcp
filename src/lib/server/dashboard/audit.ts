@@ -1,4 +1,5 @@
 import { isOneOf } from "../../one-of";
+import { m } from "../../paraglide/messages.js";
 import { dashboardAuditPath, DASHBOARD_PATH } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
@@ -32,7 +33,7 @@ import { formString, pageLinks, pageParam, type ActionResult, type Option } from
 const AUDIT_PAGE_SIZE = 50;
 
 /** 404 page of an unknown write-history entry. */
-export const AUDIT_NOT_FOUND = { title: "見つかりません", message: "指定された履歴はありません。" };
+export const AUDIT_NOT_FOUND = { title: m.error_title_404(), message: m.audit_not_found() };
 
 export interface AuditFilters {
   user?: string;
@@ -56,17 +57,17 @@ export function auditListHref(filters: AuditFilters, page = 1): string {
 function auditTitle(row: NotionAuditRow): string {
   if (row.targetTitle) return row.targetTitle;
   const requested = row.operation === "create_page" ? row.request.title : undefined;
-  return typeof requested === "string" && requested ? requested : "Notion ページ";
+  return typeof requested === "string" && requested ? requested : m.audit_untitled_page();
 }
 
 const BADGES = {
-  failed: { label: "失敗", tone: "destructive" },
-  pending: { label: "処理中", tone: "secondary" },
-  ok: { label: "成功", tone: "success" },
-  reverted: { label: "取り消し済み", tone: "secondary" },
+  failed: { label: m.audit_status_failed(), tone: "destructive" },
+  pending: { label: m.audit_status_pending(), tone: "secondary" },
+  ok: { label: m.audit_status_ok(), tone: "success" },
+  reverted: { label: m.audit_status_reverted(), tone: "secondary" },
 } as const satisfies Record<string, BadgeView>;
 
-/** Full status of the detail page: 成功 + 取り消し済み for a reverted write. */
+/** Full status of the detail page: ok + reverted for a reverted write. */
 function statusBadges(row: NotionAuditRow): BadgeView[] {
   if (row.status !== "ok") return [BADGES[row.status]];
   return row.revertedAt ? [BADGES.ok, BADGES.reverted] : [BADGES.ok];
@@ -89,7 +90,7 @@ export interface AuditRowView {
   title: string;
   targetUrl: string | null;
   badge: BadgeView | null;
-  /** One-line summary under the title in compact lists: "操作 · ユーザー · 日時". */
+  /** One-line summary under the title in compact lists: "operation · user · time". */
   meta: string;
 }
 
@@ -97,7 +98,7 @@ export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, s
   const createdAt = formatShortJst(row.createdAt);
   const action =
     row.operation === "revert" && row.revertOfAuditId !== null
-      ? `#${row.revertOfAuditId} を取り消し`
+      ? m.audit_meta_revert_of({ id: row.revertOfAuditId })
       : AUDIT_OPERATION_LABELS[row.operation];
   return {
     id: row.id,
@@ -116,7 +117,7 @@ export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, s
 export interface AuditListData {
   rows: AuditRowView[];
   total: number;
-  /** "N 件中 a–b 件"; null when the page shows no rows. */
+  /** "a–b of N"; null when the page shows no rows. */
   range: string | null;
   prevHref: string | null;
   nextHref: string | null;
@@ -134,7 +135,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
   const user = params.get("user")?.trim();
   if (user) {
     if (isSnowflake(user)) filters.user = user;
-    else error = "ユーザー ID は Discord の数値 ID で指定してください。";
+    else error = m.audit_filter_invalid_user();
   }
   const operation = params.get("operation");
   if (isAuditOperation(operation)) filters.operation = operation;
@@ -171,41 +172,44 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
   };
 }
 
-type Phrase = (title: string, row: NotionAuditRow) => string;
+/** `source` is the reverted entry's id; only the revert sentences use it. */
+type SummaryInputs = { actor: string; time: string; title: string; source: number | string };
 
-const revertOf = (row: NotionAuditRow) => `#${row.revertOfAuditId ?? "?"}`;
-
-/** What the row did, per status: "「t」を作成しました" / "…に失敗しました" / "…しています". */
-const SUMMARY: Record<NotionAuditRow["status"], Record<NotionAuditOperation, Phrase>> = {
+/** What the row did, per status and operation. */
+const SUMMARY: Record<NotionAuditRow["status"], Record<NotionAuditOperation, (inputs: SummaryInputs) => string>> = {
   ok: {
-    create_page: (t) => `「${t}」を作成しました`,
-    append_content: (t) => `「${t}」に内容を追記しました`,
-    edit_content: (t) => `「${t}」の本文を編集しました`,
-    update_properties: (t) => `「${t}」のプロパティを更新しました`,
-    archive_page: (t) => `「${t}」をアーカイブしました`,
-    revert: (t, row) => `「${t}」への ${revertOf(row)} の変更を取り消しました`,
+    create_page: m.audit_summary_ok_create_page,
+    append_content: m.audit_summary_ok_append_content,
+    edit_content: m.audit_summary_ok_edit_content,
+    update_properties: m.audit_summary_ok_update_properties,
+    archive_page: m.audit_summary_ok_archive_page,
+    revert: m.audit_summary_ok_revert,
   },
   failed: {
-    create_page: (t) => `「${t}」の作成に失敗しました`,
-    append_content: (t) => `「${t}」への追記に失敗しました`,
-    edit_content: (t) => `「${t}」の本文の編集に失敗しました`,
-    update_properties: (t) => `「${t}」のプロパティの更新に失敗しました`,
-    archive_page: (t) => `「${t}」のアーカイブに失敗しました`,
-    revert: (t, row) => `「${t}」への ${revertOf(row)} の変更の取り消しに失敗しました`,
+    create_page: m.audit_summary_failed_create_page,
+    append_content: m.audit_summary_failed_append_content,
+    edit_content: m.audit_summary_failed_edit_content,
+    update_properties: m.audit_summary_failed_update_properties,
+    archive_page: m.audit_summary_failed_archive_page,
+    revert: m.audit_summary_failed_revert,
   },
   pending: {
-    create_page: (t) => `「${t}」を作成しています`,
-    append_content: (t) => `「${t}」に内容を追記しています`,
-    edit_content: (t) => `「${t}」の本文を編集しています`,
-    update_properties: (t) => `「${t}」のプロパティを更新しています`,
-    archive_page: (t) => `「${t}」をアーカイブしています`,
-    revert: (t, row) => `「${t}」への ${revertOf(row)} の変更を取り消しています`,
+    create_page: m.audit_summary_pending_create_page,
+    append_content: m.audit_summary_pending_append_content,
+    edit_content: m.audit_summary_pending_edit_content,
+    update_properties: m.audit_summary_pending_update_properties,
+    archive_page: m.audit_summary_pending_archive_page,
+    revert: m.audit_summary_pending_revert,
   },
 };
 
 function summarySentence(row: NotionAuditRow): string {
-  const action = SUMMARY[row.status][row.operation](auditTitle(row), row);
-  return `${row.discordDisplayName} が ${formatShortJst(row.createdAt)} に${action}。`;
+  return SUMMARY[row.status][row.operation]({
+    actor: row.discordDisplayName,
+    time: formatShortJst(row.createdAt),
+    title: auditTitle(row),
+    source: row.revertOfAuditId ?? "?",
+  });
 }
 
 /** Stored hunks; failed writes have none, so the requested change is shown instead. */
@@ -253,7 +257,11 @@ function changeView(row: NotionAuditRow): ChangeView {
       const hunks = contentHunks(row);
       const removed = hunks.reduce((sum, hunk) => sum + linesOf(hunk.before).length, 0);
       const added = hunks.reduce((sum, hunk) => sum + linesOf(hunk.after).length, 0);
-      return { kind: "diff", meta: hunks.length > 0 ? `${hunks.length} か所 · −${removed} +${added}` : null, lines: diffLines(hunks) };
+      return {
+        kind: "diff",
+        meta: hunks.length > 0 ? m.audit_change_diff_meta({ hunks: hunks.length, removed, added }) : null,
+        lines: diffLines(hunks),
+      };
     }
     case "update_properties": {
       const snapshot = UpdatePropertiesSnapshotSchema.safeParse(row.snapshot);
@@ -262,11 +270,11 @@ function changeView(row: NotionAuditRow): ChangeView {
         const raw = requested[entry.name] ?? requested[entry.id];
         return {
           name: entry.name,
-          before: renderPropertyValue(entry.value) || "（空）",
-          after: (raw === undefined ? "" : renderRequestedPropertyValue(entry.type, raw)) || "（空）",
+          before: renderPropertyValue(entry.value) || m.audit_change_empty_value(),
+          after: (raw === undefined ? "" : renderRequestedPropertyValue(entry.type, raw)) || m.audit_change_empty_value(),
         };
       });
-      return { kind: "properties", meta: entries.length > 0 ? `${entries.length} 件` : null, entries };
+      return { kind: "properties", meta: entries.length > 0 ? m.audit_change_properties_meta({ count: entries.length }) : null, entries };
     }
     case "create_page":
       return { kind: "created", title: auditTitle(row), targetUrl: row.targetUrl };
@@ -334,8 +342,8 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
       comment: row.commentError ? { kind: "error", text: row.commentError } : row.status === "ok" ? { kind: "posted" } : { kind: "none" },
       error: row.error
         ? row.status === "failed"
-          ? { label: "エラー", text: row.error, failed: true }
-          : { label: "注記", text: storedNoteText(row.error), failed: false }
+          ? { label: m.audit_error_label(), text: row.error, failed: true }
+          : { label: m.audit_note_label(), text: storedNoteText(row.error), failed: false }
         : null,
     },
     revert: viewer.isAdmin ? revertView(deps, row) : null,
@@ -376,7 +384,7 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
   if (id === null || !(await deps.audit.getAudit(id))) return null;
   const force = formString(form, "force") === "true";
   if (formString(form, "confirm") !== "yes") {
-    return { result: { kind: "error", message: "確認のチェックを入れてから取り消してください。" }, conflict: force };
+    return { result: { kind: "error", message: m.audit_revert_confirm_required() }, conflict: force };
   }
   let outcome: RevertResult;
   try {
@@ -388,7 +396,7 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
     });
   } catch (error) {
     deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: false, error: errorMessage(error) });
-    return { result: { kind: "error", message: `取り消しに失敗しました: ${errorMessage(error)}` }, conflict: false };
+    return { result: { kind: "error", message: m.audit_revert_failed({ error: errorMessage(error) }) }, conflict: false };
   }
   if (outcome.ok) {
     deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: true, revertAuditId: outcome.revertAuditId });

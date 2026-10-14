@@ -4,6 +4,7 @@
   import SunIcon from "@lucide/svelte/icons/sun";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
+  import { m } from "$lib/paraglide/messages.js";
   import { THEME_PATH } from "$lib/paths";
   import { nextTheme, THEME_LABELS } from "$lib/theme";
   import { getThemeState } from "$lib/theme-state.svelte";
@@ -11,7 +12,7 @@
   const theme = getThemeState();
   const icons = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };
   const Icon = $derived(icons[theme.current]);
-  const label = $derived(`表示: ${THEME_LABELS[theme.current]}`);
+  const label = $derived(m.theme_toggle_label({ theme: THEME_LABELS[theme.current] }));
   const next = $derived(nextTheme(theme.current));
 
   function onsubmit(event: SubmitEvent) {

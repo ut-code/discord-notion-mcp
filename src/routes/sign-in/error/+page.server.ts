@@ -1,7 +1,8 @@
 import { error } from "@sveltejs/kit";
+import { m } from "$lib/paraglide/messages.js";
 import { signInErrorMessage } from "$lib/server/dashboard/session";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = ({ url }) => {
-  error(400, { title: "ログインできませんでした", message: signInErrorMessage(url.searchParams.get("error")) });
+  error(400, { title: m.sign_in_failed_title(), message: signInErrorMessage(url.searchParams.get("error")) });
 };

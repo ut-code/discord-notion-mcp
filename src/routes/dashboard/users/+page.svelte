@@ -9,6 +9,7 @@
   import * as Table from "$lib/components/ui/table";
   import { afterNavigate, goto } from "$app/navigation";
   import { useHydrated } from "$lib/hydrated.svelte";
+  import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
   import UserMenu from "./user-menu.svelte";
 
@@ -40,37 +41,37 @@
   }
 </script>
 
-<PageHeader title="ユーザー" />
+<PageHeader title={m.users_title()} />
 
 <div class="footer-row">
   <form class="search min-w-[220px] flex-[0_1_320px]" method="get" action={`${DASHBOARD_PATH}/users`} role="search">
     {#if hydrated.current}
       <span class="search-icon pointer-events-none" aria-hidden="true"><SearchIcon class="size-4" /></span>
     {:else}
-      <button class="search-icon" type="submit" aria-label="検索"><SearchIcon class="size-4" /></button>
+      <button class="search-icon" type="submit" aria-label={m.common_search()}><SearchIcon class="size-4" /></button>
     {/if}
-    <label for="user-q" class="sr-only">ユーザーを検索</label>
+    <label for="user-q" class="sr-only">{m.users_search_label()}</label>
     <Input
       id="user-q"
       name="q"
       type="search"
       bind:value={query}
       oninput={searchAsYouType}
-      placeholder="名前・@ユーザー名・ID で検索"
+      placeholder={m.users_search_placeholder()}
       autocomplete="off"
     />
   </form>
-  <span class="text-[13px] text-muted-foreground">{data.total} 人</span>
+  <span class="text-[13px] text-muted-foreground">{m.users_total({ count: data.total })}</span>
 </div>
 
 <div class="table-wrap">
   <Table.Root class="data-table table-tall">
     <Table.Header>
       <Table.Row>
-        <Table.Head>ユーザー</Table.Head>
-        <Table.Head>権限</Table.Head>
-        <Table.Head>最終ログイン</Table.Head>
-        <Table.Head class="actions"><span class="sr-only">操作</span></Table.Head>
+        <Table.Head>{m.common_user()}</Table.Head>
+        <Table.Head>{m.common_permission()}</Table.Head>
+        <Table.Head>{m.users_last_login()}</Table.Head>
+        <Table.Head class="actions"><span class="sr-only">{m.common_actions()}</span></Table.Head>
       </Table.Row>
     </Table.Header>
     <Table.Body>

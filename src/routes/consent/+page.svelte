@@ -6,6 +6,7 @@
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
   import AuthLayout from "$lib/components/app/auth-layout.svelte";
   import { Button } from "$lib/components/ui/button";
+  import { m } from "$lib/paraglide/messages.js";
   import { SIGN_OUT_PATH } from "$lib/paths";
 
   let { data } = $props();
@@ -31,7 +32,7 @@
         window.location.href = target;
         return;
       }
-      throw new Error(result.message || result.error_description || "処理できませんでした。もう一度お試しください。");
+      throw new Error(result.message || result.error_description || m.consent_failed());
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
       busy = false;
@@ -39,12 +40,12 @@
   }
 </script>
 
-<AuthLayout title="アクセスの許可 — Discord × Notion MCP" wide>
+<AuthLayout title={`${m.consent_title()} — Discord × Notion MCP`} wide>
   <section class="auth-card">
     <div class="stack gap-2">
-      <h1><span>{data.clientName}</span> がアクセスを求めています</h1>
-      <p class="lead">許可すると、このアプリがあなたの権限の範囲で MCP ツールを使えるようになります。</p>
-      {#if data.redirectOrigin}<p class="mono break-all">戻り先: {data.redirectOrigin}</p>{/if}
+      <h1><span>{data.clientName}</span> {m.consent_heading_suffix()}</h1>
+      <p class="lead">{m.consent_lead()}</p>
+      {#if data.redirectOrigin}<p class="mono break-all">{m.consent_redirect({ origin: data.redirectOrigin })}</p>{/if}
     </div>
 
     <div class="flex items-center gap-3 rounded-[10px] border p-3">
@@ -55,14 +56,16 @@
       </div>
       <form method="post" action={SIGN_OUT_PATH}>
         <input type="hidden" name="next" value={data.switchNext} />
-        <button class="cursor-pointer text-[13px] text-text-4 underline hover:text-foreground" type="submit">切り替え</button>
+        <button class="cursor-pointer text-[13px] text-text-4 underline hover:text-foreground" type="submit"
+          >{m.consent_switch_account()}</button
+        >
       </form>
     </div>
 
     <div class="flex flex-col">
-      <span class="mb-1 text-[13px] font-medium text-text-4">使えるようになる機能</span>
+      <span class="mb-1 text-[13px] font-medium text-text-4">{m.consent_features_heading()}</span>
       {#if data.features.length === 0}
-        <p class="py-3 text-[13px] text-muted-foreground">まだ権限が付与されていません。管理者に依頼してください。</p>
+        <p class="py-3 text-[13px] text-muted-foreground">{m.consent_no_features()}</p>
       {:else}
         {#each data.features as feature (feature.permission)}
           {@const Icon = ICONS[feature.permission]}
@@ -78,12 +81,12 @@
     </div>
 
     <div class="grid grid-cols-2 gap-2">
-      <Button variant="outline" size="lg" disabled={busy} onclick={() => decide(false)}>拒否</Button>
-      <Button size="lg" disabled={busy} onclick={() => decide(true)}>許可する</Button>
+      <Button variant="outline" size="lg" disabled={busy} onclick={() => decide(false)}>{m.consent_deny()}</Button>
+      <Button size="lg" disabled={busy} onclick={() => decide(true)}>{m.consent_allow()}</Button>
     </div>
     {#if status}
       <p class="text-[13px] text-bad-fg" role="status">{status}</p>
     {/if}
   </section>
-  <p class="text-center text-xs leading-relaxed text-muted-foreground">自分で接続していない場合は拒否してください。</p>
+  <p class="text-center text-xs leading-relaxed text-muted-foreground">{m.consent_footer()}</p>
 </AuthLayout>

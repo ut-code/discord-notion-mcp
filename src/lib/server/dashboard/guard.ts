@@ -1,4 +1,5 @@
 import { error, fail, redirect } from "@sveltejs/kit";
+import { m } from "../../paraglide/messages.js";
 import { signInRedirect, type Viewer } from "./access";
 import type { ActionResult } from "./shared";
 
@@ -19,7 +20,7 @@ export async function requireViewer({ locals, url, request }: GuardEvent): Promi
 /** Dashboard JSON endpoints: like requireViewer, but 401 instead of a sign-in redirect. */
 export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): Promise<Viewer> {
   const gate = await locals.viewerGate();
-  if (gate.kind === "signed-out") error(401, { message: "ログインが必要です。" });
+  if (gate.kind === "signed-out") error(401, { message: m.access_sign_in_required() });
   if (gate.kind === "denied") error(gate.status, { title: gate.title, message: gate.message });
   return gate.viewer;
 }
@@ -28,7 +29,7 @@ export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): 
 export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
   const viewer = await requireViewer(event);
   if (!viewer.canViewAudit) {
-    error(403, { title: "アクセスできません", message: "書き込み履歴を見るには Notion 読み取りの権限が必要です。", signedIn: true });
+    error(403, { title: m.access_denied_title(), message: m.access_audit_requires_notion_read(), signedIn: true });
   }
   return viewer;
 }
@@ -37,7 +38,7 @@ export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
 export async function requireAdminViewer(event: GuardEvent): Promise<Viewer> {
   const viewer = await requireViewer(event);
   if (!viewer.isAdmin) {
-    error(403, { title: "アクセスできません", message: "このページは管理者だけが開けます。", signedIn: true });
+    error(403, { title: m.access_denied_title(), message: m.access_admin_only_page(), signedIn: true });
   }
   return viewer;
 }

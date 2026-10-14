@@ -83,6 +83,8 @@ codex mcp login discord-notion
 
 Bun + SvelteKit（adapter-node）+ shadcn-svelte / Tailwind CSS、Better Auth、MCP TypeScript SDK、Drizzle（bun:sqlite）。
 
+画面の文言は `messages/ja.json`（Paraglide）。コードからは `m.<key>()` で参照する。
+
 ```sh
 bun install
 cp .env.example .env

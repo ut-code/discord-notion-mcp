@@ -1,4 +1,5 @@
 import { isOneOf } from "../../one-of";
+import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import type { Permission } from "../permissions/permissions";
 import { DAY_MS, JST_OFFSET_MS, jstDay } from "../usage/usage-stats";
@@ -17,7 +18,7 @@ const CATEGORIES = [
   { key: "discord:read", label: PERMISSION_LABELS["discord:read"], color: "#2a78d6" },
   { key: "notion:read", label: PERMISSION_LABELS["notion:read"], color: "#1baf7a" },
   { key: "notion:write", label: PERMISSION_LABELS["notion:write"], color: "#eb6834" },
-  { key: "other", label: "その他", color: "#a1a1aa" },
+  { key: "other", label: m.stats_category_other(), color: "#a1a1aa" },
 ] as const;
 type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
@@ -123,7 +124,7 @@ export async function statsPage(
 
   return {
     range,
-    ranges: STATS_RANGES.map((value) => ({ label: `${value}日`, href: rangeHref(value), active: value === range })),
+    ranges: STATS_RANGES.map((value) => ({ label: m.stats_range_days({ days: value }), href: rangeHref(value), active: value === range })),
     empty: calls === 0 && notion.writes + notion.reverts + notion.failures === 0,
     summary: { calls, activeUsers: byUser.length, failureRate: formatRate(failures, calls), rateLimited },
     daily: {

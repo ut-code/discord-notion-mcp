@@ -1,8 +1,8 @@
 import { isRecord } from "$lib/guards";
+import { m } from "$lib/paraglide/messages.js";
 import type { CandidateView } from "$lib/server/dashboard/grants";
 
 const DEBOUNCE_MS = 250;
-const FAILED = "メンバー検索に失敗しました。";
 
 function isCandidate(value: unknown): value is CandidateView {
   return (
@@ -89,12 +89,12 @@ export class MemberLookup {
         this.members = body.members;
       } else {
         this.members = [];
-        this.error = body.error ?? FAILED;
+        this.error = body.error ?? m.grants_member_search_failed();
       }
     } catch (error) {
       if (controller.signal.aborted || key !== this.latest) return;
       this.members = [];
-      this.error = FAILED;
+      this.error = m.grants_member_search_failed();
       console.error(error);
     }
     this.loading = false;

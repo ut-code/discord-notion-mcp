@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from "$lib/paraglide/messages.js";
   import CopyButton from "./copy-button.svelte";
 
   let { mcpUrl, heading = "h2" }: { mcpUrl: string; heading?: "h2" | "h3" } = $props();
@@ -17,13 +18,16 @@
   </div>
 {/snippet}
 
-{@render command(mcpUrl, "URL をコピー")}
+{@render command(mcpUrl, m.connect_copy_url())}
 <section class="stack min-w-0 gap-2" aria-labelledby="claude-code">
   <svelte:element this={heading} id="claude-code" class="text-sm font-semibold">Claude Code</svelte:element>
-  {#each claude as text (text)}{@render command(text, "コマンドをコピー")}{/each}
-  <p class="text-[13px] text-muted-foreground">Claude Code で <code class="mono text-foreground">/mcp</code> を開いてログイン</p>
+  {#each claude as text (text)}{@render command(text, m.connect_copy_command())}{/each}
+  <p class="text-[13px] text-muted-foreground">
+    {m.connect_claude_code_login_before()} <code class="mono text-foreground">/mcp</code>
+    {m.connect_claude_code_login_after()}
+  </p>
 </section>
 <section class="stack min-w-0 gap-2" aria-labelledby="codex">
   <svelte:element this={heading} id="codex" class="text-sm font-semibold">Codex</svelte:element>
-  {#each codex as text (text)}{@render command(text, "コマンドをコピー")}{/each}
+  {#each codex as text (text)}{@render command(text, m.connect_copy_command())}{/each}
 </section>

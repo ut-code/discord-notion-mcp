@@ -4,6 +4,7 @@
   import ShieldIcon from "@lucide/svelte/icons/shield";
   import ConfirmDialog from "$lib/components/app/confirm-dialog.svelte";
   import RowMenu, { type RowMenuItem } from "$lib/components/app/row-menu.svelte";
+  import { m } from "$lib/paraglide/messages.js";
   import type { UserTableRow } from "$lib/server/dashboard/users";
 
   let { row, index, canRevoke }: { row: UserTableRow; index: number; canRevoke: boolean } = $props();
@@ -13,11 +14,17 @@
   const hasLinks = $derived(row.grantHref !== null || row.auditHref !== null);
   const items = $derived.by(() => {
     const entries: RowMenuItem[] = [];
-    if (row.grantHref) entries.push({ kind: "link", label: "権限を付与", href: row.grantHref, icon: ShieldIcon });
-    if (row.auditHref) entries.push({ kind: "link", label: "書き込み履歴を見る", href: row.auditHref, icon: HistoryIcon });
+    if (row.grantHref) entries.push({ kind: "link", label: m.grants_add(), href: row.grantHref, icon: ShieldIcon });
+    if (row.auditHref) entries.push({ kind: "link", label: m.users_menu_audit(), href: row.auditHref, icon: HistoryIcon });
     if (canRevoke) {
       if (hasLinks) entries.push({ kind: "separator" });
-      entries.push({ kind: "confirm", label: "トークンを失効…", icon: BanIcon, dialogId: confirmId, onSelect: () => (confirming = true) });
+      entries.push({
+        kind: "confirm",
+        label: m.users_menu_revoke(),
+        icon: BanIcon,
+        dialogId: confirmId,
+        onSelect: () => (confirming = true),
+      });
     }
     return entries;
   });
@@ -25,16 +32,16 @@
 
 <!-- Nothing to render when the viewer can do nothing with the row. -->
 {#if items.length > 0}
-  <RowMenu id={`user-menu-${index}`} label={`${row.displayName} の操作`} contentClass="min-w-[200px]" {items} />
+  <RowMenu id={`user-menu-${index}`} label={m.users_menu_label({ name: row.displayName })} contentClass="min-w-[200px]" {items} />
 {/if}
 {#if canRevoke}
   <ConfirmDialog
     id={confirmId}
     bind:open={confirming}
-    title={`${row.displayName} のトークンを失効しますか？`}
-    description="MCP の接続が即座に切れます。"
+    title={m.users_revoke_confirm({ name: row.displayName })}
+    description={m.users_revoke_description()}
     action="revoke"
-    submitLabel="失効する"
+    submitLabel={m.users_revoke_submit()}
     destructive
   >
     {#snippet fields()}

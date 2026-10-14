@@ -1,3 +1,4 @@
+import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH, SIGN_IN_ERROR_PATH, SIGN_IN_PATH } from "../../paths";
 import { parseSetCookieHeader, toCookieOptions } from "better-auth/cookies";
 import { AUTH_BASE_PATH } from "../auth/auth";
@@ -11,7 +12,6 @@ import { safeNextPath } from "./next-path";
 import { extractSignedOAuthQuery, signedOAuthParam } from "./oauth-query";
 
 const PRODUCT_NAME = "Discord × Notion MCP";
-const RESTART = "MCP クライアントで接続し直してください。";
 
 async function orNull<T>(load: () => Promise<T>): Promise<T | null> {
   try {
@@ -48,7 +48,7 @@ export async function signInPage(deps: DashboardDeps, url: URL): Promise<SignInP
     oauthQuery && clientId ? clientLabel(clientId, () => clientNameBeforeSignIn(deps.auth, clientId, oauthQuery)) : Promise.resolve(null),
   ]);
   return {
-    heading: guildName ? `${guildName} の MCP` : PRODUCT_NAME,
+    heading: guildName ? m.sign_in_heading_guild({ guild: guildName }) : PRODUCT_NAME,
     guildName,
     endpoint: `${AUTH_BASE_PATH}/sign-in/social`,
     errorCallbackURL: SIGN_IN_ERROR_PATH,
@@ -58,21 +58,19 @@ export async function signInPage(deps: DashboardDeps, url: URL): Promise<SignInP
   };
 }
 
-const SIGN_IN_ERRORS: Record<string, string> = {
-  access_denied: "Discord でのログインがキャンセルされました。",
-  state_mismatch: `ログインの有効期限が切れました。${RESTART}`,
-  please_restart_the_process: `ログインの有効期限が切れました。${RESTART}`,
-};
-
 export function signInErrorMessage(code: string | null): string {
-  const key = code ?? "unknown_error";
-  return SIGN_IN_ERRORS[key] ?? `ログインに失敗しました（${key}）。${RESTART}`;
+  switch (code) {
+    case "access_denied":
+      return m.sign_in_error_cancelled();
+    case "state_mismatch":
+    case "please_restart_the_process":
+      return m.sign_in_error_expired();
+    default:
+      return m.sign_in_error_unknown({ code: code ?? "unknown_error" });
+  }
 }
 
-export const NOT_MEMBER = {
-  title: "アクセスできません",
-  message: "Discord サーバーのメンバーであることを確認できませんでした。参加してから、MCP クライアントで接続し直してください。",
-};
+export const NOT_MEMBER = { title: m.access_denied_title(), message: m.access_not_member() };
 
 export interface ConsentFeature {
   permission: Permission;
@@ -81,10 +79,10 @@ export interface ConsentFeature {
 }
 
 const FEATURES: Record<Permission, Omit<ConsentFeature, "permission">> = {
-  "discord:read": { title: "Discord 読み取り", description: "あなたが閲覧できるチャンネルのメッセージの取得・検索" },
-  "notion:read": { title: "Notion 読み取り", description: "共有されたページ・データベースの検索と閲覧" },
-  "notion:write": { title: "Notion 書き込み", description: "変更はあなたの名前で記録され、あなたか管理者があとから取り消せます" },
-  admin: { title: "管理画面", description: "権限とユーザーの管理" },
+  "discord:read": { title: m.permission_discord_read(), description: m.consent_feature_discord_read() },
+  "notion:read": { title: m.permission_notion_read(), description: m.consent_feature_notion_read() },
+  "notion:write": { title: m.permission_notion_write(), description: m.consent_feature_notion_write() },
+  admin: { title: m.consent_feature_admin_title(), description: m.consent_feature_admin() },
 };
 
 /** Permissions shown on the consent page; admins get everything including the dashboard's admin actions. */
@@ -125,16 +123,11 @@ export async function consentPage(deps: DashboardDeps, url: URL, headers: Header
   const oauthQuery = extractSignedOAuthQuery(url.search);
   const clientId = oauthQuery ? signedOAuthParam(oauthQuery, "client_id") : null;
   if (!oauthQuery || !clientId) {
-    return {
-      kind: "error",
-      status: 400,
-      title: "無効なリクエスト",
-      message: "このページは MCP クライアントの認可フローから開いてください。",
-    };
+    return { kind: "error", status: 400, title: m.error_title_400(), message: m.consent_invalid_request() };
   }
   const session = await deps.auth.api.getSession({ headers });
   if (!session) {
-    return { kind: "error", status: 401, title: "セッションの有効期限切れ", message: `ログインの有効期限が切れました。${RESTART}` };
+    return { kind: "error", status: 401, title: m.consent_session_expired_title(), message: m.sign_in_error_expired() };
   }
   const access = await orNull(async () => {
     const discordUserId = await deps.identity.discordUserIdForUser(session.user.id);

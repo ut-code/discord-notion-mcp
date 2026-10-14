@@ -1,12 +1,13 @@
 <script lang="ts">
   import AuthLayout from "$lib/components/app/auth-layout.svelte";
+  import { m } from "$lib/paraglide/messages.js";
 
   let { data } = $props();
 </script>
 
 <AuthLayout title="Preview">
   <section class="auth-card">
-    <h1>Preview: ログインするユーザー</h1>
+    <h1>{m.dev_users_heading()}</h1>
     <ul class="grid gap-2">
       {#each data.users as user (user.id)}
         <li>

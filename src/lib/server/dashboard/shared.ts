@@ -1,3 +1,5 @@
+import { m } from "../../paraglide/messages.js";
+
 export interface Option {
   value: string;
   label: string;
@@ -18,7 +20,7 @@ export function pageParam(value: string | null | undefined): number {
 }
 
 export interface PageLinks {
-  /** "N 件中 a–b 件"; null when the page shows no rows. */
+  /** "a–b of N"; null when the page shows no rows. */
   range: string | null;
   prevHref: string | null;
   nextHref: string | null;
@@ -30,7 +32,7 @@ export function pageLinks(page: number, pageSize: number, total: number, shown: 
   const first = (page - 1) * pageSize + 1;
   const last = first + shown - 1;
   return {
-    range: shown > 0 ? `${total} 件中 ${first}–${last} 件` : null,
+    range: shown > 0 ? m.pager_range({ total, first, last }) : null,
     prevHref: page > 1 ? href(Math.min(page - 1, lastPage)) : null,
     nextHref: shown > 0 && last < total ? href(page + 1) : null,
   };

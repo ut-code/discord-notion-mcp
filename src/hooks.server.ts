@@ -1,4 +1,5 @@
 import type { Handle, HandleServerError, ServerInit } from "@sveltejs/kit";
+import { m } from "$lib/paraglide/messages.js";
 import { checkViewer, type ViewerGate } from "$lib/server/dashboard/access";
 import { withSecurityHeaders } from "$lib/server/http";
 import { errorMessage } from "$lib/server/lib/errors";
@@ -29,5 +30,5 @@ export const handleError: HandleServerError = async ({ error, event, status }) =
     const { server } = await ensureStarted();
     server.logError({ event: "http_error", path: event.url.pathname, error: errorMessage(error) });
   }
-  return { message: "予期しないエラーが発生しました。しばらくしてから再度お試しください。" };
+  return { message: m.error_unexpected() };
 };

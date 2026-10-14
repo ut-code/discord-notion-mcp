@@ -25,13 +25,13 @@
     {#if revert.state === "reverted"}
       <div class="stack gap-2">
         <span class="cluster">
-          <ToneBadge badge={{ label: m.revert_card_reverted(), tone: "secondary" }} />
+          <ToneBadge badge={{ label: m.audit_status_reverted(), tone: "secondary" }} />
           {#if revert.revert}<a href={revert.revert.href}>#{revert.revert.id}</a>{/if}
         </span>
         {#if revert.note}<span class="sub">{revert.note}</span>{/if}
       </div>
     {:else if revert.state === "disabled"}
-      <p class="text-muted-foreground">{m.revert_card_disabled()}</p>
+      <p class="text-muted-foreground">{m.revert_reason_notion_disabled()}</p>
     {:else if revert.state === "unavailable"}
       <p class="text-muted-foreground">{revert.reason}</p>
     {:else if conflict}
