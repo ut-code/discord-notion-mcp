@@ -24,5 +24,5 @@ export function extractSignedOAuthQuery(search: string): string | undefined {
  */
 export function signedOAuthParam(oauthQuery: string, name: string): string | null {
   const values = new URLSearchParams(oauthQuery).getAll(name);
-  return values.length === 1 ? values[0]! : null;
+  return values.length === 1 ? (values[0] ?? null) : null;
 }

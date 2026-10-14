@@ -51,8 +51,8 @@ export function parseNotionId(input: string, options: ParseIdOptions = {}): stri
   }
   const segment = url.pathname.split("/").filter(Boolean).at(-1);
   if (!segment) return null;
-  const match = TRAILING_ID.exec(decodeURIComponent(segment));
-  return match ? formatNotionId(match[1]!) : null;
+  const id = TRAILING_ID.exec(decodeURIComponent(segment))?.[1];
+  return id ? formatNotionId(id) : null;
 }
 
 /** Like parseNotionId but throws a ToolError naming the offending argument. */

@@ -1,4 +1,4 @@
-import { DiscordAPIError, makeURLSearchParams, REST } from "@discordjs/rest";
+import { DiscordAPIError, makeURLSearchParams, REST, type RequestData, type RouteLike } from "@discordjs/rest";
 import {
   Routes,
   type APIGuild,
@@ -39,6 +39,9 @@ export interface ArchivedThreadsPage {
   threads: APIThreadChannel[];
   hasMore: boolean;
 }
+
+/** Thread list endpoints type `threads` as any channel, but only return thread channels. */
+type ThreadsOnly<T extends { threads: APIChannel[] }> = Omit<T, "threads"> & { threads: APIThreadChannel[] };
 
 /** Discord answers 202 with `retry_after` while the guild's search index is being built. */
 export type MessageSearchResponse = { status: "ok"; result: APIMessageSearchResult } | { status: "indexing"; retryAfterSeconds: number };
@@ -87,8 +90,14 @@ export class RestDiscordApi implements DiscordApi {
     this.rest = new REST({ version: "10" }).setToken(botToken);
   }
 
+  /** `rest.get` resolves to `unknown`; discord-api-types is the contract for the response of each route. */
+  private async get<T>(route: RouteLike, options?: RequestData): Promise<T> {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- trust boundary: Discord's REST response, typed by discord-api-types
+    return (await this.rest.get(route, options)) as T;
+  }
+
   async fetchGuild(): Promise<GuildInfo> {
-    const guild = (await this.rest.get(Routes.guild(this.guildId))) as APIGuild;
+    const guild = await this.get<APIGuild>(Routes.guild(this.guildId));
     return {
       id: guild.id,
       name: guild.name,
@@ -106,7 +115,7 @@ export class RestDiscordApi implements DiscordApi {
 
   async fetchMember(userId: string): Promise<MemberInfo | null> {
     try {
-      const member = (await this.rest.get(Routes.guildMember(this.guildId, userId))) as APIGuildMember;
+      const member = await this.get<APIGuildMember>(Routes.guildMember(this.guildId, userId));
       return toMemberInfo(member, this.guildId, userId);
     } catch (error) {
       if (error instanceof DiscordAPIError && error.status === 404) return null;
@@ -115,12 +124,12 @@ export class RestDiscordApi implements DiscordApi {
   }
 
   async fetchChannels(): Promise<GuildChannel[]> {
-    return (await this.rest.get(Routes.guildChannels(this.guildId))) as GuildChannel[];
+    return this.get<GuildChannel[]>(Routes.guildChannels(this.guildId));
   }
 
   async fetchChannel(channelId: string): Promise<APIChannel | null> {
     try {
-      return (await this.rest.get(Routes.channel(channelId))) as APIChannel;
+      return await this.get<APIChannel>(Routes.channel(channelId));
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
@@ -128,16 +137,16 @@ export class RestDiscordApi implements DiscordApi {
   }
 
   async fetchActiveThreads(): Promise<APIThreadChannel[]> {
-    const result = (await this.rest.get(Routes.guildActiveThreads(this.guildId))) as RESTGetAPIGuildThreadsResult;
-    return result.threads as APIThreadChannel[];
+    const result = await this.get<ThreadsOnly<RESTGetAPIGuildThreadsResult>>(Routes.guildActiveThreads(this.guildId));
+    return result.threads;
   }
 
   async fetchArchivedPublicThreads(channelId: string, query: { before?: string; limit: number }): Promise<ArchivedThreadsPage> {
     try {
-      const result = (await this.rest.get(Routes.channelThreads(channelId, "public"), {
+      const result = await this.get<ThreadsOnly<RESTGetAPIChannelThreadsArchivedPublicResult>>(Routes.channelThreads(channelId, "public"), {
         query: makeURLSearchParams(query),
-      })) as RESTGetAPIChannelThreadsArchivedPublicResult;
-      return { threads: result.threads as APIThreadChannel[], hasMore: result.has_more ?? false };
+      });
+      return { threads: result.threads, hasMore: result.has_more ?? false };
     } catch (error) {
       if (isNotFound(error)) return { threads: [], hasMore: false };
       throw error;
@@ -145,12 +154,12 @@ export class RestDiscordApi implements DiscordApi {
   }
 
   async fetchMessages(channelId: string, query: MessageQuery): Promise<APIMessage[]> {
-    return (await this.rest.get(Routes.channelMessages(channelId), { query: makeURLSearchParams(query) })) as APIMessage[];
+    return this.get<APIMessage[]>(Routes.channelMessages(channelId), { query: makeURLSearchParams(query) });
   }
 
   async fetchMessage(channelId: string, messageId: string): Promise<APIMessage | null> {
     try {
-      return (await this.rest.get(Routes.channelMessage(channelId, messageId))) as APIMessage;
+      return await this.get<APIMessage>(Routes.channelMessage(channelId, messageId));
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
@@ -158,9 +167,9 @@ export class RestDiscordApi implements DiscordApi {
   }
 
   async fetchPins(channelId: string, query: { before?: string; limit: number }): Promise<PinsPage> {
-    const result = (await this.rest.get(Routes.channelMessagesPins(channelId), {
+    const result = await this.get<RESTGetAPIChannelMessagesPinsResult>(Routes.channelMessagesPins(channelId), {
       query: makeURLSearchParams(query),
-    })) as RESTGetAPIChannelMessagesPinsResult;
+    });
     const last = result.items.at(-1);
     return {
       messages: result.items.map((item) => item.message),
@@ -180,27 +189,27 @@ export class RestDiscordApi implements DiscordApi {
   }
 
   async fetchScheduledEvents(): Promise<APIGuildScheduledEvent[]> {
-    return (await this.rest.get(Routes.guildScheduledEvents(this.guildId))) as APIGuildScheduledEvent[];
+    return this.get<APIGuildScheduledEvent[]>(Routes.guildScheduledEvents(this.guildId));
   }
 
   async searchMessages(query: RESTGetAPIGuildMessagesSearchQuery): Promise<MessageSearchResponse> {
-    const result = (await this.rest.get(Routes.guildMessagesSearch(this.guildId), {
+    const result = await this.get<RESTGetAPIGuildMessagesSearchResult>(Routes.guildMessagesSearch(this.guildId), {
       query: makeURLSearchParams(query),
-    })) as RESTGetAPIGuildMessagesSearchResult;
+    });
     if ("messages" in result) return { status: "ok", result };
     return { status: "indexing", retryAfterSeconds: result.retry_after ?? 1 };
   }
 
   async searchMembers(query: string, limit: number): Promise<MemberInfo[]> {
-    const members = (await this.rest.get(Routes.guildMembersSearch(this.guildId), {
+    const members = await this.get<APIGuildMember[]>(Routes.guildMembersSearch(this.guildId), {
       query: makeURLSearchParams({ query, limit }),
-    })) as APIGuildMember[];
+    });
     return members.map((member) => toMemberInfo(member, this.guildId));
   }
 
   async fetchUser(userId: string): Promise<UserInfo | null> {
     try {
-      const user = (await this.rest.get(Routes.user(userId))) as APIUser;
+      const user = await this.get<APIUser>(Routes.user(userId));
       return { id: user.id, username: user.username, globalName: user.global_name ?? null, avatarUrl: userAvatarUrl(user.id, user.avatar) };
     } catch (error) {
       if (isNotFound(error)) return null;

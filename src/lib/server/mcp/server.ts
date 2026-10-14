@@ -4,7 +4,7 @@ import { errorMessage, ToolError } from "../lib/errors";
 import { logError, logEvent, type ErrorSink, type ToolCallLogEntry } from "../lib/log";
 import type { EffectiveAccess } from "../permissions/resolver";
 import type { RateLimitDecision } from "../lib/rate-limit";
-import { toolsForPermissions, type AnyToolDefinition, type Principal, type ToolResult } from "./registry";
+import { toolsForPermissions, type AnyToolArgs, type AnyToolDefinition, type Principal, type ToolResult } from "./registry";
 
 const SERVER_INFO = { name: "discord-notion-mcp", version: "0.1.0" } as const;
 
@@ -41,7 +41,12 @@ function errorResult(message: string): CallToolResult {
 export const TOOL_RESULT_ERROR = "tool returned an error";
 export const TOOL_CRASH_ERROR = "internal error";
 
-export async function runTool(tool: AnyToolDefinition, args: unknown, principal: Principal, deps: McpServerDeps): Promise<CallToolResult> {
+export async function runTool(
+  tool: AnyToolDefinition,
+  args: AnyToolArgs,
+  principal: Principal,
+  deps: McpServerDeps,
+): Promise<CallToolResult> {
   const started = performance.now();
   const reportError = deps.logError ?? logError;
   const finish = (ok: boolean, failure?: { kind: ToolCallErrorKind; message: string }) => {
@@ -72,7 +77,7 @@ export async function runTool(tool: AnyToolDefinition, args: unknown, principal:
     if (!current.isMember || !current.permissions.has(tool.permission)) {
       throw new ToolError(`You do not have the "${tool.permission}" permission required for this tool.`);
     }
-    const result = toCallToolResult(await tool.handler(args as never, { principal: { ...principal, access: current } }));
+    const result = toCallToolResult(await tool.handler(args, { principal: { ...principal, access: current } }));
     finish(!result.isError, result.isError ? { kind: "error", message: TOOL_RESULT_ERROR } : undefined);
     return result;
   } catch (error) {
@@ -105,7 +110,7 @@ export function buildMcpServer(principal: Principal, deps: McpServerDeps): McpSe
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
       },
-      (args: unknown) => runTool(tool, args, principal, deps),
+      (args) => runTool(tool, args, principal, deps),
     );
   }
   return server;

@@ -45,10 +45,13 @@
       : [],
   );
   const members = $derived<CandidateView[]>(needle ? lookup.members : []);
-  const options = $derived<GrantSubject[]>([
-    ...roleOptions,
-    ...members.map((member): GrantSubject => ({ type: "user", id: member.id, label: member.name, avatarUrl: member.avatarUrl })),
-  ]);
+  const memberOptions = $derived(
+    members.map((member) => ({
+      subject: { type: "user", id: member.id, label: member.name, avatarUrl: member.avatarUrl } satisfies GrantSubject,
+      secondLine: member.secondLine,
+    })),
+  );
+  const options = $derived<GrantSubject[]>([...roleOptions, ...memberOptions.map((entry) => entry.subject)]);
   const open = $derived(needle !== "" && !dismissed);
   const active = $derived(options.find((option) => keyOf(option) === activeKey) ?? options[0]);
   const memberNote = $derived(
@@ -78,7 +81,8 @@
   async function move(step: number) {
     if (!open || options.length === 0) return;
     const index = active ? options.indexOf(active) : -1;
-    const next = options[(index + step + options.length) % options.length]!;
+    const next = options[(index + step + options.length) % options.length];
+    if (!next) return;
     activeKey = keyOf(next);
     await tick();
     document.getElementById(optionId(next))?.scrollIntoView({ block: "nearest" });
@@ -189,8 +193,8 @@
         {#if open && members.length > 0}
           <div role="group" aria-labelledby={`${id}-members`}>
             {@render heading("メンバー", `${id}-members`)}
-            {#each members as member, index (member.id)}
-              {@render option(options[roleOptions.length + index]!, member.secondLine)}
+            {#each memberOptions as entry (entry.subject.id)}
+              {@render option(entry.subject, entry.secondLine)}
             {/each}
           </div>
         {/if}

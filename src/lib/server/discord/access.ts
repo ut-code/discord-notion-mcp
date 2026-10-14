@@ -29,8 +29,11 @@ export function isThread(channel: APIChannel): channel is APIThreadChannel {
   return THREAD_TYPES.has(channel.type);
 }
 
+/** A channel from the cached guild list or fetched by id. */
+export type ResolvedChannel = GuildChannel | APIChannel;
+
 export interface ReadableChannel {
-  channel: APIChannel;
+  channel: ResolvedChannel;
   /** Parent channel for threads; null for regular channels. */
   parent: GuildChannel | null;
   permissions: bigint;
@@ -119,7 +122,7 @@ export class ChannelAccess {
       if (listed.type === ChannelType.GuildCategory) {
         throw new ToolError("This is a category, which has no messages. Use discord_list_channels to pick a channel inside it.");
       }
-      return { channel: listed as APIChannel, parent: null, permissions };
+      return { channel: listed, parent: null, permissions };
     }
 
     const fetched = await this.api.fetchChannel(channelId);
@@ -132,7 +135,7 @@ export class ChannelAccess {
       return { channel: fetched, parent, permissions: channelPermissions(parent, viewer) };
     }
 
-    const permissions = channelPermissions(fetched as GuildChannel, viewer);
+    const permissions = channelPermissions(fetched, viewer);
     if (!canReadMessages(permissions)) throw new NotAccessibleError();
     return { channel: fetched, parent: null, permissions };
   }

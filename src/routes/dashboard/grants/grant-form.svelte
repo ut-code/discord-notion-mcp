@@ -34,7 +34,10 @@
   // The inline search that replaces the controls below once JavaScript runs.
   let subject = $derived(initialSubject(form));
 
-  const permissionOption = $derived(form.permissions.find((option) => option.value === permission) ?? form.permissions[0]!);
+  const permissionOption = $derived(
+    form.permissions.find((option) => option.value === permission) ??
+      form.permissions[0] ?? { value: permission, label: permission, hint: "" },
+  );
   const target = $derived(
     hydrated.current
       ? (subject?.label ?? null)

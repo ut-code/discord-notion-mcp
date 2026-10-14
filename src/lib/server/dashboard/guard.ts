@@ -53,6 +53,6 @@ export function orNotFound<T>(value: T | null, page: { title: string; message: s
  * non-admins, else 400). `extra` fields are sent next to the result either way.
  */
 export function respond<T extends ActionResult, E extends object = Record<never, never>>(result: T, extra?: E) {
-  const body = { ...extra, result } as E & { result: T };
+  const body: E & { result: T } = Object.assign({}, extra, { result });
   return result.kind === "ok" ? body : fail(result.status ?? 400, body);
 }

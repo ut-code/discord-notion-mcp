@@ -1,3 +1,4 @@
+import { isOneOf } from "../../one-of";
 import { dashboardAuditPath, DASHBOARD_PATH } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
@@ -40,7 +41,7 @@ export interface AuditFilters {
 }
 
 function isAuditOperation(value: string | null): value is NotionAuditOperation {
-  return value !== null && (NOTION_AUDIT_OPERATIONS as readonly string[]).includes(value);
+  return isOneOf(NOTION_AUDIT_OPERATIONS, value);
 }
 
 export function auditListHref(filters: AuditFilters, page = 1): string {
@@ -165,10 +166,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
     filters: { user: filters.user ?? "", operation: filters.operation ?? "", status: filters.status ?? "" },
     userOptions,
     operationOptions: NOTION_AUDIT_OPERATIONS.map((value) => ({ value, label: AUDIT_OPERATION_LABELS[value] })),
-    statusOptions: (Object.keys(AUDIT_STATUS_FILTERS) as AuditStatusFilter[]).map((value) => ({
-      value,
-      label: AUDIT_STATUS_FILTERS[value],
-    })),
+    statusOptions: Object.entries(AUDIT_STATUS_FILTERS).map(([value, label]) => ({ value, label })),
     error,
   };
 }

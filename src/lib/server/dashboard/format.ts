@@ -1,6 +1,7 @@
 import type { Permission } from "../permissions/permissions";
 import type { NotionAuditOperation } from "../db/schema";
 import { OPERATION_LABELS } from "../notion/changes/attribution";
+import { isRecord } from "../../guards";
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "discord:read": "Discord 読み取り",
@@ -39,9 +40,13 @@ const JST_PARTS = new Intl.DateTimeFormat("en-US", {
 });
 
 function jstParts(date: Date): Record<"year" | "month" | "day" | "hour" | "minute" | "second", string> {
-  const parts: Record<string, string> = {};
-  for (const part of JST_PARTS.formatToParts(date)) parts[part.type] = part.value;
-  return { year: parts.year!, month: parts.month!, day: parts.day!, hour: parts.hour!, minute: parts.minute!, second: parts.second! };
+  const parts = JST_PARTS.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes): string => {
+    const value = parts.find((candidate) => candidate.type === type)?.value;
+    if (value === undefined) throw new Error(`Intl.DateTimeFormat omitted the ${type} part`);
+    return value;
+  };
+  return { year: part("year"), month: part("month"), day: part("day"), hour: part("hour"), minute: part("minute"), second: part("second") };
 }
 
 /** Japan time, e.g. "2026/10/12 23:03:00". */
@@ -75,10 +80,6 @@ export function roleHandle(name: string): string {
 }
 
 // The request JSON is untyped: read it only through these guards.
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object";
-}
-
 function field(value: unknown, key: string): unknown {
   return isRecord(value) && Object.hasOwn(value, key) ? value[key] : undefined;
 }

@@ -4,9 +4,10 @@ import { plainText } from "./rich-text";
 import type { RichTextRequest } from "../client/types";
 
 export type PagePropertyValue = PageObjectResponse["properties"][string];
-/** Loosely typed view used by the type switches below (the SDK union is too deep to narrow cheaply). */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the loose view is the point (see above)
-type AnyValue = Record<string, any>;
+type WithoutId<T> = T extends unknown ? Omit<T, "id"> : never;
+/** A property value without its id, as nested in rollup arrays. */
+type PropertyValueContent = WithoutId<PagePropertyValue>;
+type FormulaValue = Extract<PropertyValueContent, { type: "formula" }>["formula"];
 
 /** Property types this server can write and restore on revert. */
 export const WRITABLE_PROPERTY_TYPES = new Set([
@@ -26,8 +27,6 @@ export const WRITABLE_PROPERTY_TYPES = new Set([
   "files",
 ]);
 
-/** Array properties the page object truncates to 25 entries. */
-const PAGINATED_TYPES = new Set(["title", "rich_text", "people", "relation"]);
 const PAGE_PROPERTY_ITEM_LIMIT = 25;
 
 export function pageTitle(page: PageObjectResponse): string {
@@ -53,7 +52,7 @@ function renderDate(date: { start: string; end: string | null } | null | undefin
   return date.end ? `${date.start} → ${date.end}` : date.start;
 }
 
-function renderFormula(formula: AnyValue): string {
+function renderFormula(formula: FormulaValue): string {
   switch (formula.type) {
     case "string":
       return formula.string ?? "";
@@ -69,56 +68,64 @@ function renderFormula(formula: AnyValue): string {
 }
 
 /** Renders a property value as readable single-line text (empty string when unset). */
-export function renderPropertyValue(value: PagePropertyValue): string {
-  const v = value as unknown as AnyValue;
-  switch (v.type) {
+export function renderPropertyValue(value: PropertyValueContent): string {
+  switch (value.type) {
     case "title":
+      return plainText(value.title);
     case "rich_text":
-      return plainText(v[v.type] as RichTextItemResponse[]);
+      return plainText(value.rich_text);
     case "number":
-      return v.number === null ? "" : String(v.number);
+      return value.number === null ? "" : String(value.number);
     case "select":
+      return value.select?.name ?? "";
     case "status":
-      return v[v.type]?.name ?? "";
+      return value.status?.name ?? "";
     case "multi_select":
-      return v.multi_select.map((option: { name: string }) => option.name).join(", ");
+      return value.multi_select.map((option) => option.name).join(", ");
     case "date":
-      return renderDate(v.date);
+      return renderDate(value.date);
     case "checkbox":
-      return v.checkbox ? "true" : "false";
+      return value.checkbox ? "true" : "false";
     case "url":
+      return value.url ?? "";
     case "email":
+      return value.email ?? "";
     case "phone_number":
-      return v[v.type] ?? "";
+      return value.phone_number ?? "";
     case "people":
-      return v.people.map(userName).join(", ");
+      return value.people.map(userName).join(", ");
     case "relation": {
-      const ids = v.relation.map((item: { id: string }) => item.id).join(", ");
-      return v.has_more ? `${ids}, …` : ids;
+      const ids = value.relation.map((item) => item.id).join(", ");
+      // Notion sends `has_more` on paginated values; the SDK types do not declare it.
+      return "has_more" in value && value.has_more ? `${ids}, …` : ids;
     }
     case "files":
-      return v.files.map((file: AnyValue) => `${file.name} (${file.type === "external" ? file.external.url : file.file.url})`).join(", ");
+      return value.files.map((file) => `${file.name} (${file.type === "external" ? file.external.url : file.file.url})`).join(", ");
     case "formula":
-      return renderFormula(v.formula);
+      return renderFormula(value.formula);
     case "rollup": {
-      const rollup = v.rollup;
+      const rollup = value.rollup;
       if (rollup.type === "number") return rollup.number === null ? "" : String(rollup.number);
       if (rollup.type === "date") return renderDate(rollup.date);
-      if (rollup.type === "array") return rollup.array.map((item: AnyValue) => renderPropertyValue(item as PagePropertyValue)).join(", ");
+      if (rollup.type === "array") return rollup.array.map(renderPropertyValue).join(", ");
       return "";
     }
     case "created_time":
+      return value.created_time;
     case "last_edited_time":
-      return v[v.type];
+      return value.last_edited_time;
     case "created_by":
+      return userName(value.created_by);
     case "last_edited_by":
-      return userName(v[v.type]);
+      return userName(value.last_edited_by);
     case "unique_id":
-      return v.unique_id.number === null ? "" : `${v.unique_id.prefix ? `${v.unique_id.prefix}-` : ""}${v.unique_id.number}`;
+      return value.unique_id.number === null
+        ? ""
+        : `${value.unique_id.prefix ? `${value.unique_id.prefix}-` : ""}${value.unique_id.number}`;
     case "verification":
-      return v.verification?.state ?? "";
+      return value.verification?.state ?? "";
     case "place":
-      return v.place ? (v.place.name ?? v.place.address ?? `${v.place.lat},${v.place.lon}`) : "";
+      return value.place ? (value.place.name ?? value.place.address ?? `${value.place.lat},${value.place.lon}`) : "";
     default:
       return "";
   }
@@ -126,16 +133,44 @@ export function renderPropertyValue(value: PagePropertyValue): string {
 
 /** True when the page object may have truncated this value and the full list must be fetched. */
 export function mayBeTruncated(value: PagePropertyValue): boolean {
-  const v = value as unknown as AnyValue;
-  if (!PAGINATED_TYPES.has(v.type)) return false;
-  return v.has_more === true || (Array.isArray(v[v.type]) && v[v.type].length >= PAGE_PROPERTY_ITEM_LIMIT);
+  // The array properties the page object truncates to 25 entries.
+  let entries: unknown;
+  switch (value.type) {
+    case "title":
+      entries = value.title;
+      break;
+    case "rich_text":
+      entries = value.rich_text;
+      break;
+    case "people":
+      entries = value.people;
+      break;
+    case "relation":
+      entries = value.relation;
+      break;
+    default:
+      return false;
+  }
+  return ("has_more" in value && value.has_more === true) || (Array.isArray(entries) && entries.length >= PAGE_PROPERTY_ITEM_LIMIT);
 }
 
-/** Rebuilds a page-format property value from the paginated property item endpoint. */
+/**
+ * Rebuilds a page-format property value from the paginated property item endpoint.
+ * Only the paginated types (see mayBeTruncated) are rebuilt; other values are returned as is.
+ */
 export function valueFromPropertyItems(value: PagePropertyValue, items: readonly PropertyItemObjectResponse[]): PagePropertyValue {
-  const type = value.type;
-  const entries = items.filter((item) => item.type === type).map((item) => (item as AnyValue)[type]);
-  return { id: value.id, type, [type]: entries } as unknown as PagePropertyValue;
+  switch (value.type) {
+    case "title":
+      return { id: value.id, type: "title", title: items.flatMap((item) => (item.type === "title" ? [item.title] : [])) };
+    case "rich_text":
+      return { id: value.id, type: "rich_text", rich_text: items.flatMap((item) => (item.type === "rich_text" ? [item.rich_text] : [])) };
+    case "people":
+      return { id: value.id, type: "people", people: items.flatMap((item) => (item.type === "people" ? [item.people] : [])) };
+    case "relation":
+      return { id: value.id, type: "relation", relation: items.flatMap((item) => (item.type === "relation" ? [item.relation] : [])) };
+    default:
+      return value;
+  }
 }
 
 function toRichTextRequest(item: RichTextItemResponse): RichTextRequest {
@@ -146,7 +181,7 @@ function toRichTextRequest(item: RichTextItemResponse): RichTextRequest {
   if (item.type === "equation") {
     return { type: "equation", equation: { expression: item.equation.expression }, annotations };
   }
-  const mention = item.mention as AnyValue;
+  const mention = item.mention;
   switch (mention.type) {
     case "user":
       return { type: "mention", mention: { user: { id: mention.user.id } }, annotations };
@@ -184,47 +219,55 @@ export function propertyWriteRefusalText(refusal: PropertyWriteRefusal): string 
 
 /** Converts a page-format (read) property value into the format pages.update accepts. */
 export function toWritablePropertyValue(value: PagePropertyValue): WritableResult {
-  const v = value as unknown as AnyValue;
-  switch (v.type) {
+  switch (value.type) {
     case "title":
+      return { ok: true, value: { title: value.title.map(toRichTextRequest) } };
     case "rich_text":
-      return { ok: true, value: { [v.type]: (v[v.type] as RichTextItemResponse[]).map(toRichTextRequest) } };
+      return { ok: true, value: { rich_text: value.rich_text.map(toRichTextRequest) } };
     case "number":
+      return { ok: true, value: { number: value.number ?? null } };
     case "checkbox":
+      return { ok: true, value: { checkbox: value.checkbox ?? false } };
     case "url":
+      return { ok: true, value: { url: value.url ?? null } };
     case "email":
+      return { ok: true, value: { email: value.email ?? null } };
     case "phone_number":
-      return { ok: true, value: { [v.type]: v[v.type] ?? (v.type === "checkbox" ? false : null) } };
+      return { ok: true, value: { phone_number: value.phone_number ?? null } };
     case "select":
+      return { ok: true, value: { select: value.select ? { id: value.select.id } : null } };
     case "status":
-      return { ok: true, value: { [v.type]: v[v.type] ? { id: v[v.type].id } : null } };
+      return { ok: true, value: { status: value.status ? { id: value.status.id } : null } };
     case "multi_select":
-      return { ok: true, value: { multi_select: v.multi_select.map((option: { id: string }) => ({ id: option.id })) } };
+      return { ok: true, value: { multi_select: value.multi_select.map((option) => ({ id: option.id })) } };
     case "date":
       return {
         ok: true,
-        value: { date: v.date ? { start: v.date.start, end: v.date.end ?? null, time_zone: v.date.time_zone ?? null } : null },
+        value: {
+          date: value.date ? { start: value.date.start, end: value.date.end ?? null, time_zone: value.date.time_zone ?? null } : null,
+        },
       };
     case "people":
       return {
         ok: true,
         value: {
-          people: v.people.map((person: { id: string; object: string }) =>
+          people: value.people.map((person) =>
             person.object === "group" ? { object: "group", id: person.id } : { object: "user", id: person.id },
           ),
         },
       };
     case "relation":
-      return { ok: true, value: { relation: v.relation.map((item: { id: string }) => ({ id: item.id })) } };
+      return { ok: true, value: { relation: value.relation.map((item) => ({ id: item.id })) } };
     case "files": {
-      const hosted = v.files.filter((file: { type: string }) => file.type !== "external");
+      const external = value.files.flatMap((file) => (file.type === "external" ? [file] : []));
+      const hosted = value.files.filter((file) => file.type !== "external");
       if (hosted.length > 0) {
-        return { ok: false, refusal: { kind: "hosted_files", files: hosted.map((file: { name: string }) => file.name) } };
+        return { ok: false, refusal: { kind: "hosted_files", files: hosted.map((file) => file.name) } };
       }
       return {
         ok: true,
         value: {
-          files: v.files.map((file: { name: string; external: { url: string } }) => ({
+          files: external.map((file) => ({
             name: file.name,
             type: "external",
             external: { url: file.external.url },
@@ -233,6 +276,6 @@ export function toWritablePropertyValue(value: PagePropertyValue): WritableResul
       };
     }
     default:
-      return { ok: false, refusal: { kind: "unsupported_type", type: v.type } };
+      return { ok: false, refusal: { kind: "unsupported_type", type: value.type } };
   }
 }

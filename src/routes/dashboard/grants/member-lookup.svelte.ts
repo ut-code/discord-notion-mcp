@@ -1,7 +1,27 @@
+import { isRecord } from "$lib/guards";
 import type { CandidateView } from "$lib/server/dashboard/grants";
 
 const DEBOUNCE_MS = 250;
 const FAILED = "メンバー検索に失敗しました。";
+
+function isCandidate(value: unknown): value is CandidateView {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    typeof value.secondLine === "string" &&
+    (value.avatarUrl === null || typeof value.avatarUrl === "string")
+  );
+}
+
+/** The endpoint's JSON; a malformed member list counts as a failed search. */
+function parseBody(body: unknown): { members?: CandidateView[]; error?: string } {
+  if (!isRecord(body)) return {};
+  return {
+    members: Array.isArray(body.members) && body.members.every(isCandidate) ? body.members : undefined,
+    error: typeof body.error === "string" ? body.error : undefined,
+  };
+}
 
 /**
  * Search-as-you-type against the members endpoint: debounced, aborts the request of a
@@ -62,7 +82,7 @@ export class MemberLookup {
         location.reload();
         return;
       }
-      const body = (await response.json().catch(() => ({}))) as { members?: CandidateView[]; error?: string };
+      const body = parseBody(await response.json().catch(() => ({})));
       if (key !== this.latest) return;
       if (response.ok && body.members) {
         this.cache.set(key, body.members);

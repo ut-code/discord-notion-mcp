@@ -10,7 +10,10 @@ export interface Runtime {
   preview: Preview | null;
 }
 
-const RUNTIME_KEY = Symbol.for("discord-notion-mcp.runtime");
+declare global {
+  // Survives dev-server module reloads, which would otherwise boot a second server.
+  var discordNotionMcpRuntime: Promise<Runtime> | undefined;
+}
 
 function readConfig(): Config {
   try {
@@ -46,7 +49,6 @@ async function boot(): Promise<Runtime> {
 
 /** Boots the server on first call and returns it; one per process, kept across dev-server module reloads. */
 export function ensureStarted(): Promise<Runtime> {
-  const store = globalThis as typeof globalThis & { [RUNTIME_KEY]?: Promise<Runtime> };
-  store[RUNTIME_KEY] ??= boot();
-  return store[RUNTIME_KEY];
+  globalThis.discordNotionMcpRuntime ??= boot();
+  return globalThis.discordNotionMcpRuntime;
 }

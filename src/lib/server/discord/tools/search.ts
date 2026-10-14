@@ -1,10 +1,5 @@
 // Discord tool for searching messages.
-import {
-  MessageSearchAuthorType,
-  MessageSearchSortMode,
-  type MessageSearchHasType,
-  type RESTGetAPIGuildMessagesSearchQuery,
-} from "discord-api-types/v10";
+import { MessageSearchAuthorType, MessageSearchSortMode, type RESTGetAPIGuildMessagesSearchQuery } from "discord-api-types/v10";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
 import { compareSnowflakes, snowflakeSchema } from "../../lib/snowflake";
@@ -49,7 +44,7 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
         channel_id: scope.channelIds,
         author_id: args.author_id ? [args.author_id] : undefined,
         mentions: args.mentions_user_id ? [args.mentions_user_id] : undefined,
-        has: args.has as MessageSearchHasType[] | undefined,
+        has: args.has,
         pinned: args.pinned,
         author_type: args.exclude_bots ? [MessageSearchAuthorType.User] : undefined,
         max_id: before,

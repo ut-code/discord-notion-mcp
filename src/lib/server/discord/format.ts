@@ -56,7 +56,7 @@ export function formatMessage(message: FormattableMessage, ctx: FormatContext, o
   const author = message.author;
   const displayName = userDisplayName(author, message.member?.nick);
   const botTag = author.bot ? " [bot]" : "";
-  const content = resolveMentions(message.content ?? "", (message.mentions ?? []) as MentionedUser[], ctx);
+  const content = resolveMentions(message.content ?? "", message.mentions ?? [], ctx);
   const prefix = options.highlight ? "▶ " : "";
   const lines = [
     `${prefix}[${formatTimestamp(message.timestamp)}] ${displayName} (@${author.username})${botTag}: ${content || "(no text content)"}`,
@@ -67,7 +67,7 @@ export function formatMessage(message: FormattableMessage, ctx: FormatContext, o
   }
   for (const snapshot of message.message_snapshots ?? []) {
     const forwarded = snapshot.message.content
-      ? resolveMentions(snapshot.message.content, (snapshot.message.mentions ?? []) as MentionedUser[], ctx)
+      ? resolveMentions(snapshot.message.content, snapshot.message.mentions ?? [], ctx)
       : "(no text content)";
     lines.push(`  ⤷ forwarded: ${forwarded}`);
   }

@@ -13,12 +13,12 @@ import { formatJst } from "./format";
 /* Japanese wording of write notes and revert outcomes; the MCP tools word the same data in English. */
 
 function blockerText(blocker: string): string {
-  switch (blocker as RevertBlocker) {
-    case "no_anchor":
+  switch (blocker) {
+    case "no_anchor" satisfies RevertBlocker:
       return "ページに文字が残っておらず、元に戻す位置を決められません";
-    case "ambiguous_inverse":
+    case "ambiguous_inverse" satisfies RevertBlocker:
       return "元に戻す編集を一つに決められません";
-    case "truncated_after_write":
+    case "truncated_after_write" satisfies RevertBlocker:
       return "書き込み後のページが大きすぎて、変更内容を記録できませんでした";
     default:
       return blocker;

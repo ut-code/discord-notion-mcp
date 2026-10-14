@@ -98,8 +98,17 @@ function translateError(error: unknown): unknown {
   return error;
 }
 
-function expectFull<T>(value: unknown, guard: (value: never) => boolean, what: string): T {
-  if (!guard(value as never)) throw new NotionRequestError(`Notion returned a partial ${what} object.`, 0, "partial_response");
+function expectFull<R, T extends R>(value: R, guard: (value: R) => value is T, what: string): T {
+  if (!guard(value)) throw new NotionRequestError(`Notion returned a partial ${what} object.`, 0, "partial_response");
+  return value;
+}
+
+/**
+ * Request JSON built from tool input or stored snapshots goes to the SDK as-is: its
+ * request unions are finer than the loosely typed JSON, and Notion validates the body.
+ */
+function sdkRequest<T>(value: unknown): T {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- trust boundary: loosely typed request JSON is validated by the Notion API
   return value as T;
 }
 
@@ -141,7 +150,7 @@ export class SdkNotionApi implements NotionApi {
 
   async retrievePage(pageId: string): Promise<NotionPage> {
     const page = await this.call(() => this.client.pages.retrieve({ page_id: pageId }));
-    return expectFull<NotionPage>(page, isFullPage, "page");
+    return expectFull(page, isFullPage, "page");
   }
 
   async retrievePropertyItems(pageId: string, propertyId: string): Promise<PropertyItemObjectResponse[]> {
@@ -152,7 +161,7 @@ export class SdkNotionApi implements NotionApi {
         this.client.pages.properties.retrieve({ page_id: pageId, property_id: propertyId, start_cursor: cursor, page_size: 100 }),
       );
       if (response.object !== "list") return [response];
-      items.push(...(response.results as PropertyItemObjectResponse[]));
+      items.push(...response.results);
       if (!response.has_more || !response.next_cursor) break;
       cursor = response.next_cursor;
     }
@@ -176,12 +185,12 @@ export class SdkNotionApi implements NotionApi {
 
   async retrieveDatabase(databaseId: string): Promise<NotionDatabase> {
     const database = await this.call(() => this.client.databases.retrieve({ database_id: databaseId }));
-    return expectFull<NotionDatabase>(database, isFullDatabase, "database");
+    return expectFull(database, isFullDatabase, "database");
   }
 
   async retrieveDataSource(dataSourceId: string): Promise<NotionDataSource> {
     const dataSource = await this.call(() => this.client.dataSources.retrieve({ data_source_id: dataSourceId }));
-    return expectFull<NotionDataSource>(dataSource, isFullDataSource, "data source");
+    return expectFull(dataSource, isFullDataSource, "data source");
   }
 
   async queryDataSource(
@@ -190,8 +199,8 @@ export class SdkNotionApi implements NotionApi {
     const response = await this.call(() =>
       this.client.dataSources.query({
         data_source_id: query.dataSourceId,
-        filter: query.filter as QueryDataSourceParameters["filter"],
-        sorts: query.sorts as QueryDataSourceParameters["sorts"],
+        filter: sdkRequest<QueryDataSourceParameters["filter"]>(query.filter),
+        sorts: sdkRequest<QueryDataSourceParameters["sorts"]>(query.sorts),
         page_size: query.pageSize,
         start_cursor: query.startCursor,
         result_type: "page",
@@ -211,28 +220,28 @@ export class SdkNotionApi implements NotionApi {
     const page = await this.call(() =>
       this.client.pages.create({
         parent: params.parent,
-        properties: params.properties as CreatePageParameters["properties"],
+        properties: sdkRequest<CreatePageParameters["properties"]>(params.properties),
       }),
     );
-    return expectFull<NotionPage>(page, isFullPage, "page");
+    return expectFull(page, isFullPage, "page");
   }
 
   async updatePage(params: { pageId: string; properties?: Record<string, unknown>; inTrash?: boolean }): Promise<NotionPage> {
     const page = await this.call(() =>
       this.client.pages.update({
         page_id: params.pageId,
-        properties: params.properties as UpdatePageParameters["properties"],
+        properties: sdkRequest<UpdatePageParameters["properties"]>(params.properties),
         in_trash: params.inTrash,
       }),
     );
-    return expectFull<NotionPage>(page, isFullPage, "page");
+    return expectFull(page, isFullPage, "page");
   }
 
   async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<void> {
     await this.call(() =>
       this.client.comments.create({
         parent: { page_id: params.pageId },
-        rich_text: params.richText as unknown as Extract<CreateCommentParameters, { rich_text: unknown }>["rich_text"],
+        rich_text: sdkRequest<Extract<CreateCommentParameters, { rich_text: unknown }>["rich_text"]>(params.richText),
       }),
     );
   }

@@ -1,3 +1,4 @@
+import { isOneOf } from "../../one-of";
 import { DASHBOARD_PATH } from "../../paths";
 import type { Permission } from "../permissions/permissions";
 import { DAY_MS, JST_OFFSET_MS, jstDay } from "../usage/usage-stats";
@@ -58,7 +59,7 @@ export interface StatsPageData {
 
 export function rangeParam(value: string | null): StatsRange {
   const range = Number(value);
-  return (STATS_RANGES as readonly number[]).includes(range) ? (range as StatsRange) : DEFAULT_RANGE;
+  return isOneOf(STATS_RANGES, range) ? range : DEFAULT_RANGE;
 }
 
 function rangeHref(range: StatsRange): string {
@@ -114,7 +115,8 @@ export async function statsPage(
     counts.set(row.day, bucket);
     used.add(key);
   }
-  const series: ChartSeries[] = CATEGORIES.filter((category) => used.has(category.key)).map((category) => ({ ...category }));
+  const usedCategories = CATEGORIES.filter((category) => used.has(category.key));
+  const series: ChartSeries[] = usedCategories.map((category) => ({ ...category }));
 
   const calls = byTool.reduce((sum, row) => sum + row.calls, 0);
   const failures = byTool.reduce((sum, row) => sum + row.failures, 0);
@@ -128,7 +130,7 @@ export async function statsPage(
       series,
       rows: days.map((day) => {
         const bucket = counts.get(day) ?? {};
-        return { date: dayLabel(day), ...Object.fromEntries(series.map((entry) => [entry.key, bucket[entry.key as CategoryKey] ?? 0])) };
+        return { date: dayLabel(day), ...Object.fromEntries(usedCategories.map(({ key }) => [key, bucket[key] ?? 0])) };
       }),
     },
     users: byUser.map((row) => {

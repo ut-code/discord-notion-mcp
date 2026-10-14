@@ -32,7 +32,7 @@ export function stripUserMentionLabels(content: string): string {
 
 /** Adds display names to unlabeled user mentions; lookups that fail leave the mention as is. */
 export async function labelUserMentions(markdown: string, lookup: (userId: string) => Promise<string | null>): Promise<string> {
-  const ids = [...new Set([...markdown.matchAll(BARE_USER_MENTION)].map((match) => match[1]!))].slice(0, MAX_USER_LOOKUPS);
+  const ids = [...new Set([...markdown.matchAll(BARE_USER_MENTION)].flatMap((match) => match[1] ?? []))].slice(0, MAX_USER_LOOKUPS);
   if (ids.length === 0) return markdown;
   const names = new Map<string, string>();
   await Promise.all(

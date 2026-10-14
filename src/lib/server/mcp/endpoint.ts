@@ -39,6 +39,11 @@ export interface McpEndpointDeps {
 
 const PRINCIPAL_KEY = "principal";
 
+/** Carries the principal through `AuthInfo.extra` (typed `unknown`) so the server factory can narrow it with instanceof. */
+class PrincipalCarrier {
+  constructor(readonly principal: Principal) {}
+}
+
 function jsonRpcError(status: number, message: string): Response {
   return Response.json({ jsonrpc: "2.0", error: { code: -32000, message }, id: null }, { status });
 }
@@ -71,9 +76,9 @@ export function createMcpEndpoint(deps: McpEndpointDeps): (request: Request) => 
   };
   const handler = createMcpHandler(
     (ctx) => {
-      const principal = ctx.authInfo?.extra?.[PRINCIPAL_KEY] as Principal | undefined;
-      if (!principal) throw new Error("MCP server factory invoked without an authenticated principal");
-      return buildMcpServer(principal, serverDeps);
+      const carrier = ctx.authInfo?.extra?.[PRINCIPAL_KEY];
+      if (!(carrier instanceof PrincipalCarrier)) throw new Error("MCP server factory invoked without an authenticated principal");
+      return buildMcpServer(carrier.principal, serverDeps);
     },
     {
       // Serve 2025-era clients (initialize handshake, protocol 2025-03-26 .. 2025-11-25)
@@ -108,7 +113,7 @@ export function createMcpEndpoint(deps: McpEndpointDeps): (request: Request) => 
         scopes: (stringClaim(claims.scope) ?? "").split(" ").filter(Boolean),
         expiresAt: typeof claims.exp === "number" ? claims.exp : undefined,
         resource: new URL(deps.resource),
-        extra: { [PRINCIPAL_KEY]: principal },
+        extra: { [PRINCIPAL_KEY]: new PrincipalCarrier(principal) },
       };
       return handler.fetch(request, { authInfo });
     },

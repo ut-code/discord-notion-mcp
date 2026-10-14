@@ -3,10 +3,7 @@ export function niceScale(max: number, count = 4): { max: number; ticks: number[
   if (!(max > 0)) return { max: 1, ticks: [0, 1] };
   const raw = max / count;
   const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = Math.max(
-    1,
-    [1, 2, 5, 10].map((multiple) => multiple * magnitude).find((candidate) => candidate >= raw)!,
-  );
+  const step = Math.max(1, [1, 2, 5].map((multiple) => multiple * magnitude).find((candidate) => candidate >= raw) ?? 10 * magnitude);
   const top = Math.ceil(max / step) * step;
   return { max: top, ticks: Array.from({ length: top / step + 1 }, (_, index) => index * step) };
 }

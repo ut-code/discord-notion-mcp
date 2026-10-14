@@ -124,7 +124,7 @@ export function buildUserRow(
   const roleIds = new Set([guild.id, ...member.roles]);
   const fromRoles = new Set(grants.filter((g) => g.subjectType === "role" && roleIds.has(g.subjectId)).map((g) => g.permission));
   const fromUser = new Set(grants.filter((g) => g.subjectType === "user" && g.subjectId === member.userId).map((g) => g.permission));
-  const held = access.isAdmin ? (["admin"] as Permission[]) : PERMISSIONS.filter((permission) => access.permissions.has(permission));
+  const held: Permission[] = access.isAdmin ? ["admin"] : PERMISSIONS.filter((permission) => access.permissions.has(permission));
   return {
     user,
     membership: "member",

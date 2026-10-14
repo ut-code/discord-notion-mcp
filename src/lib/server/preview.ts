@@ -35,7 +35,7 @@ const ROLE_STAFF = "200000000000000002";
 const ROLE_MEMBER = "200000000000000003";
 const ROLE_BOT = "200000000000000004";
 
-const people: MemberInfo[] = [
+const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...rest: MemberInfo[]] = [
   { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: null },
   {
     userId: "300000000000000001",
@@ -50,7 +50,8 @@ const people: MemberInfo[] = [
   { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
 ];
 
-const PREVIEW_TOOLS: Array<[tool: string, weight: number, durationMs: number]> = [
+type PreviewTool = [tool: string, weight: number, durationMs: number];
+const PREVIEW_TOOLS: [PreviewTool, ...PreviewTool[]] = [
   ["discord_read_messages", 30, 420],
   ["discord_search_messages", 18, 900],
   ["notion_search", 16, 650],
@@ -85,7 +86,7 @@ function seedToolCalls(store: ToolCallStore, now = Date.now()): void {
       roll -= entry[1];
       if (roll <= 0) return entry;
     }
-    return PREVIEW_TOOLS[0]!;
+    return PREVIEW_TOOLS[0];
   };
   for (let daysAgo = 29; daysAgo >= 0; daysAgo--) {
     const weekend = new Date(now - daysAgo * 86_400_000).getDay() % 6 === 0;
@@ -195,9 +196,11 @@ export async function startPreview(): Promise<Runtime> {
     ]),
   );
   const run = async (name: string, args: Record<string, unknown>, who: MemberInfo): Promise<string> => {
-    const tool = tools.get(name)!;
+    const tool = tools.get(name);
+    const userId = authUserIds.get(who.userId);
+    if (!tool || !userId) throw new Error(`Preview seed refers to an unknown tool (${name}) or user (${who.userId})`);
     const principal: Principal = {
-      userId: authUserIds.get(who.userId)!,
+      userId,
       discordUserId: who.userId,
       clientId: "preview",
       access: {
@@ -210,13 +213,13 @@ export async function startPreview(): Promise<Runtime> {
       },
     };
     try {
-      const result = await tool.handler(tool.inputSchema.parse(args) as never, { principal });
+      const result = await tool.handler(tool.inputSchema.parse(args), { principal });
       return typeof result === "string" ? result : JSON.stringify(result);
     } catch (error) {
       return String(error);
     }
   };
-  const [, tanaka, suzuki] = people as [MemberInfo, MemberInfo, MemberInfo];
+  const [, tanaka, suzuki] = people;
   await run(
     "notion_create_page",
     { parent: wiki.id, title: "10/12 定例議事録", content: "## 決定事項\n- リリースは 10/20\n- 担当: 田中" },

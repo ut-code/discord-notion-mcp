@@ -1,3 +1,4 @@
+import { isRecord } from "../../guards";
 import { isLoopbackHost } from "../lib/loopback";
 
 function isNativeRedirectUri(uri: unknown): boolean {
@@ -19,9 +20,8 @@ function isNativeRedirectUri(uri: unknown): boolean {
  * Better Auth then rejects the http loopback redirects. Such clients are native
  * apps per RFC 8252, so we fill in `application_type: "native"` for them only.
  */
-export function withInferredApplicationType(body: unknown): Record<string, unknown> | null {
-  if (typeof body !== "object" || body === null || Array.isArray(body)) return null;
-  const metadata = body as Record<string, unknown>;
+export function withInferredApplicationType(metadata: unknown): Record<string, unknown> | null {
+  if (!isRecord(metadata)) return null;
   if (metadata.application_type !== undefined) return null;
   if (metadata.token_endpoint_auth_method !== "none") return null;
   const redirectUris = metadata.redirect_uris;

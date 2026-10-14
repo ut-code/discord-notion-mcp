@@ -1,10 +1,10 @@
 // Shared types, constants and helpers used by the Discord tool modules.
 import { DiscordAPIError } from "@discordjs/rest";
-import { ChannelType, GuildScheduledEventStatus, type APIChannel, type APIThreadChannel } from "discord-api-types/v10";
+import { ChannelType, GuildScheduledEventStatus, MessageSearchHasType, type APIThreadChannel } from "discord-api-types/v10";
 import { ToolError } from "../../lib/errors";
 import { compareSnowflakes, parseMessageCursor } from "../../lib/snowflake";
 import type { Principal, ToolResult } from "../../mcp/registry";
-import { NotAccessibleError, type ChannelAccess, type ChannelDirectory, type Viewer } from "../access";
+import { NotAccessibleError, type ChannelAccess, type ChannelDirectory, type ResolvedChannel, type Viewer } from "../access";
 import type { DiscordApi, GuildChannel } from "../api";
 import { formatTimestamp, type FormatContext } from "../format";
 
@@ -17,7 +17,17 @@ export interface DiscordToolDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
-export const SEARCH_HAS_TYPES = ["image", "sound", "video", "file", "sticker", "embed", "link", "poll", "snapshot"] as const;
+export const SEARCH_HAS_TYPES = [
+  MessageSearchHasType.Image,
+  MessageSearchHasType.Sound,
+  MessageSearchHasType.Video,
+  MessageSearchHasType.File,
+  MessageSearchHasType.Sticker,
+  MessageSearchHasType.Embed,
+  MessageSearchHasType.Link,
+  MessageSearchHasType.Poll,
+  MessageSearchHasType.Snapshot,
+] as const;
 
 export const LISTED_CHANNEL_TYPES = new Map<ChannelType, string>([
   [ChannelType.GuildText, "text"],
@@ -71,12 +81,12 @@ export function parseCursor(value: string | undefined, field: string): string | 
   }
 }
 
-export function channelLabel(channel: APIChannel): string {
+export function channelLabel(channel: ResolvedChannel): string {
   const name = "name" in channel && channel.name ? channel.name : channel.id;
   return `#${name}`;
 }
 
-export async function formatContextFor(deps: DiscordToolDeps, principal: Principal, extra?: APIChannel): Promise<FormatContext> {
+export async function formatContextFor(deps: DiscordToolDeps, principal: Principal, extra?: ResolvedChannel): Promise<FormatContext> {
   const channelNames = await deps.channels.nameMap();
   if (extra && "name" in extra && extra.name) channelNames.set(extra.id, extra.name);
   return {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isRecord } from "../../../guards";
 import type { ContentHunk } from "../content/content-diff";
 import type { PagePropertyValue } from "../content/properties";
 import type { PageMarkdownUpdate } from "../client/types";
@@ -32,7 +33,7 @@ const pageMarkdownUpdateSchema = z.discriminatedUnion("type", [
 const contentHunkSchema = z.object({ before: z.string(), after: z.string() }) satisfies z.ZodType<ContentHunk>;
 
 const propertyValueSchema = z.custom<PagePropertyValue>(
-  (value) => typeof value === "object" && value !== null && typeof (value as { type?: unknown }).type === "string",
+  (value) => isRecord(value) && typeof value.type === "string",
   "expected a Notion property value",
 );
 

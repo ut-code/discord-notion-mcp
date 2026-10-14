@@ -58,12 +58,12 @@ export type RevertResult =
   { ok: true; revertAuditId: number; forced: boolean; partial: boolean; note: RevertNote | null } | { ok: false; reason: RevertReason };
 
 export function revertBlockerText(blocker: string): string {
-  switch (blocker as RevertBlocker) {
-    case "no_anchor":
+  switch (blocker) {
+    case "no_anchor" satisfies RevertBlocker:
       return "the page has no text left to anchor a revert on";
-    case "ambiguous_inverse":
+    case "ambiguous_inverse" satisfies RevertBlocker:
       return "no unambiguous inverse edit could be computed";
-    case "truncated_after_write":
+    case "truncated_after_write" satisfies RevertBlocker:
       return "Notion returned truncated content after the write, so the change could not be captured";
     default:
       return blocker;

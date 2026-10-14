@@ -42,21 +42,21 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
 
       if (visible.length === 0) return "No channels are visible to you.";
 
-      const groups = new Map<string | null, GuildChannel[]>();
+      const groups = new Map<GuildChannel | null, GuildChannel[]>();
       for (const channel of visible) {
-        const key = channel.parent_id && categories.has(channel.parent_id) ? channel.parent_id : null;
-        groups.set(key, [...(groups.get(key) ?? []), channel]);
+        const category = channel.parent_id ? (categories.get(channel.parent_id) ?? null) : null;
+        groups.set(category, [...(groups.get(category) ?? []), channel]);
       }
-      const orderedKeys = [...groups.keys()].sort((a, b) => {
+      const orderedCategories = [...groups.keys()].sort((a, b) => {
         if (a === null) return -1;
         if (b === null) return 1;
-        return byPosition(categories.get(a)!, categories.get(b)!);
+        return byPosition(a, b);
       });
 
       const lines = [`Server: ${principal.access.guild.name}`, ""];
-      for (const key of orderedKeys) {
-        lines.push(key === null ? "(no category)" : `Category: ${categories.get(key)?.name ?? key}`);
-        for (const channel of groups.get(key) ?? []) {
+      for (const category of orderedCategories) {
+        lines.push(category === null ? "(no category)" : `Category: ${category.name ?? category.id}`);
+        for (const channel of groups.get(category) ?? []) {
           const topic = channel.topic ? ` — ${channel.topic.replace(/\s+/g, " ")}` : "";
           lines.push(`  #${channel.name} (id ${channel.id}, ${LISTED_CHANNEL_TYPES.get(channel.type)})${topic}`);
         }

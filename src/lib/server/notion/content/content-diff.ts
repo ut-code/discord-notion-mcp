@@ -102,8 +102,9 @@ function inverseUpdates(a: string[], b: string[], raw: Hunk[], after: string): C
   };
 
   let next = 0;
-  while (next < raw.length) {
-    let g: Hunk = { ...raw[next++]! };
+  for (let start = raw[next]; start !== undefined; start = raw[next]) {
+    next++;
+    let g: Hunk = { ...start };
     for (;;) {
       const previous = groups.at(-1);
       if (previous && previous.bEnd >= g.bStart) {

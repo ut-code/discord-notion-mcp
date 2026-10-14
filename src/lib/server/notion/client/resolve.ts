@@ -54,9 +54,10 @@ export async function resolveDataSource(api: NotionApi, id: string): Promise<Res
     if (isNotionMiss(error)) throw new NotionNotAccessibleError();
     throw error;
   }
-  if (database.data_sources.length === 0) throw new ToolError("This database has no data sources.");
-  if (database.data_sources.length > 1) throw multipleDataSourcesError(database);
-  return { dataSource: await api.retrieveDataSource(database.data_sources[0]!.id), database };
+  const [dataSource, ...others] = database.data_sources;
+  if (!dataSource) throw new ToolError("This database has no data sources.");
+  if (others.length > 0) throw multipleDataSourcesError(database);
+  return { dataSource: await api.retrieveDataSource(dataSource.id), database };
 }
 
 export interface DatabaseView {

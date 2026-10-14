@@ -35,6 +35,9 @@ export interface ToolDefinition<S extends z.ZodObject = z.ZodObject> {
 
 export type AnyToolDefinition = ToolDefinition<z.ZodObject>;
 
+/** Arguments of any tool, already validated against its input schema. */
+export type AnyToolArgs = z.output<AnyToolDefinition["inputSchema"]>;
+
 /** Annotations of tools that only read from Discord or Notion. */
 export const READ_ONLY_ANNOTATIONS = { readOnlyHint: true, idempotentHint: true, openWorldHint: true } as const satisfies ToolAnnotations;
 

@@ -29,11 +29,10 @@ export function parseMessageLink(link: string, expectedGuildId: string): Message
   if (url.protocol !== "https:" || !ALLOWED_HOSTS.has(url.hostname)) {
     return { ok: false, error: "Not a Discord message link." };
   }
-  const segments = url.pathname.split("/").filter(Boolean);
-  if (segments.length !== 4 || segments[0] !== "channels") {
+  const [prefix, guildId, channelId, messageId, ...rest] = url.pathname.split("/").filter(Boolean);
+  if (prefix !== "channels" || guildId === undefined || channelId === undefined || messageId === undefined || rest.length > 0) {
     return { ok: false, error: "Malformed message link: expected https://discord.com/channels/{guild}/{channel}/{message}." };
   }
-  const [, guildId, channelId, messageId] = segments as [string, string, string, string];
   if (guildId === "@me") {
     return { ok: false, error: "Direct message links are not supported." };
   }

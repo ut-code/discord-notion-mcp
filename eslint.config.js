@@ -29,4 +29,12 @@ export default defineConfig(
       },
     },
   },
+  {
+    // Application code narrows types with guards instead of unchecked assertions; tests stay exempt.
+    files: ["src/**/*.ts", "src/**/*.svelte", "src/**/*.svelte.ts"],
+    rules: {
+      "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
+      "@typescript-eslint/no-non-null-assertion": "error",
+    },
+  },
 );

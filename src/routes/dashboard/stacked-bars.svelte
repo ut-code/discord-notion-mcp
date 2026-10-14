@@ -32,14 +32,15 @@
   let tipWidth = $state(0);
   // Beside the hovered day, on the right when it fits, else on the left; never past the y axis.
   const tip = $derived.by(() => {
-    if (active === null) return null;
+    const row = active === null ? undefined : rows[active];
+    if (active === null || !row) return null;
     const center = ((active + 0.5) / rows.length) * plotWidth;
     const left = center + 8 + tipWidth <= plotWidth ? center + 8 : Math.max(-32, center - 8 - tipWidth);
-    return { row: rows[active]!, left };
+    return { row, left };
   });
 
-  function track(event: PointerEvent) {
-    const box = (event.currentTarget as SVGSVGElement).getBoundingClientRect();
+  function track(event: PointerEvent & { currentTarget: SVGSVGElement }) {
+    const box = event.currentTarget.getBoundingClientRect();
     const index = Math.floor(((event.clientX - box.left) / box.width) * rows.length);
     active = index >= 0 && index < rows.length ? index : null;
   }
@@ -73,7 +74,7 @@
           {/each}
         {/each}
         {#each labels as tick (tick.index)}
-          <text class:wide-only={!tick.narrow} x={`${(tick.index + 0.5) * band}%`} y={PLOT_HEIGHT + 16}>{rows[tick.index]!.date}</text>
+          <text class:wide-only={!tick.narrow} x={`${(tick.index + 0.5) * band}%`} y={PLOT_HEIGHT + 16}>{rows[tick.index]?.date}</text>
         {/each}
       </svg>
       {#if tip}

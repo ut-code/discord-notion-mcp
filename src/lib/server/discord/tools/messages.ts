@@ -41,10 +41,10 @@ export function createMessageTools(deps: DiscordToolDeps): {
         after,
       });
       const header = `${channelLabel(channel)} (id ${channel.id}) — ${messages.length} message(s), oldest first`;
-      if (messages.length === 0) return `${header}\n\nNo messages found for this range.`;
+      const first = messages[0];
+      const last = messages.at(-1);
+      if (first === undefined || last === undefined) return `${header}\n\nNo messages found for this range.`;
       const ctx = await formatContextFor(deps, principal, channel);
-      const first = messages[0]!;
-      const last = messages.at(-1)!;
       const hints = [`Older: before="${first.id}"`, after || before ? `Newer: after="${last.id}"` : undefined].filter(Boolean);
       return `${header}\n${hints.join(" | ")}\n\n${formatMessages(messages, ctx)}`;
     }),
