@@ -33,6 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@inlang/paraglide-js": "^2.27.0",
+    "@inlang/plugin-message-format": "4.5.3",
     "@internationalized/date": "^3.12.4",
     "@lucide/svelte": "^1.55.0",
     "@sveltejs/adapter-node": "^5.5.7",
