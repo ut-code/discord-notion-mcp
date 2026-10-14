@@ -1,0 +1,21 @@
+{
+  "$schema": "https://inlang.com/schema/inlang-message-format",
+  "access_denied_title": "アクセスできません",
+  "access_not_linked": "このログインには Discord アカウントが連携されていません。",
+  "access_unavailable_title": "一時的に確認できません",
+  "access_unavailable": "Discord サーバーのメンバーシップを確認できませんでした。しばらくしてから再読み込みしてください。",
+  "access_admin_only_action": "この操作は管理者だけが行えます。",
+  "role_owner": "オーナー",
+  "role_admin": "管理者",
+  "role_member": "メンバー",
+  "revert_card_heading": "この変更を取り消す",
+  "revert_card_reverted": "取り消し済み",
+  "revert_card_disabled": "NOTION_TOKEN が未設定のため取り消せません。",
+  "revert_card_conflict_title": "この変更の後にページが編集されています",
+  "revert_card_conflict_body": "取り消すと、後からの編集と食い違う可能性があります。内容を確認してから実行してください。",
+  "revert_card_conflict_confirm": "後からの編集を確認した上で取り消す",
+  "revert_card_force": "強制的に取り消す",
+  "revert_card_open_in_notion": "Notion でページを確認",
+  "revert_card_revert": "取り消す",
+  "revert_card_dialog_title": "この変更を取り消しますか？"
+}

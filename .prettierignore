@@ -2,3 +2,5 @@ build
 .svelte-kit
 drizzle
 bun.lock
+src/lib/paraglide
+project.inlang/cache

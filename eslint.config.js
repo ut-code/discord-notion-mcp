@@ -6,7 +6,7 @@ import ts from "typescript-eslint";
 import svelteConfig from "./svelte.config.js";
 
 export default defineConfig(
-  globalIgnores(["build/", ".svelte-kit/", "node_modules/", "drizzle/meta/"]),
+  globalIgnores(["build/", ".svelte-kit/", "node_modules/", "drizzle/meta/", "src/lib/paraglide/"]),
   js.configs.recommended,
   ts.configs.recommended,
   svelte.configs.recommended,

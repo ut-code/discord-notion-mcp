@@ -1,9 +1,11 @@
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [tailwindcss(), sveltekit()],
+  // Outdir and strategy live in project.inlang/paraglide.config.ts.
+  plugins: [paraglideVitePlugin({ project: "./project.inlang" }), tailwindcss(), sveltekit()],
   // Same port as PUBLIC_URL in .env (OAuth redirects come back here).
   // `.ts.net`: reachable through `tailscale serve` from other tailnet devices.
   server: { port: Number(process.env.PORT ?? 3000), strictPort: true, allowedHosts: [".ts.net"] },

@@ -1,3 +1,4 @@
+import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH, SIGN_IN_PATH } from "../../paths";
 import { isGuildOwner } from "../discord/permissions";
 import type { EffectiveAccess } from "../permissions/resolver";
@@ -13,7 +14,7 @@ export interface Viewer {
   displayName: string;
   username: string;
   avatarUrl: string | null;
-  roleLabel: "オーナー" | "管理者" | "メンバー";
+  roleLabel: string;
   guildName: string;
   /** Grants, revocations and reverts. */
   isAdmin: boolean;
@@ -30,24 +31,14 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
   if (!session) return { kind: "signed-out" };
   const discordUserId = await deps.identity.discordUserIdForUser(session.user.id);
   if (!discordUserId) {
-    return {
-      kind: "denied",
-      status: 403,
-      title: "アクセスできません",
-      message: "このログインには Discord アカウントが連携されていません。",
-    };
+    return { kind: "denied", status: 403, title: m.access_denied_title(), message: m.access_not_linked() };
   }
   let access: EffectiveAccess;
   try {
     access = await deps.resolver.resolve(discordUserId);
   } catch (error) {
     deps.logError({ event: "access_resolution_failed", source: "dashboard", discordUserId, error: errorMessage(error) });
-    return {
-      kind: "denied",
-      status: 503,
-      title: "一時的に確認できません",
-      message: "Discord サーバーのメンバーシップを確認できませんでした。しばらくしてから再読み込みしてください。",
-    };
+    return { kind: "denied", status: 503, title: m.access_unavailable_title(), message: m.access_unavailable() };
   }
   if (!access.isMember) return { kind: "denied", status: 403, ...NOT_MEMBER };
   return {
@@ -57,7 +48,7 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
       displayName: displayName(access.member),
       username: access.member.username,
       avatarUrl: access.member.avatarUrl,
-      roleLabel: isGuildOwner(access.guild, access.member) ? "オーナー" : access.isAdmin ? "管理者" : "メンバー",
+      roleLabel: isGuildOwner(access.guild, access.member) ? m.role_owner() : access.isAdmin ? m.role_admin() : m.role_member(),
       guildName: access.guild.name,
       isAdmin: access.isAdmin,
       canViewAudit: access.permissions.has("notion:read"),
@@ -66,7 +57,7 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
 }
 
 /** Result of an admin-only action attempted by a non-admin; nothing is changed. */
-export const ADMIN_ONLY: ActionResult = { kind: "error", message: "この操作は管理者だけが行えます。", status: 403 };
+export const ADMIN_ONLY: ActionResult = { kind: "error", message: m.access_admin_only_action(), status: 403 };
 
 /** Sign-in URL that returns to the requested page (form posts return to the dashboard top). */
 export function signInRedirect(url: URL, method: string): string {

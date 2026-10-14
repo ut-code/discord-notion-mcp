@@ -4,13 +4,13 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "prepare": "svelte-kit sync || echo ''; lefthook install || echo ''",
+    "prepare": "bun scripts/compile-messages.ts; svelte-kit sync || echo ''; lefthook install || echo ''",
     "dev": "bun --bun vite dev",
     "build": "bun --bun vite build",
     "start": "NODE_ENV=production BODY_SIZE_LIMIT=4M bun build/index.js",
     "preview": "PREVIEW=1 PORT=3920 bun --bun vite dev",
     "test": "bun test",
-    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo",
+    "typecheck": "bun scripts/compile-messages.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -31,6 +31,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@inlang/paraglide-js": "^2.27.0",
     "@internationalized/date": "^3.12.4",
     "@lucide/svelte": "^1.55.0",
     "@sveltejs/adapter-node": "^5.5.7",
