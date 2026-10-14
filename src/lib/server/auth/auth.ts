@@ -59,7 +59,6 @@ function authOptions({ config, sqlite, isGuildMember, logEvent: reportEvent = lo
       ipAddress: { ipAddressHeaders: [CLIENT_IP_HEADER] },
     },
     hooks: {
-      // eslint-disable-next-line @typescript-eslint/require-await -- createAuthMiddleware only accepts an async handler
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== "/oauth2/register") return;
         const body = withInferredApplicationType(ctx.body);

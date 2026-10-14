@@ -13,6 +13,8 @@ export default [
       ...Object.assign({}, ...ts.configs.recommendedTypeCheckedOnly.map((config) => config.rules ?? {})),
       // `${value satisfies never}` in exhaustiveness errors is intended.
       "@typescript-eslint/restrict-template-expressions": ["error", { allowNever: true }],
+      // Some APIs (Better Auth's createAuthMiddleware) only accept async handlers.
+      "@typescript-eslint/require-await": "off",
     },
   },
 ];
