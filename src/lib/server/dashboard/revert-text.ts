@@ -93,6 +93,8 @@ function failureText(failure: RevertFailure): string {
       return m.revert_failure_text_gone({ notionMessage: failure.notionMessage });
     case "nothing_restorable":
       return m.revert_failure_nothing_restorable({ skipped: skippedText(failure.skipped) });
+    case "superseded":
+      return m.revert_failure_superseded();
     case "error":
       return failure.message;
     default:

@@ -36,6 +36,8 @@ export type RevertNote = z.infer<typeof RevertNoteSchema>;
 export type RevertFailure =
   | { kind: "text_gone"; notionMessage: string }
   | { kind: "nothing_restorable"; skipped: PropertySkip[] }
+  /** Notion was reverted, but the log had given this revert up as interrupted and another one started. */
+  | { kind: "superseded" }
   | { kind: "error"; message: string };
 
 export type RevertReason =
@@ -110,6 +112,8 @@ export function revertFailureText(id: number, failure: RevertFailure): string {
       return `The page no longer contains the text written by audit #${id} in its original form, so it cannot be reverted automatically; restore it by hand. (Notion: ${failure.notionMessage})`;
     case "nothing_restorable":
       return `No property could be restored: ${skippedText(failure.skipped)}`;
+    case "superseded":
+      return `The revert ran, but meanwhile it had been marked interrupted and another revert of audit #${id} started; check the page.`;
     case "error":
       return failure.message;
     default:

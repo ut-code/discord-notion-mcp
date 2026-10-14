@@ -18,7 +18,7 @@ import { createMcpEndpoint } from "./mcp/endpoint";
 import type { AnyToolDefinition } from "./mcp/registry";
 import type { McpServerDeps } from "./mcp/server";
 import { SdkNotionApi, type NotionApi } from "./notion/client/api";
-import { NotionAuditService } from "./notion/changes/audit-service";
+import { NotionAuditService, startInterruptedWriteSweep } from "./notion/changes/audit-service";
 import { NotionAuditStore } from "./notion/changes/audit-store";
 import { NotionWriteService } from "./notion/changes/write-service";
 import { createNotionChangeTools, createNotionTools } from "./notion/tools";
@@ -86,8 +86,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   const notion = options.notionApi ?? (config.notion ? new SdkNotionApi(config.notion.token) : null);
   const auditStore = new NotionAuditStore(database.db);
   const notionAudit = new NotionAuditService(auditStore, notion);
-  const interrupted = await notionAudit.failInterruptedWrites();
-  if (interrupted > 0) reportEvent({ event: "audit_pending_marked_failed", count: interrupted });
+  startInterruptedWriteSweep({ audit: notionAudit, log: reportEvent, logError: reportError });
   const tools: AnyToolDefinition[] = [
     ...createDiscordTools({
       api: discord,

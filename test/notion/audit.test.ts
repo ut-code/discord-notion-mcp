@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { openDatabase, runAppMigrations, type AppDatabase } from "../../src/lib/server/db/client";
 import { ToolError } from "../../src/lib/server/lib/errors";
+import type { EventEntry } from "../../src/lib/server/lib/log";
 import { NotionRequestError, type NotionPage } from "../../src/lib/server/notion/client/api";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
-import { NotionAuditService } from "../../src/lib/server/notion/changes/audit-service";
+import { NotionAuditService, startInterruptedWriteSweep } from "../../src/lib/server/notion/changes/audit-service";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import { parseStoredJson, WriteWarningSchema, type WriteWarning } from "../../src/lib/server/notion/changes/audit-records";
 import {
@@ -684,8 +685,37 @@ describe("NotionAuditStore", () => {
 
     const old = await insertAuditRow(db, { ...archiveRow, status: "pending", createdAt: new Date(Date.now() - 11 * 60_000) });
     expect(await audit.failInterruptedWrites()).toBe(1);
-    expect(await store.finishPending(old.id, { status: "ok", result: {}, error: null })).toBe(true);
+    expect(await store.finishPending(old.id, { status: "ok", result: {} })).toBe(true);
     expect(await store.get(old.id)).toMatchObject({ status: "ok", error: null });
+    expect(await store.finishPending(old.id, { status: "failed", error: "late" })).toBe(false);
+  });
+
+  test("a revert given up as interrupted does not overwrite a later revert of the same row", async () => {
+    const original = await store.insert({ ...archiveRow, status: "ok" });
+    const revert = { ...archiveRow, operation: "revert" as const, request: {}, revertOfAuditId: original.id };
+    const first = (await store.startRevert(revert))!;
+    expect(await store.startRevert(revert)).toBeNull();
+    await overwriteAuditRow(db, first.id, { createdAt: new Date(Date.now() - 11 * 60_000) });
+    expect(await audit.failInterruptedWrites()).toBe(1);
+
+    const second = (await store.startRevert(revert))!;
+    expect(await store.finishRevert(first.id, original.id, { status: "ok", result: {} }, { revertedBy: "a", revertNote: null })).toBe(
+      false,
+    );
+    expect(await store.get(first.id)).toMatchObject({ status: "failed" });
+    expect(await store.finishRevert(second.id, original.id, { status: "ok", result: {} }, { revertedBy: "b", revertNote: null })).toBe(
+      true,
+    );
+    expect(await store.get(original.id)).toMatchObject({ revertAuditId: second.id, revertedBy: "b" });
+  });
+
+  test("the sweep marks stale pending writes right away and keeps running", async () => {
+    await insertAuditRow(db, { ...archiveRow, status: "pending", createdAt: new Date(Date.now() - 11 * 60_000) });
+    const events: EventEntry[] = [];
+    const stop = startInterruptedWriteSweep({ audit, log: (entry) => events.push(entry), logError: () => {}, intervalMs: 60_000 });
+    await Bun.sleep(10);
+    stop();
+    expect(events).toEqual([{ event: "audit_pending_marked_failed", count: 1 }]);
   });
 });
 

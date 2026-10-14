@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, isNull, lt, max, or, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, lt, max, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../../db/client";
 import {
   notionAudit,
@@ -47,9 +47,25 @@ export type PendingOutcome =
 /** What the original row records about its revert. */
 export type RevertMark = Pick<NewNotionAuditRow, "revertedBy" | "revertNote">;
 
-/** Still open: pending, or given up on at startup while the write may have gone on. */
+/** Still open: pending, or given up on as interrupted while the write may have gone on. */
 const stillOpen = (id: number) =>
-  and(eq(notionAudit.id, id), or(eq(notionAudit.status, "pending"), eq(notionAudit.error, INTERRUPTED_ERROR)));
+  and(
+    eq(notionAudit.id, id),
+    or(eq(notionAudit.status, "pending"), and(eq(notionAudit.status, "failed"), eq(notionAudit.error, INTERRUPTED_ERROR))),
+  );
+
+/** The partial unique index on revert_of_audit_id: reverts that are pending or done. */
+const activeRevert = sql`${notionAudit.status} <> 'failed'`;
+
+/** The unique index on active reverts rejected an insert; other constraint errors are real failures. */
+function isActiveRevertConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "SQLITE_CONSTRAINT_UNIQUE" &&
+    error.message.includes("notion_audit.revert_of_audit_id")
+  );
+}
 
 /**
  * The audit log. Rows are written once and then only move forward: a pending write ends
@@ -70,7 +86,12 @@ export class NotionAuditStore {
 
   /** Ends a pending write; false when it already ended (a real outcome is never replaced). */
   async finishPending(id: number, outcome: PendingOutcome): Promise<boolean> {
-    const updated = await this.db.update(notionAudit).set(outcome).where(stillOpen(id)).returning({ id: notionAudit.id });
+    // `error: null` first: an outcome replacing the interruption guess must not keep its marker.
+    const updated = await this.db
+      .update(notionAudit)
+      .set({ error: null, ...outcome })
+      .where(stillOpen(id))
+      .returning({ id: notionAudit.id });
     return updated.length > 0;
   }
 
@@ -89,18 +110,33 @@ export class NotionAuditStore {
    * row is pending or done (the unique index on revert_of_audit_id decides, across processes).
    */
   async startRevert(row: Omit<AuditInsert, "status"> & { operation: "revert"; revertOfAuditId: number }): Promise<NotionAuditRow | null> {
-    const [inserted] = await this.db
-      .insert(notionAudit)
-      .values({ ...row, status: "pending" })
-      .onConflictDoNothing()
-      .returning();
-    return inserted ?? null;
+    try {
+      return await this.insert({ ...row, status: "pending" });
+    } catch (error) {
+      if (isActiveRevertConflict(error)) return null;
+      throw error;
+    }
   }
 
-  /** Ends a pending revert successfully and marks the original reverted, atomically; false when it already ended. */
+  /**
+   * Ends a pending revert successfully and marks the original reverted, atomically. False when the
+   * log moved on meanwhile: the revert already ended, or it was given up on as interrupted and
+   * another revert of the same row started.
+   */
   finishRevert(revertId: number, originalId: number, outcome: PendingOutcome & { status: "ok" }, mark: RevertMark): Promise<boolean> {
     const finished = this.db.transaction((tx) => {
-      const ended = tx.update(notionAudit).set(outcome).where(stillOpen(revertId)).returning({ id: notionAudit.id }).all();
+      const other = tx
+        .select({ id: notionAudit.id })
+        .from(notionAudit)
+        .where(and(eq(notionAudit.revertOfAuditId, originalId), ne(notionAudit.id, revertId), activeRevert))
+        .get();
+      if (other) return false;
+      const ended = tx
+        .update(notionAudit)
+        .set({ error: null, ...outcome })
+        .where(stillOpen(revertId))
+        .returning({ id: notionAudit.id })
+        .all();
       if (ended.length === 0) return false;
       tx.update(notionAudit)
         .set({ ...mark, revertedAt: new Date(), revertAuditId: revertId })

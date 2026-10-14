@@ -38,6 +38,7 @@ export type ErrorEntry =
   | { event: "tool_call_record_failed"; tool: string; error: string }
   | { event: "tool_call_prune_failed"; error: string }
   | { event: "oauth_client_prune_failed"; error: string }
+  | { event: "audit_sweep_failed"; error: string }
   | { event: "access_resolution_failed"; source: "mcp" | "dashboard"; discordUserId: string; error: string }
   | { event: "membership_check_failed"; error: string }
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }

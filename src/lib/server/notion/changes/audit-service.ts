@@ -1,5 +1,7 @@
 import type { NotionAuditRow } from "../../db/schema";
 import { errorMessage } from "../../lib/errors";
+import type { ErrorSink, EventSink } from "../../lib/log";
+import { runPeriodically } from "../../lib/periodic";
 import { isNotionMiss, NotionRequestError, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
 import { sha256 } from "../content/content-diff";
 import { toWritablePropertyValue } from "../content/properties";
@@ -216,7 +218,7 @@ export class NotionAuditService {
     }
 
     const note = executed.note ? JSON.stringify(executed.note) : null;
-    await this.store.finishRevert(
+    const finished = await this.store.finishRevert(
       revertRow.id,
       row.id,
       {
@@ -228,6 +230,7 @@ export class NotionAuditService {
       },
       { revertedBy: options.actorDiscordUserId, revertNote: note },
     );
+    if (!finished) return { ok: false, reason: { kind: "failed", failure: { kind: "superseded" }, revertAuditId: revertRow.id } };
     return { ok: true, revertAuditId: revertRow.id, forced: conflict !== null, partial: executed.partial, note: executed.note };
   }
 
@@ -346,4 +349,33 @@ export class NotionAuditService {
     const page = await api.retrievePage(pageId).catch(() => null);
     return page?.last_edited_time ?? null;
   }
+}
+
+const SWEEP_INTERVAL_MS = 60_000;
+
+export interface InterruptedWriteSweepOptions {
+  audit: Pick<NotionAuditService, "failInterruptedWrites">;
+  log: EventSink;
+  logError: ErrorSink;
+  intervalMs?: number;
+}
+
+/**
+ * Marks writes a crashed process left pending as interrupted, now and every minute, so a
+ * pending revert claim cannot block its row until the next restart. Returns a stop function.
+ */
+export function startInterruptedWriteSweep({
+  audit,
+  log,
+  logError,
+  intervalMs = SWEEP_INTERVAL_MS,
+}: InterruptedWriteSweepOptions): () => void {
+  return runPeriodically(() => {
+    audit.failInterruptedWrites().then(
+      (count) => {
+        if (count > 0) log({ event: "audit_pending_marked_failed", count });
+      },
+      (error: unknown) => logError({ event: "audit_sweep_failed", error: errorMessage(error) }),
+    );
+  }, intervalMs);
 }
