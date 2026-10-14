@@ -4,9 +4,9 @@ import type { Permission } from "../../src/lib/server/permissions/permissions";
 import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
-import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import { ToolCallStore } from "../../src/lib/server/usage/tool-calls";
 import { jstDay, UsageStats } from "../../src/lib/server/usage/usage-stats";
+import { insertAuditRow } from "../support/audit-rows";
 import { FakeDiscordApi, makeMember } from "../support/fakes";
 
 const U1 = "300000000000000001";
@@ -57,12 +57,11 @@ beforeAll(async () => {
   for (const [discordUserId, tool, ok, durationMs, errorKind, createdAt] of rows) {
     calls.record({ discordUserId, tool, ok, durationMs, errorKind, error: errorKind ? "boom" : undefined, createdAt });
   }
-  const audit = new NotionAuditStore(database.db);
   const base = { discordUserId: U1, discordDisplayName: "Mina", request: {} };
-  await audit.insert({ ...base, operation: "create_page", status: "ok", createdAt: jst(12, 8) });
-  await audit.insert({ ...base, operation: "edit_content", status: "failed", createdAt: jst(12, 8, 30) });
-  await audit.insert({ ...base, operation: "revert", status: "ok", createdAt: jst(11, 18) });
-  await audit.insert({ ...base, operation: "create_page", status: "ok", createdAt: jst(1, 18) });
+  await insertAuditRow(database.db, { ...base, operation: "create_page", status: "ok", createdAt: jst(12, 8) });
+  await insertAuditRow(database.db, { ...base, operation: "edit_content", status: "failed", createdAt: jst(12, 8, 30) });
+  await insertAuditRow(database.db, { ...base, operation: "revert", status: "ok", createdAt: jst(11, 18) });
+  await insertAuditRow(database.db, { ...base, operation: "create_page", status: "ok", createdAt: jst(1, 18) });
   deps = depsFor(database);
 });
 

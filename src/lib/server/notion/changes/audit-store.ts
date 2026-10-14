@@ -30,12 +30,30 @@ export interface AuditListResult {
   total: number;
 }
 
-export type AuditPatch = Partial<Omit<NewNotionAuditRow, "id" | "createdAt">>;
+/** A new row; the database assigns the id and the store's clock the creation time. */
+export type AuditInsert = Omit<NewNotionAuditRow, "id" | "createdAt">;
+
+/** What changes after insert: the outcome of the write, then its revert. Who did what stays as recorded. */
+export type AuditPatch = Partial<
+  Pick<
+    NewNotionAuditRow,
+    | "status"
+    | "error"
+    | "commentError"
+    | "result"
+    | "resultLastEditedTime"
+    | "targetUrl"
+    | "revertedAt"
+    | "revertedBy"
+    | "revertAuditId"
+    | "revertNote"
+  >
+>;
 
 export class NotionAuditStore {
   constructor(private readonly db: AppDatabase) {}
 
-  async insert(row: Omit<NewNotionAuditRow, "id">): Promise<NotionAuditRow> {
+  async insert(row: AuditInsert): Promise<NotionAuditRow> {
     const [inserted] = await this.db.insert(notionAudit).values(row).returning();
     if (!inserted) throw new Error("Audit insert returned no row");
     return inserted;

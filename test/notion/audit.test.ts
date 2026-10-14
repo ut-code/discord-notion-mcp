@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { openDatabase, runAppMigrations } from "../../src/lib/server/db/client";
+import { openDatabase, runAppMigrations, type AppDatabase } from "../../src/lib/server/db/client";
 import { ToolError } from "../../src/lib/server/lib/errors";
 import { NotionRequestError, type NotionPage } from "../../src/lib/server/notion/client/api";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
@@ -15,12 +15,14 @@ import {
 import { NotionWriteService, writeWarningText } from "../../src/lib/server/notion/changes/write-service";
 import { sha256 } from "../../src/lib/server/notion/content/content-diff";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
+import { insertAuditRow, overwriteAuditRow } from "../support/audit-rows";
 import { FakeNotionApi, titleValue } from "../support/notion-fakes";
 
 const ACTOR: Actor = { discordUserId: "300000000000000001", displayName: "Alice", username: "alice" };
 const ADMIN = { actorDiscordUserId: "300000000000000009", actorDisplayName: "Admin" };
 
 let api: FakeNotionApi;
+let db: AppDatabase;
 let store: NotionAuditStore;
 let writes: NotionWriteService;
 let audit: NotionAuditService;
@@ -30,6 +32,7 @@ beforeEach(() => {
   const database = openDatabase(":memory:");
   runAppMigrations(database.db);
   api = new FakeNotionApi();
+  db = database.db;
   store = new NotionAuditStore(database.db);
   writes = new NotionWriteService(api, store);
   audit = new NotionAuditService(store, api);
@@ -601,9 +604,9 @@ describe("NotionAuditService.revert", () => {
     const row = addRow({ Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue });
     const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "A", request: {} });
-    await store.update(appended.auditId, { snapshot: { beforeSha256: "x", inverse: "not an update" } });
-    await store.update(updated.auditId, { snapshot: { properties: [{ name: "Count" }] } });
-    await store.update(created.auditId, { result: { url: "https://example.invalid" } });
+    await overwriteAuditRow(db, appended.auditId, { snapshot: { beforeSha256: "x", inverse: "not an update" } });
+    await overwriteAuditRow(db, updated.auditId, { snapshot: { properties: [{ name: "Count" }] } });
+    await overwriteAuditRow(db, created.auditId, { result: { url: "https://example.invalid" } });
     const writesBefore = api.calls.filter((call) => ["updatePage", "updatePageMarkdown", "createComment"].includes(call.method)).length;
 
     for (const id of [appended.auditId, updated.auditId, created.auditId]) {
@@ -627,15 +630,31 @@ describe("NotionAuditService.failInterruptedWrites", () => {
       request: {},
       snapshot: { inTrash: false },
     };
-    const stale = await store.insert({ ...base, status: "pending", createdAt: new Date(now.getTime() - 11 * 60_000) });
-    const recent = await store.insert({ ...base, status: "pending", createdAt: new Date(now.getTime() - 5 * 60_000) });
-    const done = await store.insert({ ...base, status: "ok", createdAt: new Date(now.getTime() - 60 * 60_000) });
+    const stale = await insertAuditRow(db, { ...base, status: "pending", createdAt: new Date(now.getTime() - 11 * 60_000) });
+    const recent = await insertAuditRow(db, { ...base, status: "pending", createdAt: new Date(now.getTime() - 5 * 60_000) });
+    const done = await insertAuditRow(db, { ...base, status: "ok", createdAt: new Date(now.getTime() - 60 * 60_000) });
 
     expect(await audit.failInterruptedWrites(now)).toBe(1);
     expect(await store.get(stale.id)).toMatchObject({ status: "failed", error: "interrupted (server restarted)" });
     expect(await store.get(recent.id)).toMatchObject({ status: "pending", error: null });
     expect(await store.get(done.id)).toMatchObject({ status: "ok", error: null });
     expect(await audit.failInterruptedWrites(now)).toBe(0);
+  });
+});
+
+describe("NotionAuditStore types", () => {
+  test("who did what and when cannot be written through the store", () => {
+    const row = { discordUserId: "1", discordDisplayName: "a", operation: "archive_page" as const, request: {}, status: "ok" as const };
+    // Type-only: these calls are never made.
+    const rejected = [
+      // @ts-expect-error the store's clock sets createdAt
+      () => store.insert({ ...row, createdAt: new Date(0) }),
+      // @ts-expect-error the actor stays as recorded
+      () => store.update(1, { discordUserId: "2" }),
+      // @ts-expect-error the operation and its request stay as recorded
+      () => store.update(1, { request: {} }),
+    ];
+    expect(rejected).toHaveLength(3);
   });
 });
 

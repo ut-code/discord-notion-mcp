@@ -10,6 +10,9 @@ export interface GrantInput {
   createdBy?: string | null;
 }
 
+/** What identifies a grant: one permission for one subject. */
+export type GrantKey = Pick<GrantInput, "permission" | "subjectType" | "subjectId">;
+
 export interface GrantLookup {
   /** Permissions granted directly to the user or to any of the given role ids. */
   permissionsFor(userId: string, roleIds: readonly string[]): Promise<Set<Permission>>;
@@ -49,7 +52,7 @@ export class GrantStore implements GrantLookup {
     return { grant: existing[0], created: false };
   }
 
-  async removeGrant(input: Omit<GrantInput, "createdBy">): Promise<boolean> {
+  async removeGrant(input: GrantKey): Promise<boolean> {
     const deleted = await this.db
       .delete(grants)
       .where(and(eq(grants.permission, input.permission), eq(grants.subjectType, input.subjectType), eq(grants.subjectId, input.subjectId)))

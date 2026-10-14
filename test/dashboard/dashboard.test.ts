@@ -15,6 +15,7 @@ import { NotionAuditService } from "../../src/lib/server/notion/changes/audit-se
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import type { RevertNote } from "../../src/lib/server/notion/changes/revert-reasons";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
+import { overwriteAuditRow } from "../support/audit-rows";
 import { FakeDiscordApi, makeGuild, makeMember, OWNER_ID } from "../support/fakes";
 import {
   authorize,
@@ -848,7 +849,7 @@ describe("audit log", () => {
   test("a row the service would refuse shows why instead of a revert button", async () => {
     const parent = h.notion.addPage({ title: "Unreadable root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Broken", request: {} });
-    await store.update(created.auditId, { result: { url: "https://example.invalid" } });
+    await overwriteAuditRow(h.server.database.db, created.auditId, { result: { url: "https://example.invalid" } });
     expect((await auditDetail(deps, String(created.auditId), owner))?.revert).toEqual({
       state: "unavailable",
       reason: "記録の形式を読み取れないため、自動では取り消せません。",
