@@ -32,8 +32,8 @@ beforeAll(async () => {
   h = await startHarness({ discord });
 });
 
-afterAll(() => {
-  h?.stop();
+afterAll(async () => {
+  await h?.stop();
 });
 
 describe("unused OAuth client cleanup", () => {

@@ -76,7 +76,7 @@ export function textChannel(
       deny: String(o.deny ?? 0n),
     })),
     ...extra,
-  } as GuildChannel;
+  };
 }
 
 export function thread(id: string, parentId: string, type: 11 | 12 = 11, name = `thread-${id}`): APIThreadChannel {
@@ -87,7 +87,7 @@ export function thread(id: string, parentId: string, type: 11 | 12 = 11, name = 
     guild_id: GUILD_ID,
     parent_id: parentId,
     thread_metadata: { archived: false, auto_archive_duration: 1440, archive_timestamp: "2026-10-01T00:00:00.000Z", locked: false },
-  } as APIThreadChannel;
+  };
 }
 
 export function message(id: string, channelId: string, content: string, authorName = "alice"): APIMessage {

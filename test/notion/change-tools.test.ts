@@ -37,7 +37,7 @@ let tools: Map<string, AnyToolDefinition>;
 
 async function call(name: string, principal: Principal, args: Record<string, unknown> = {}): Promise<string> {
   const tool = tools.get(name)!;
-  const result = await tool.handler(tool.inputSchema.parse(args) as never, { principal });
+  const result = await tool.handler(tool.inputSchema.parse(args), { principal });
   return typeof result === "string" ? result : JSON.stringify(result);
 }
 

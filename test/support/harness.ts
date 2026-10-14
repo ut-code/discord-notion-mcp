@@ -25,7 +25,7 @@ export interface Harness {
   toolLogs: ToolCallLogEntry[];
   events: EventEntry[];
   errors: ErrorEntry[];
-  stop(): void;
+  stop(): Promise<void>;
 }
 
 export interface HarnessOptions {

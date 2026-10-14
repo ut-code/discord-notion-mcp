@@ -40,7 +40,7 @@ function principal(roles: string[] = []): Principal {
 }
 
 async function search(args: Record<string, unknown>, roles: string[] = []): Promise<string> {
-  const result = await tool.handler(tool.inputSchema.parse(args) as never, { principal: principal(roles) });
+  const result = await tool.handler(tool.inputSchema.parse(args), { principal: principal(roles) });
   return typeof result === "string" ? result : JSON.stringify(result);
 }
 
@@ -85,7 +85,7 @@ beforeEach(() => {
 
 describe("discord_list_threads", () => {
   const list = async (args: Record<string, unknown>) =>
-    listThreads.handler(listThreads.inputSchema.parse(args) as never, { principal: principal() });
+    listThreads.handler(listThreads.inputSchema.parse(args), { principal: principal() });
 
   test("passes a valid `before` to Discord as an ISO timestamp", async () => {
     await list({ channel_id: PUBLIC, before: "2026-10-01T12:34:56.789000+00:00" });
@@ -108,7 +108,7 @@ describe("discord_list_threads", () => {
 
 describe("discord_find_member", () => {
   async function find(args: Record<string, unknown>): Promise<string> {
-    const result = await findMember.handler(findMember.inputSchema.parse(args) as never, { principal: principal() });
+    const result = await findMember.handler(findMember.inputSchema.parse(args), { principal: principal() });
     return typeof result === "string" ? result : JSON.stringify(result);
   }
 

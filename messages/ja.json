@@ -9,7 +9,6 @@
   "common_permission": "権限",
   "common_actions": "操作",
   "common_no_roles": "ロールなし",
-  "common_list_separator": "、",
   "error_title_400": "無効なリクエスト",
   "error_title_404": "見つかりません",
   "error_title_default": "エラー",

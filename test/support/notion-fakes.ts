@@ -26,11 +26,11 @@ export function rt(
     plain_text: text,
     href,
     annotations: { bold: false, italic: false, strikethrough: false, underline: false, code: false, color: "default", ...annotations },
-  } as RichTextItemResponse;
+  };
 }
 
 export function titleValue(text: string, id = "title"): PagePropertyValue {
-  return { id, type: "title", title: text ? [rt(text)] : [] } as PagePropertyValue;
+  return { id, type: "title", title: text ? [rt(text)] : [] };
 }
 
 function notFound(what: string): NotionRequestError {
@@ -177,7 +177,7 @@ export class FakeNotionApi implements NotionApi {
         item.object === "page"
           ? Object.values(item.properties).find((value) => value.type === "title")
           : { type: "title", title: item.title };
-      const text = title && "title" in title ? (title.title as RichTextItemResponse[]).map((t) => t.plain_text).join("") : "";
+      const text = title && "title" in title ? title.title.map((t) => t.plain_text).join("") : "";
       return text.toLowerCase().includes(query.query.toLowerCase());
     });
     return { results: matches.slice(0, query.pageSize), nextCursor: null };

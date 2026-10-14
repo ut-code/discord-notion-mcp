@@ -23,7 +23,7 @@ function msg(overrides: Partial<FormattableMessage>): FormattableMessage {
     attachments: [],
     embeds: [],
     ...overrides,
-  } as FormattableMessage;
+  };
 }
 
 describe("formatMessage", () => {

@@ -112,8 +112,8 @@ beforeAll(async () => {
   writes = new NotionWriteService(h.notion, store);
 });
 
-afterAll(() => {
-  h?.stop();
+afterAll(async () => {
+  await h?.stop();
 });
 
 describe("dashboard access control", () => {

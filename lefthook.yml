@@ -7,7 +7,7 @@ pre-commit:
       stage_fixed: true
     - name: lint
       glob: "*.{js,ts,svelte}"
-      run: bunx eslint {staged_files}
+      run: SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 bunx eslint {staged_files}
     - name: typecheck
       run: bun run typecheck
     - name: test

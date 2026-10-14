@@ -1,4 +1,5 @@
 import { m } from "../../paraglide/messages.js";
+import { getLocale } from "../../paraglide/runtime.js";
 import { parseStoredJson, WriteWarningSchema, type WriteWarning } from "../notion/changes/audit-records";
 import type { PropertyWriteRefusal } from "../notion/content/properties";
 import {
@@ -26,10 +27,14 @@ function blockerText(blocker: string): string {
   }
 }
 
+function joinList(items: readonly string[]): string {
+  return new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(items);
+}
+
 function propertyRefusalText(refusal: PropertyWriteRefusal): string {
   switch (refusal.kind) {
     case "hosted_files":
-      return m.revert_refusal_hosted_files({ files: refusal.files.join(m.common_list_separator()) });
+      return m.revert_refusal_hosted_files({ files: joinList(refusal.files) });
     case "unsupported_type":
       return m.revert_refusal_unsupported_type({ type: refusal.type });
     default:
@@ -38,9 +43,7 @@ function propertyRefusalText(refusal: PropertyWriteRefusal): string {
 }
 
 function skippedText(skipped: readonly PropertySkip[]): string {
-  return skipped
-    .map((skip) => m.revert_skipped_property({ name: skip.name, reason: propertyRefusalText(skip.refusal) }))
-    .join(m.common_list_separator());
+  return joinList(skipped.map((skip) => m.revert_skipped_property({ name: skip.name, reason: propertyRefusalText(skip.refusal) })));
 }
 
 function noteText(note: RevertNote): string {
@@ -55,7 +58,7 @@ function noteText(note: RevertNote): string {
       return m.revert_note_already_restored();
     case "properties_partial":
       return m.revert_note_properties_partial({
-        restored: note.restored.map((name) => m.revert_property_name({ name })).join(m.common_list_separator()),
+        restored: joinList(note.restored.map((name) => m.revert_property_name({ name }))),
         skipped: skippedText(note.skipped),
       });
     default:

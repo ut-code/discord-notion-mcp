@@ -52,8 +52,8 @@ beforeAll(async () => {
   discord.messages.set(PUBLIC_CHANNEL, [message("600000000000000001", PUBLIC_CHANNEL, "hello world")]);
 });
 
-afterAll(() => {
-  h?.stop();
+afterAll(async () => {
+  await h?.stop();
 });
 
 describe("OAuth + MCP end to end", () => {

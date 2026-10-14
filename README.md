@@ -93,8 +93,7 @@ bun run preview    # 偽データで UI 確認: http://localhost:3920/dev
 # 他端末から: tailscale serve --bg --https=8443 http://localhost:3920 && PREVIEW_PUBLIC_URL=https://<host>.ts.net:8443 bun run preview
 bun test
 bun run typecheck
-bun run lint
-bun run lint:typed # 型情報を使う lint（CI で実行）
+bun run lint       # 型情報を使う。エディタの ESLint 拡張にも SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 を渡す
 bun run format
 bun run build && bun run start
 ```

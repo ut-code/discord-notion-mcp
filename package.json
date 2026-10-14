@@ -11,8 +11,7 @@
     "preview": "PREVIEW=1 PORT=3920 bun --bun vite dev",
     "test": "bun test",
     "typecheck": "bun scripts/compile-messages.ts && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --tsgo",
-    "lint": "eslint .",
-    "lint:typed": "SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 eslint -c eslint.typed.config.js src",
+    "lint": "SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "drizzle-kit generate"
@@ -55,7 +54,7 @@
     "shadcn-svelte": "^1.7.0",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.6",
-    "svelte-eslint-parser": "^1.9.0",
+    "svelte-eslint-parser": "1.9.0",
     "svelte-sonner": "^1.2.1",
     "tailwind-variants": "^3.3.1",
     "tailwindcss": "^4.3.3",
