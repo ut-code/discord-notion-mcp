@@ -830,6 +830,21 @@ describe("audit log", () => {
     expect(detail?.revert).toEqual({ state: "disabled" });
   });
 
+  test("a pending write reads as in progress", async () => {
+    const pending = await store.insert({
+      discordUserId: MEMBER,
+      discordDisplayName: "Mina",
+      operation: "archive_page",
+      targetTitle: "Old notes",
+      request: {},
+      status: "pending",
+    });
+    const detail = (await auditDetail(deps, String(pending.id), owner))!;
+    expect(detail.summary).toMatch(/^Mina が \d{2}\/\d{2} \d{2}:\d{2} に「Old notes」をアーカイブしています。$/);
+    expect(detail.operation).toBe("ページをアーカイブ");
+    expect(detail.revert).toBeNull();
+  });
+
   test("a row the service would refuse shows why instead of a revert button", async () => {
     const parent = h.notion.addPage({ title: "Unreadable root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Broken", request: {} });

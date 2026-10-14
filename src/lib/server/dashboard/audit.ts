@@ -173,32 +173,40 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
   };
 }
 
-const DONE: Record<NotionAuditOperation, (title: string, row: NotionAuditRow) => string> = {
-  create_page: (t) => `「${t}」を作成しました`,
-  append_content: (t) => `「${t}」に内容を追記しました`,
-  edit_content: (t) => `「${t}」の本文を編集しました`,
-  update_properties: (t) => `「${t}」のプロパティを更新しました`,
-  archive_page: (t) => `「${t}」をアーカイブしました`,
-  revert: (t, row) => `「${t}」への #${row.revertOfAuditId ?? "?"} の変更を取り消しました`,
-};
+type Phrase = (title: string, row: NotionAuditRow) => string;
 
-const FAILED: Record<NotionAuditOperation, (title: string, row: NotionAuditRow) => string> = {
-  create_page: (t) => `「${t}」の作成に失敗しました`,
-  append_content: (t) => `「${t}」への追記に失敗しました`,
-  edit_content: (t) => `「${t}」の本文の編集に失敗しました`,
-  update_properties: (t) => `「${t}」のプロパティの更新に失敗しました`,
-  archive_page: (t) => `「${t}」のアーカイブに失敗しました`,
-  revert: (t, row) => `「${t}」への #${row.revertOfAuditId ?? "?"} の変更の取り消しに失敗しました`,
+const revertOf = (row: NotionAuditRow) => `#${row.revertOfAuditId ?? "?"}`;
+
+/** What the row did, per status: "「t」を作成しました" / "…に失敗しました" / "…しています". */
+const SUMMARY: Record<NotionAuditRow["status"], Record<NotionAuditOperation, Phrase>> = {
+  ok: {
+    create_page: (t) => `「${t}」を作成しました`,
+    append_content: (t) => `「${t}」に内容を追記しました`,
+    edit_content: (t) => `「${t}」の本文を編集しました`,
+    update_properties: (t) => `「${t}」のプロパティを更新しました`,
+    archive_page: (t) => `「${t}」をアーカイブしました`,
+    revert: (t, row) => `「${t}」への ${revertOf(row)} の変更を取り消しました`,
+  },
+  failed: {
+    create_page: (t) => `「${t}」の作成に失敗しました`,
+    append_content: (t) => `「${t}」への追記に失敗しました`,
+    edit_content: (t) => `「${t}」の本文の編集に失敗しました`,
+    update_properties: (t) => `「${t}」のプロパティの更新に失敗しました`,
+    archive_page: (t) => `「${t}」のアーカイブに失敗しました`,
+    revert: (t, row) => `「${t}」への ${revertOf(row)} の変更の取り消しに失敗しました`,
+  },
+  pending: {
+    create_page: (t) => `「${t}」を作成しています`,
+    append_content: (t) => `「${t}」に内容を追記しています`,
+    edit_content: (t) => `「${t}」の本文を編集しています`,
+    update_properties: (t) => `「${t}」のプロパティを更新しています`,
+    archive_page: (t) => `「${t}」をアーカイブしています`,
+    revert: (t, row) => `「${t}」への ${revertOf(row)} の変更を取り消しています`,
+  },
 };
 
 function summarySentence(row: NotionAuditRow): string {
-  const title = auditTitle(row);
-  const action =
-    row.status === "ok"
-      ? DONE[row.operation](title, row)
-      : row.status === "failed"
-        ? FAILED[row.operation](title, row)
-        : `「${title}」の${AUDIT_OPERATION_LABELS[row.operation]}を処理しています`;
+  const action = SUMMARY[row.status][row.operation](auditTitle(row), row);
   return `${row.discordDisplayName} が ${formatShortJst(row.createdAt)} に${action}。`;
 }
 

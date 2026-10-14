@@ -10,6 +10,9 @@ const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: fal
 
 const MAX_PROPERTY_VALUES_JSON_LENGTH = 100_000;
 
+// Value shapes are left to Notion: it rejects malformed values with a 400, which toToolError
+// surfaces and the audit log records as a failed write. Property names (and, for updates,
+// writable types) are checked locally in NotionWriteService.
 const propertyValues = z
   .record(z.string(), z.record(z.string(), z.unknown()))
   .refine((value) => JSON.stringify(value).length <= MAX_PROPERTY_VALUES_JSON_LENGTH, {

@@ -80,6 +80,17 @@ describe("admin formatting", () => {
     expect(renderRequestedPropertyValue("multi_select", { multi_select: [{ name: "x" }, { name: "y" }] })).toBe("x, y");
     expect(renderRequestedPropertyValue("date", { date: { start: "2026-10-12", end: null } })).toBe("2026-10-12");
     expect(renderRequestedPropertyValue("checkbox", { checkbox: true })).toBe("true");
+    expect(renderRequestedPropertyValue("number", { number: null })).toBe("");
+    expect(renderRequestedPropertyValue("number", 3)).toBe("3");
+  });
+
+  test("malformed requested values render as text instead of throwing", () => {
+    expect(renderRequestedPropertyValue("rich_text", { rich_text: [null, 5, { plain_text: "a" }, { text: null }] })).toBe("a");
+    expect(renderRequestedPropertyValue("people", { people: [null, { id: "u1" }, { id: 2 }] })).toBe(", u1, ");
+    expect(renderRequestedPropertyValue("date", { date: "2026-10-12" })).toBe("");
+    expect(renderRequestedPropertyValue("select", { select: null })).toBe("");
+    expect(renderRequestedPropertyValue("__proto__", {})).toBe("{}");
+    expect(renderRequestedPropertyValue("formula", { formula: undefined })).toBe("");
   });
 
   test("diff lines separate hunks with ⋯", () => {

@@ -17,11 +17,7 @@ export const PERMISSION_HINTS: Record<Permission, string> = {
   admin: "すべての権限に加えて、この管理画面を使えます。",
 };
 
-export const AUDIT_OPERATION_LABELS: Record<NotionAuditOperation, string> = {
-  ...OPERATION_LABELS,
-  archive_page: "アーカイブ",
-  revert: "取り消し",
-};
+export const AUDIT_OPERATION_LABELS: Record<NotionAuditOperation, string> = { ...OPERATION_LABELS, revert: "取り消し" };
 
 /** Status filter of the audit list: row status, or rows that were reverted later. */
 export const AUDIT_STATUS_FILTERS = { ok: "成功", failed: "失敗", reverted: "取り消し済み" } as const;
@@ -78,20 +74,26 @@ export function roleHandle(name: string): string {
   return name.startsWith("@") ? name : `@${name}`;
 }
 
+// The request JSON is untyped: read it only through these guards.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object";
+}
+
+function field(value: unknown, key: string): unknown {
+  return isRecord(value) && Object.hasOwn(value, key) ? value[key] : undefined;
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 function richTextContent(items: unknown): string {
   if (!Array.isArray(items)) return "";
-  return items
-    .map((item) => {
-      const entry = item as { plain_text?: unknown; text?: { content?: unknown } };
-      if (typeof entry.plain_text === "string") return entry.plain_text;
-      return typeof entry.text?.content === "string" ? entry.text.content : "";
-    })
-    .join("");
+  return items.map((item) => text(field(item, "plain_text")) || text(field(field(item, "text"), "content"))).join("");
 }
 
 function optionName(option: unknown): string {
-  const name = (option as { name?: unknown } | null)?.name;
-  return typeof name === "string" ? name : "";
+  return text(field(option, "name"));
 }
 
 /**
@@ -99,7 +101,7 @@ function optionName(option: unknown): string {
  * before/after view; falls back to compact JSON for shapes it does not know.
  */
 export function renderRequestedPropertyValue(type: string, raw: unknown): string {
-  const value = raw !== null && typeof raw === "object" && type in raw ? (raw as Record<string, unknown>)[type] : raw;
+  const value = isRecord(raw) && Object.hasOwn(raw, type) ? raw[type] : raw;
   switch (type) {
     case "title":
     case "rich_text":
@@ -114,17 +116,17 @@ export function renderRequestedPropertyValue(type: string, raw: unknown): string
     case "multi_select":
       return Array.isArray(value) ? value.map(optionName).filter(Boolean).join(", ") : "";
     case "date": {
-      const date = value as { start?: unknown; end?: unknown } | null;
-      if (!date || typeof date.start !== "string") return "";
-      return typeof date.end === "string" ? `${date.start} → ${date.end}` : date.start;
+      const start = text(field(value, "start"));
+      const end = text(field(value, "end"));
+      return start && end ? `${start} → ${end}` : start;
     }
     case "url":
     case "email":
     case "phone_number":
-      return typeof value === "string" ? value : "";
+      return text(value);
     case "people":
     case "relation":
-      return Array.isArray(value) ? value.map((item) => String((item as { id?: unknown })?.id ?? "")).join(", ") : "";
+      return Array.isArray(value) ? value.map((item) => text(field(item, "id"))).join(", ") : "";
     default: {
       const json = JSON.stringify(value) ?? "";
       return json.length > 120 ? `${json.slice(0, 120)}…` : json;
