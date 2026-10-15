@@ -202,7 +202,7 @@
         {/if}
       </div>
       {#if open && memberNote}
-        <p class={["px-2 py-1.5 text-[13px]", lookup.error ? "text-bad-fg" : "text-muted-foreground"]} role="status">{memberNote}</p>
+        <p class={["px-2 py-1.5 text-note", lookup.error ? "text-bad-fg" : "text-muted-foreground"]} role="status">{memberNote}</p>
       {/if}
     </div>
   {/if}

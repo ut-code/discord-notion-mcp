@@ -37,10 +37,10 @@
     {:else if conflict}
       <form method="post" {action} class="stack gap-4" use:enhance>
         <input type="hidden" name="force" value="true" />
-        <Alert.Root class="rounded-[10px] border-warn-border bg-warn-bg p-3.5 *:[svg]:text-warn-icon">
+        <Alert.Root class="rounded-lg border-warn-border bg-warn-bg p-3.5 *:[svg]:text-warn-icon">
           <TriangleAlertIcon />
           <Alert.Title class="font-semibold text-warn-text">{m.revert_card_conflict_title()}</Alert.Title>
-          <Alert.Description class="text-[13px] leading-relaxed text-warn-fg">
+          <Alert.Description class="text-note leading-relaxed text-warn-fg">
             {m.revert_card_conflict_body()}
           </Alert.Description>
         </Alert.Root>

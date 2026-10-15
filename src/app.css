@@ -56,9 +56,6 @@
 	--warn-icon: light-dark(#b45309, #f59e0b);
 	--blurple: #5865f2;
 	--blurple-hover: #4752c4;
-	--text-2: light-dark(#27272a, #e4e4e7);
-	--text-3: light-dark(#3f3f46, #d4d4d8);
-	--text-4: light-dark(#52525b, #a1a1aa);
 	--subtle: light-dark(#a1a1aa, #71717a);
 }
 :root.light {
@@ -78,6 +75,11 @@
 			@slot;
 		}
 	}
+}
+
+/* Between text-xs (12px) and text-sm (14px): notes, captions and inline messages. */
+@theme {
+	--text-note: 0.8125rem;
 }
 
 @theme inline {
@@ -122,9 +124,6 @@
 	--color-warn-icon: var(--warn-icon);
 	--color-blurple: var(--blurple);
 	--color-blurple-hover: var(--blurple-hover);
-	--color-text-2: var(--text-2);
-	--color-text-3: var(--text-3);
-	--color-text-4: var(--text-4);
 	--color-subtle: var(--subtle);
 	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);
@@ -238,7 +237,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 13px;
+		font-size: var(--text-note);
 		font-weight: 700;
 		flex-shrink: 0;
 	}
@@ -260,7 +259,7 @@
 		height: 36px;
 		padding: 0 10px;
 		border-radius: 8px;
-		color: var(--text-3);
+		color: var(--muted-foreground);
 		text-decoration: none;
 		font-size: 14px;
 	}
@@ -282,7 +281,7 @@
 	.nav-foot {
 		flex-grow: 1;
 		height: 32px;
-		font-size: 13px;
+		font-size: var(--text-note);
 		color: var(--muted-foreground);
 	}
 	.sidebar-foot + .account {
@@ -388,7 +387,7 @@
 		.nav {
 			flex-shrink: 0;
 			height: 32px;
-			font-size: 13px;
+			font-size: var(--text-note);
 		}
 	}
 	@media (max-width: 640px) {
@@ -609,10 +608,10 @@
 		height: 30px;
 		padding: 0 12px;
 		border-radius: 6px;
-		font-size: 13px;
+		font-size: var(--text-note);
 		font-weight: 500;
 		line-height: 1;
-		color: var(--text-4);
+		color: var(--muted-foreground);
 		text-decoration: none;
 		cursor: pointer;
 	}
@@ -814,7 +813,7 @@
 		gap: 4px;
 	}
 	.stat-tile dt {
-		font-size: 13px;
+		font-size: var(--text-note);
 		color: var(--muted-foreground);
 	}
 	.stat-tile dd {
@@ -851,7 +850,7 @@
 		padding: 0;
 		list-style: none;
 		font-size: 12px;
-		color: var(--text-4);
+		color: var(--muted-foreground);
 	}
 	.chart-legend li {
 		display: inline-flex;
@@ -1034,7 +1033,7 @@
 	height: 72px;
 }
 .data-table td.secondary {
-	color: var(--text-4);
+	color: var(--muted-foreground);
 }
 .data-table td.wrap {
 	white-space: normal;

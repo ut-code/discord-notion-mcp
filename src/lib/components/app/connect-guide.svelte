@@ -22,7 +22,7 @@
 <section class="stack min-w-0 gap-2" aria-labelledby="claude-code">
   <svelte:element this={heading} id="claude-code" class="text-sm font-semibold">Claude Code</svelte:element>
   {#each claude as text (text)}{@render command(text, m.connect_copy_command())}{/each}
-  <p class="text-[13px] text-muted-foreground">
+  <p class="text-note text-muted-foreground">
     {m.connect_claude_code_login_before()} <code class="mono text-foreground">/mcp</code>
     {m.connect_claude_code_login_after()}
   </p>

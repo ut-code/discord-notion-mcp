@@ -8,7 +8,7 @@
 
   const tones: Record<BadgeView["tone"], string> = {
     outline: "border-border bg-background text-foreground",
-    secondary: "border-transparent bg-secondary text-text-2",
+    secondary: "border-transparent bg-secondary text-secondary-foreground",
     success: "border-ok-border bg-ok-bg text-ok-fg",
     destructive: "border-bad-border bg-bad-bg text-bad-fg",
     warn: "border-warn-border bg-warn-bg text-warn-fg",

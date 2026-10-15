@@ -59,7 +59,8 @@
     {/each}
   </NativeSelect.Root>
   {#if !hydrated.current}<Button type="submit" variant="outline">{m.audit_filter_apply()}</Button>{/if}
-  <Button variant="ghost" class="justify-self-start text-text-4" href={`${DASHBOARD_PATH}/audit`}>{m.audit_filter_reset()}</Button>
+  <Button variant="ghost" class="justify-self-start text-muted-foreground" href={`${DASHBOARD_PATH}/audit`}>{m.audit_filter_reset()}</Button
+  >
 {/snippet}
 
 <PageHeader title={m.audit_title()} />
@@ -134,7 +135,7 @@
 
 {#if data.range || data.prevHref}
   <div class="footer-row">
-    <span class="text-[13px] text-muted-foreground">{data.range ?? ""}</span>
+    <span class="text-note text-muted-foreground">{data.range ?? ""}</span>
     <Pager prev={data.prevHref} next={data.nextHref} />
   </div>
 {/if}

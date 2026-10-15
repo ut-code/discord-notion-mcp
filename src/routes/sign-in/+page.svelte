@@ -59,10 +59,10 @@
       {m.sign_in_discord()}
     </Button>
     {#if status}
-      <p class="text-[13px] text-bad-fg" role="status">{status}</p>
+      <p class="text-note text-bad-fg" role="status">{status}</p>
     {/if}
     {#if data.oauthQuery && data.clientName}
-      <div class="flex items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-[13px] text-text-4">
+      <div class="flex items-center gap-2 rounded-lg bg-muted px-3 py-2.5 text-note text-muted-foreground">
         <LockIcon class="size-4" />
         <span>{m.sign_in_client()} <strong class="font-semibold text-foreground">{data.clientName}</strong></span>
       </div>

@@ -50,7 +50,7 @@
   <section class="auth-card">
     <h1><span>{data.clientName}</span> {m.consent_heading_suffix()}</h1>
 
-    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-note">
       <dt class="text-muted-foreground">{m.consent_publisher_label()}</dt>
       {#if data.verifiedHost}
         <dd class="flex items-start gap-1.5 break-all">
@@ -76,25 +76,26 @@
       {/if}
     </dl>
 
-    <div class="flex items-center gap-3 rounded-[10px] border p-3">
+    <div class="flex items-center gap-3 rounded-lg border p-3">
       <AppAvatar name={data.account.name} url={data.account.avatarUrl} size="lg" />
       <div class="stack min-w-0 grow">
         <span class="truncate text-sm font-medium">{data.account.name}</span>
         <span class="mono truncate">@{data.account.username}</span>
-        <span class="truncate text-[13px] text-muted-foreground">{data.guildName}</span>
+        <span class="truncate text-note text-muted-foreground">{data.guildName}</span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>
         <input type="hidden" name="next" value={data.switchNext} />
-        <button class="shrink-0 cursor-pointer text-[13px] whitespace-nowrap text-text-4 underline hover:text-foreground" type="submit"
-          >{m.consent_switch_account()}</button
+        <button
+          class="shrink-0 cursor-pointer text-note whitespace-nowrap text-muted-foreground underline hover:text-foreground"
+          type="submit">{m.consent_switch_account()}</button
         >
       </form>
     </div>
 
     <div class="flex flex-col">
-      <span class="mb-1 text-[13px] font-medium text-text-4">{m.consent_features_heading()}</span>
+      <span class="mb-1 text-note font-medium text-muted-foreground">{m.consent_features_heading()}</span>
       {#if data.features.length === 0}
-        <p class="py-3 text-[13px] text-muted-foreground">{m.consent_no_features()}</p>
+        <p class="py-3 text-note text-muted-foreground">{m.consent_no_features()}</p>
       {:else}
         {#each data.features as feature (feature.permission)}
           {@const Icon = ICONS[feature.permission]}
@@ -102,7 +103,7 @@
             <Icon class="mt-0.5 size-4 shrink-0 text-foreground" />
             <div class="stack">
               <span class="text-sm font-medium">{feature.title}</span>
-              <span class="text-[13px] text-muted-foreground">{feature.description}</span>
+              <span class="text-note text-muted-foreground">{feature.description}</span>
             </div>
           </div>
         {/each}
@@ -114,7 +115,7 @@
       <Button size="lg" disabled={busy} onclick={() => decide(true)}>{m.consent_allow()}</Button>
     </div>
     {#if status}
-      <p class="text-[13px] text-bad-fg" role="status">{status}</p>
+      <p class="text-note text-bad-fg" role="status">{status}</p>
     {/if}
   </section>
   <p class="text-center text-xs leading-relaxed text-muted-foreground">{m.consent_footer()}</p>

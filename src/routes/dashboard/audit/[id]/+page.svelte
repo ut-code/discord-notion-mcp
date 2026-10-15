@@ -22,7 +22,7 @@
 
 <div class="stack gap-3">
   <a
-    class="inline-flex items-center gap-1.5 self-start text-[13px] text-text-4 no-underline hover:text-foreground"
+    class="inline-flex items-center gap-1.5 self-start text-note text-muted-foreground no-underline hover:text-foreground"
     href={`${DASHBOARD_PATH}/audit`}
   >
     <ChevronLeftIcon class="size-3.5" />

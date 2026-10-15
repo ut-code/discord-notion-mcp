@@ -116,7 +116,7 @@
           />
         </div>
         {#if form.searchError}
-          <div class="picker"><p class="px-2 py-2.5 text-[13px] text-bad-fg">{form.searchError}</p></div>
+          <div class="picker"><p class="px-2 py-2.5 text-note text-bad-fg">{form.searchError}</p></div>
         {:else if form.candidates.length > 0}
           <div class="picker" role="radiogroup" aria-label={m.grants_member_choices_label()}>
             {#each form.candidates as user (user.id)}
@@ -133,7 +133,7 @@
           </div>
         {:else if form.query}
           <div class="picker">
-            <p class="px-2 py-2.5 text-[13px] text-muted-foreground">{m.grants_member_no_match({ query: form.query })}</p>
+            <p class="px-2 py-2.5 text-note text-muted-foreground">{m.grants_member_no_match({ query: form.query })}</p>
           </div>
         {/if}
       </div>

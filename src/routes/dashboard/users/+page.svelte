@@ -63,7 +63,7 @@
       autocomplete="off"
     />
   </form>
-  <span class="text-[13px] text-muted-foreground">{m.users_total({ count: data.total })}</span>
+  <span class="text-note text-muted-foreground">{m.users_total({ count: data.total })}</span>
 </div>
 
 <div class="table-wrap">

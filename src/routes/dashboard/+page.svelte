@@ -118,7 +118,7 @@
 
   <section class="panel panel-pad flex flex-row flex-wrap items-center gap-x-6 gap-y-3" aria-labelledby="notion-heading">
     <h2 id="notion-heading">{m.stats_notion_heading()}</h2>
-    <dl class="cluster grow gap-x-4 text-[13px]">
+    <dl class="cluster grow gap-x-4 text-note">
       {#each notionTotals as total (total.label)}
         <div class="flex items-baseline gap-1.5">
           <dt class="text-muted-foreground">{total.label}</dt>

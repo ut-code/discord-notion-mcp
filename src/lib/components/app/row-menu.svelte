@@ -35,7 +35,7 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger>
       {#snippet child({ props })}
-        <Button {...props} variant="ghost" size="icon-sm" class="text-text-4" aria-label={label}>
+        <Button {...props} variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={label}>
           <EllipsisIcon />
         </Button>
       {/snippet}
@@ -61,7 +61,7 @@
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {:else}
-  <Button variant="ghost" size="icon-sm" class="text-text-4" popovertarget={id} aria-label={label} style={`anchor-name:--${id}`}>
+  <Button variant="ghost" size="icon-sm" class="text-muted-foreground" popovertarget={id} aria-label={label} style={`anchor-name:--${id}`}>
     <EllipsisIcon />
   </Button>
   <div class="native-menu" {id} popover="auto" style={`position-anchor:--${id}`}>
