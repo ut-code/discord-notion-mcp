@@ -102,12 +102,29 @@ describe("security headers", () => {
     expect(res.headers.get("x-frame-options")).toBe("DENY");
   });
 
-  test("immutable responses are copied", async () => {
-    const immutable = Response.redirect("http://x/next", 302);
-    const res = withSecurityHeaders(immutable);
+  // Per the Fetch spec, redirect and fetched responses have immutable headers (Node throws
+  // TypeError on set; Bun currently does not), so the immutability is simulated here.
+  const withFrozenHeaders = (response: Response, error: Error) => {
+    Object.defineProperty(response.headers, "set", {
+      value: () => {
+        throw error;
+      },
+    });
+    return response;
+  };
+
+  test("immutable responses are copied", () => {
+    const frozen = withFrozenHeaders(Response.redirect("http://x/next", 302), new TypeError("immutable"));
+    const res = withSecurityHeaders(frozen);
+    expect(res).not.toBe(frozen);
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("http://x/next");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
+  });
+
+  test("other failures while setting headers are not mistaken for immutability", () => {
+    const broken = withFrozenHeaders(new Response("x"), new RangeError("unexpected"));
+    expect(() => withSecurityHeaders(broken)).toThrow("unexpected");
   });
 });
 
