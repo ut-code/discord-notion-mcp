@@ -28,6 +28,12 @@ export interface ChartSeries {
   color: string;
 }
 
+/** One bar: `counts` has a value for every series key. */
+export interface ChartRow {
+  date: string;
+  counts: Record<string, number>;
+}
+
 export interface StatsUserRow {
   id: string;
   name: string;
@@ -50,8 +56,8 @@ export interface StatsPageData {
   /** Nothing recorded in the range. */
   empty: boolean;
   summary: { calls: number; activeUsers: number; failureRate: string; rateLimited: number };
-  /** Daily calls stacked by permission: one row per day, `date` plus a count per series key. */
-  daily: { series: ChartSeries[]; rows: Array<Record<string, string | number>> };
+  /** Daily calls stacked by permission, one row per day. */
+  daily: { series: ChartSeries[]; rows: ChartRow[] };
   users: StatsUserRow[];
   tools: StatsToolRow[];
   /** `auditHref` only for viewers who may open the write history. */
@@ -131,7 +137,7 @@ export async function statsPage(
       series,
       rows: days.map((day) => {
         const bucket = counts.get(day) ?? {};
-        return { date: dayLabel(day), ...Object.fromEntries(usedCategories.map(({ key }) => [key, bucket[key] ?? 0])) };
+        return { date: dayLabel(day), counts: Object.fromEntries(usedCategories.map(({ key }) => [key, bucket[key] ?? 0])) };
       }),
     },
     users: byUser.map((row) => {

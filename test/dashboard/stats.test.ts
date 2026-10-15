@@ -92,9 +92,9 @@ describe("usage statistics", () => {
       ["other", "その他"],
     ]);
     expect(data.daily.rows.map((row) => row.date)).toEqual(["10/06", "10/07", "10/08", "10/09", "10/10", "10/11", "10/12"]);
-    expect(data.daily.rows.at(-1)).toEqual({ date: "10/12", "discord:read": 2, "notion:read": 2, other: 0 });
-    expect(data.daily.rows.at(-2)).toEqual({ date: "10/11", "discord:read": 0, "notion:read": 1, other: 0 });
-    expect(data.daily.rows.at(-3)).toEqual({ date: "10/10", "discord:read": 0, "notion:read": 0, other: 3 });
+    expect(data.daily.rows.at(-1)).toEqual({ date: "10/12", counts: { "discord:read": 2, "notion:read": 2, other: 0 } });
+    expect(data.daily.rows.at(-2)).toEqual({ date: "10/11", counts: { "discord:read": 0, "notion:read": 1, other: 0 } });
+    expect(data.daily.rows.at(-3)).toEqual({ date: "10/10", counts: { "discord:read": 0, "notion:read": 0, other: 3 } });
   });
 
   test("summary, per-user and per-tool tables cover the range only", async () => {

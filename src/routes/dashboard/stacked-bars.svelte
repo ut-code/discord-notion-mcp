@@ -1,23 +1,33 @@
 <script lang="ts">
   import { labelIndexes, niceScale } from "$lib/chart-scale";
-  import type { ChartSeries } from "$lib/server/dashboard/stats";
+  import type { ChartRow, ChartSeries } from "$lib/server/dashboard/stats";
 
-  let { rows, series, label }: { rows: Array<Record<string, string | number>>; series: ChartSeries[]; label: string } = $props();
+  let { rows, series, label }: { rows: ChartRow[]; series: ChartSeries[]; label: string } = $props();
 
+  // Plain SVG rather than a chart library: layerchart (behind shadcn-svelte's chart) built a
+  // component per bar and froze the page for over a second with a few hundred bars.
   // Heights are in px and horizontal positions in %, so the server-rendered SVG is final:
   // nothing is measured or redrawn after hydration.
   const PLOT_HEIGHT = 168;
+  /** Band below the plot holding the date labels. */
   const AXIS_HEIGHT = 24;
+  const LABEL_BASELINE = PLOT_HEIGHT + 16;
+  const Y_AXIS_WIDTH = 32;
+  /** Share of a day's band the bar fills; the rest is the gap, split on both sides. */
+  const BAR_SHARE = 0.75;
+  const MAX_LABELS = 8;
+  /** Space between the hovered bar and the tooltip. */
+  const TIP_OFFSET = 8;
 
-  const value = (row: Record<string, string | number>, key: string) => Number(row[key] ?? 0);
-  const scale = $derived(niceScale(Math.max(0, ...rows.map((row) => series.reduce((sum, entry) => sum + value(row, entry.key), 0)))));
+  const count = (row: ChartRow, key: string) => row.counts[key] ?? 0;
+  const scale = $derived(niceScale(Math.max(0, ...rows.map((row) => series.reduce((sum, entry) => sum + count(row, entry.key), 0)))));
   const y = (amount: number) => PLOT_HEIGHT - (amount / scale.max) * PLOT_HEIGHT;
   const band = $derived(100 / rows.length);
   const columns = $derived(
     rows.map((row) => {
       let base = 0;
       return series.flatMap((entry) => {
-        const amount = value(row, entry.key);
+        const amount = count(row, entry.key);
         if (amount <= 0) return [];
         const segment = { key: entry.key, color: entry.color, y: y(base + amount), height: y(base) - y(base + amount) };
         base += amount;
@@ -25,17 +35,19 @@
       });
     }),
   );
-  const labels = $derived(labelIndexes(rows.length, 8));
+  const labels = $derived(labelIndexes(rows.length, MAX_LABELS));
 
   let active = $state<number | null>(null);
   let plotWidth = $state(0);
   let tipWidth = $state(0);
-  // Beside the hovered day, on the right when it fits, else on the left; never past the y axis.
+  // Beside the hovered day, on the right when it fits, else on the left; it may cover the
+  // y axis but not go past the chart's left edge (`left` is relative to the plot).
   const tip = $derived.by(() => {
     const row = active === null ? undefined : rows[active];
     if (active === null || !row) return null;
     const center = ((active + 0.5) / rows.length) * plotWidth;
-    const left = center + 8 + tipWidth <= plotWidth ? center + 8 : Math.max(-32, center - 8 - tipWidth);
+    const left =
+      center + TIP_OFFSET + tipWidth <= plotWidth ? center + TIP_OFFSET : Math.max(-Y_AXIS_WIDTH, center - TIP_OFFSET - tipWidth);
     return { row, left };
   });
 
@@ -48,7 +60,7 @@
 
 <div class="flex flex-col gap-3">
   <div class="chart" role="img" aria-label={label}>
-    <div class="y-axis" aria-hidden="true">
+    <div class="y-axis" style:width={`${Y_AXIS_WIDTH}px`} style:height={`${PLOT_HEIGHT}px`} aria-hidden="true">
       {#each scale.ticks as tick (tick)}
         <span style:top={`${y(tick)}px`}>{tick.toLocaleString("ja-JP")}</span>
       {/each}
@@ -70,11 +82,17 @@
         {/if}
         {#each columns as segments, index (index)}
           {#each segments as segment (segment.key)}
-            <rect x={`${(index + 0.125) * band}%`} width={`${band * 0.75}%`} y={segment.y} height={segment.height} fill={segment.color} />
+            <rect
+              x={`${(index + (1 - BAR_SHARE) / 2) * band}%`}
+              width={`${band * BAR_SHARE}%`}
+              y={segment.y}
+              height={segment.height}
+              fill={segment.color}
+            />
           {/each}
         {/each}
         {#each labels as tick (tick.index)}
-          <text class:wide-only={!tick.narrow} x={`${(tick.index + 0.5) * band}%`} y={PLOT_HEIGHT + 16}>{rows[tick.index]?.date}</text>
+          <text class:wide-only={!tick.narrow} x={`${(tick.index + 0.5) * band}%`} y={LABEL_BASELINE}>{rows[tick.index]?.date}</text>
         {/each}
       </svg>
       {#if tip}
@@ -84,7 +102,7 @@
             <div>
               <span class="chart-swatch" style:background={entry.color}></span>
               <span class="name">{entry.label}</span>
-              <span class="amount">{value(tip.row, entry.key).toLocaleString("ja-JP")}</span>
+              <span class="amount">{count(tip.row, entry.key).toLocaleString("ja-JP")}</span>
             </div>
           {/each}
         </div>
@@ -106,8 +124,7 @@
   }
   .y-axis {
     position: relative;
-    flex: 0 0 32px;
-    height: 168px;
+    flex: none;
     font-size: 11px;
     line-height: 1;
     color: var(--muted-foreground);
