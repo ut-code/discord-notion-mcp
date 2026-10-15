@@ -21,7 +21,7 @@
   "access_unavailable": "Discord サーバーのメンバーシップを確認できませんでした。しばらくしてから再読み込みしてください。",
   "access_admin_only_action": "この操作は管理者だけが行えます。",
   "access_admin_only_page": "このページは管理者だけが開けます。",
-  "access_audit_requires_notion_read": "書き込み履歴を見るには Notion 読み取りの権限が必要です。",
+  "access_audit_requires_notion_write": "書き込み履歴を見るには Notion 書き込みの権限が必要です。",
   "access_sign_in_required": "ログインが必要です。",
   "role_owner": "オーナー",
   "role_admin": "管理者",

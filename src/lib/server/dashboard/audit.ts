@@ -127,16 +127,21 @@ export interface AuditListData {
   nextHref: string | null;
   filters: { user: string; operation: string; status: string };
   userOptions: Option[];
+  /** Admins only: everyone else sees just their own writes. */
+  canFilterUsers: boolean;
   operationOptions: Option[];
   statusOptions: Option[];
   /** Shown when the user filter is not a Discord id. */
   error: string | null;
 }
 
-export async function auditList(deps: DashboardDeps, params: URLSearchParams): Promise<AuditListData> {
+/** Who opens the write history: admins see everyone's writes, other writers only their own. */
+type AuditViewer = Pick<Viewer, "isAdmin" | "discordUserId">;
+
+export async function auditList(deps: DashboardDeps, params: URLSearchParams, viewer: AuditViewer): Promise<AuditListData> {
   const filters: AuditFilters = {};
   let error: string | null = null;
-  const user = params.get("user")?.trim();
+  const user = viewer.isAdmin ? params.get("user")?.trim() : undefined;
   if (user) {
     if (isSnowflake(user)) filters.user = user;
     else error = m.audit_filter_invalid_user();
@@ -151,12 +156,12 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
     deps.audit.listAudit({
       limit: AUDIT_PAGE_SIZE,
       offset: (page - 1) * AUDIT_PAGE_SIZE,
-      discordUserId: filters.user,
+      discordUserId: viewer.isAdmin ? filters.user : viewer.discordUserId,
       operation: filters.operation,
       status: filters.status === "reverted" ? undefined : filters.status,
       reverted: filters.status === "reverted" ? true : undefined,
     }),
-    deps.audit.listActors(),
+    viewer.isAdmin ? deps.audit.listActors() : [],
   ]);
   const avatars = await deps.subjects.memberAvatars(rows.map((row) => row.discordUserId));
   // Keep a filtered user selectable even when it has no rows any more.
@@ -170,6 +175,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
     ...pageLinks(page, AUDIT_PAGE_SIZE, total, rows.length, (target) => auditListHref(filters, target)),
     filters: { user: filters.user ?? "", operation: filters.operation ?? "", status: filters.status ?? "" },
     userOptions,
+    canFilterUsers: viewer.isAdmin,
     operationOptions: NOTION_AUDIT_OPERATIONS.map((value) => ({ value, label: AUDIT_OPERATION_LABELS[value] })),
     statusOptions: Object.entries(AUDIT_STATUS_FILTERS).map(([value, label]) => ({ value, label })),
     error,
@@ -336,10 +342,11 @@ function parseAuditId(raw: string): number | null {
   return /^\d{1,15}$/.test(raw) ? Number(raw) : null;
 }
 
-export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: Pick<Viewer, "isAdmin">): Promise<AuditDetailData | null> {
+/** Null when the entry does not exist or is someone else's write and the viewer is not an admin (the same 404). */
+export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: AuditViewer): Promise<AuditDetailData | null> {
   const id = parseAuditId(idParam);
   const row = id === null ? null : await deps.audit.getAudit(id);
-  if (!row) return null;
+  if (!row || (!viewer.isAdmin && row.discordUserId !== viewer.discordUserId)) return null;
   const avatars = await deps.subjects.memberAvatars([row.discordUserId]);
   return {
     id: row.id,

@@ -35,13 +35,15 @@
 </script>
 
 {#snippet filterFields(idPrefix: string, selectClass: string)}
-  <label for={`${idPrefix}filter-user`} class="sr-only">{m.common_user()}</label>
-  <NativeSelect.Root id={`${idPrefix}filter-user`} name="user" value={data.filters.user} class={selectClass}>
-    <option value="">{m.audit_filter_all_users()}</option>
-    {#each data.userOptions as option (option.value)}
-      <option value={option.value}>{option.label}</option>
-    {/each}
-  </NativeSelect.Root>
+  {#if data.canFilterUsers}
+    <label for={`${idPrefix}filter-user`} class="sr-only">{m.common_user()}</label>
+    <NativeSelect.Root id={`${idPrefix}filter-user`} name="user" value={data.filters.user} class={selectClass}>
+      <option value="">{m.audit_filter_all_users()}</option>
+      {#each data.userOptions as option (option.value)}
+        <option value={option.value}>{option.label}</option>
+      {/each}
+    </NativeSelect.Root>
+  {/if}
   <label for={`${idPrefix}filter-operation`} class="sr-only">{m.audit_operation()}</label>
   <NativeSelect.Root id={`${idPrefix}filter-operation`} name="operation" value={data.filters.operation} class={selectClass}>
     <option value="">{m.audit_filter_all_operations()}</option>

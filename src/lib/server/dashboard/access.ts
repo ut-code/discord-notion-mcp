@@ -18,7 +18,7 @@ export interface Viewer {
   guildName: string;
   /** Grants, revocations and reverts. */
   isAdmin: boolean;
-  /** The write history shows Notion content: notion:read. */
+  /** The write history: writers see their own writes (notion:write), admins everyone's. */
   canViewAudit: boolean;
 }
 
@@ -51,7 +51,7 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
       roleLabel: isGuildOwner(access.guild, access.member) ? m.role_owner() : access.isAdmin ? m.role_admin() : m.role_member(),
       guildName: access.guild.name,
       isAdmin: access.isAdmin,
-      canViewAudit: access.permissions.has("notion:read"),
+      canViewAudit: access.permissions.has("notion:write"),
     },
   };
 }

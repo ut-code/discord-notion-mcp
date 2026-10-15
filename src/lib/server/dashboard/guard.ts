@@ -25,11 +25,11 @@ export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): 
   return gate.viewer;
 }
 
-/** The write history shows Notion content: notion:read or admin. */
+/** The write history: notion:write (their own writes) or admin (everyone's). */
 export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
   const viewer = await requireViewer(event);
   if (!viewer.canViewAudit) {
-    error(403, { title: m.access_denied_title(), message: m.access_audit_requires_notion_read(), signedIn: true });
+    error(403, { title: m.access_denied_title(), message: m.access_audit_requires_notion_write(), signedIn: true });
   }
   return viewer;
 }

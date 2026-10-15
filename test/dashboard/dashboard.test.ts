@@ -134,11 +134,16 @@ describe("dashboard access control", () => {
     expect(outsider).toEqual({ kind: "denied", status: 403, ...NOT_MEMBER });
   });
 
-  test("the write history needs notion:read (or admin)", async () => {
-    expect((await viewerFor(READER)).canViewAudit).toBe(false);
+  test("the write history needs notion:write (or admin); notion:read alone is not enough", async () => {
     await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
-    expect(await viewerFor(READER)).toMatchObject({ isAdmin: false, canViewAudit: true });
-    await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    try {
+      expect((await viewerFor(READER)).canViewAudit).toBe(false);
+      await h.server.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: READER });
+      expect(await viewerFor(READER)).toMatchObject({ isAdmin: false, canViewAudit: true });
+    } finally {
+      await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+      await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "user", subjectId: READER });
+    }
     expect(owner.canViewAudit).toBe(true);
   });
 
@@ -393,14 +398,16 @@ describe("read-only members", () => {
     expect(await requireAdminViewer(guardEvent(owner))).toBe(owner);
   });
 
-  test("the users page hides grant links and revocation, and audit links without notion:read", async () => {
+  test("the users page hides grant links and revocation; writers get a history link on their own row only", async () => {
     const member = { ...(await viewerFor(MEMBER)), canViewAudit: false };
     const memberLogin = await signIn(h, MEMBER);
     const data = await usersPage(deps, params(), member);
     expect(data.canRevoke).toBe(false);
     expect(data.rows.every((row) => row.grantHref === null && row.auditHref === null)).toBe(true);
-    const asReader = await userRow(memberLogin.userId, "", { ...member, canViewAudit: true });
-    expect(asReader).toMatchObject({ grantHref: null, auditHref: `/dashboard/audit?user=${MEMBER}` });
+    const asWriter = { ...member, canViewAudit: true };
+    expect(await userRow(memberLogin.userId, "", asWriter)).toMatchObject({ grantHref: null, auditHref: "/dashboard/audit" });
+    const others = (await usersPage(deps, params(), asWriter)).rows.filter((row) => row.userId !== memberLogin.userId);
+    expect(others.every((row) => row.auditHref === null)).toBe(true);
   });
 
   test("audit details offer no revert to non-admins", async () => {
@@ -673,7 +680,7 @@ describe("audit log", () => {
     const parent = h.notion.addPage({ title: "Audit root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Listed", request: { title: "Listed" } });
 
-    const list = await auditList(deps, params());
+    const list = await auditList(deps, params(), owner);
     const row = list.rows.find((candidate) => candidate.id === created.auditId);
     expect(row).toMatchObject({
       href: `/dashboard/audit/${created.auditId}`,
@@ -687,26 +694,26 @@ describe("audit log", () => {
     expect(list.userOptions).toContainEqual({ value: MEMBER, label: "Mina" });
     expect(list.range).toMatch(/^\d+ 件中 1–\d+ 件$/);
 
-    expect((await auditList(deps, params("operation=append_content"))).rows.some((candidate) => candidate.id === created.auditId)).toBe(
-      false,
-    );
+    expect(
+      (await auditList(deps, params("operation=append_content"), owner)).rows.some((candidate) => candidate.id === created.auditId),
+    ).toBe(false);
     await expect(
       writes.editContent(MEMBER_ACTOR, { pageId: parent.id, edits: [{ old_str: "missing", new_str: "x" }], request: {} }),
     ).rejects.toThrow();
-    const failed = await auditList(deps, params("status=failed"));
+    const failed = await auditList(deps, params("status=failed"), owner);
     expect(failed.rows.some((candidate) => candidate.id === created.auditId)).toBe(false);
     expect(failed.rows[0]?.badge).toEqual({ label: "失敗", tone: "destructive" });
     expect(failed.filters.status).toBe("failed");
-    expect((await auditList(deps, params("user=abc"))).error).toBe("ユーザー ID は Discord の数値 ID で指定してください。");
-    expect((await auditList(deps, params(`user=${STRANGER}`))).userOptions).toContainEqual({ value: STRANGER, label: STRANGER });
+    expect((await auditList(deps, params("user=abc"), owner)).error).toBe("ユーザー ID は Discord の数値 ID で指定してください。");
+    expect((await auditList(deps, params(`user=${STRANGER}`), owner)).userOptions).toContainEqual({ value: STRANGER, label: STRANGER });
   });
 
   test("a page past the end links back to the last page", async () => {
     const parent = h.notion.addPage({ title: "Pager root" });
     await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Paged", request: {} });
-    const { total } = await auditList(deps, params("status=ok"));
+    const { total } = await auditList(deps, params("status=ok"), owner);
     const lastPage = Math.ceil(total / 50);
-    const past = await auditList(deps, params(`status=ok&page=${lastPage + 5}`));
+    const past = await auditList(deps, params(`status=ok&page=${lastPage + 5}`), owner);
     expect(past.rows).toEqual([]);
     expect(past.range).toBeNull();
     expect(past.nextHref).toBeNull();
@@ -798,9 +805,9 @@ describe("audit log", () => {
     const revertRow = (await auditDetail(deps, String(row.revertAuditId), owner))!;
     expect(revertRow.change).toEqual({ kind: "revert", of: { id: created.auditId, href: `/dashboard/audit/${created.auditId}` } });
     expect(revertRow.revert).toBeNull();
-    const reverted = (await auditList(deps, params("status=reverted"))).rows.find((candidate) => candidate.id === created.auditId);
+    const reverted = (await auditList(deps, params("status=reverted"), owner)).rows.find((candidate) => candidate.id === created.auditId);
     expect(reverted?.badge).toEqual({ label: "取り消し済み", tone: "secondary" });
-    const revertListRow = (await auditList(deps, params())).rows.find((candidate) => candidate.id === row.revertAuditId);
+    const revertListRow = (await auditList(deps, params(), owner)).rows.find((candidate) => candidate.id === row.revertAuditId);
     expect(revertListRow?.meta).toStartWith(`#${created.auditId} を取り消し · `);
     expect(await revertAudit(deps, "99999", form({ confirm: "yes" }), owner)).toBeNull();
   });
@@ -846,6 +853,32 @@ describe("audit log", () => {
     expect(detail.revert).toBeNull();
   });
 
+  test("writers see only their own writes; admins see everyone's", async () => {
+    const parent = h.notion.addPage({ title: "Scope root" });
+    const mine = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Mine", request: {} });
+    const theirs = await writes.createPage(
+      { discordUserId: STRANGER, displayName: "Stranger", username: "stranger" },
+      {
+        parentId: parent.id,
+        title: "Theirs",
+        request: {},
+      },
+    );
+    const writer = { isAdmin: false, discordUserId: MEMBER };
+
+    const own = await auditList(deps, params(`user=${STRANGER}`), writer);
+    expect(own.rows.map((row) => row.id)).toContain(mine.auditId);
+    expect(own.rows.every((row) => row.user.id === MEMBER)).toBe(true);
+    expect(own).toMatchObject({ canFilterUsers: false, userOptions: [], filters: { user: "" } });
+    expect(await auditDetail(deps, String(mine.auditId), writer)).not.toBeNull();
+    expect(await auditDetail(deps, String(theirs.auditId), writer)).toBeNull();
+
+    const all = await auditList(deps, params(), owner);
+    expect(all.rows.map((row) => row.id)).toEqual(expect.arrayContaining([mine.auditId, theirs.auditId]));
+    expect(all.canFilterUsers).toBe(true);
+    expect(await auditDetail(deps, String(theirs.auditId), owner)).not.toBeNull();
+  });
+
   test("an interrupted write says its outcome is unknown and offers no revert", async () => {
     const stuck = await store.insert({
       discordUserId: MEMBER,
@@ -860,7 +893,7 @@ describe("audit log", () => {
     expect(detail.badges).toEqual([{ label: "中断", tone: "warn" }]);
     expect(detail.summary).toEndWith("「Draft」を作成しようとしましたが、途中で中断しました（反映されたかは不明です）。");
     expect(detail.revert).toBeNull();
-    const listed = await auditList(deps, params("status=interrupted"));
+    const listed = await auditList(deps, params("status=interrupted"), owner);
     expect(listed.rows.map((row) => row.id)).toContain(stuck.id);
     expect(listed.rows.every((row) => row.badge?.label === "中断")).toBe(true);
   });

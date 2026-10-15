@@ -91,7 +91,7 @@ function wasRevokedSinceLogin(user: LoginUser): boolean {
   return user.revokedAt !== null && (user.lastLoginAt === null || user.revokedAt >= user.lastLoginAt);
 }
 
-function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canViewAudit">): UserTableRow {
+function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canViewAudit" | "discordUserId">): UserTableRow {
   const discordUserId = row.user.discordUserId;
   return {
     userId: row.user.userId,
@@ -106,7 +106,14 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
       ? { label: m.users_revoked(), tone: "secondary", title: m.users_revoked_at({ time: formatJst(row.user.revokedAt) }) }
       : null,
     grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
-    auditHref: discordUserId && viewer.canViewAudit ? auditListHref({ user: discordUserId }) : null,
+    // Non-admin writers only have their own history.
+    auditHref: !discordUserId
+      ? null
+      : viewer.isAdmin
+        ? auditListHref({ user: discordUserId })
+        : viewer.canViewAudit && discordUserId === viewer.discordUserId
+          ? auditListHref({})
+          : null,
   };
 }
 
