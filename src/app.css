@@ -57,6 +57,10 @@
 	--blurple: #5865f2;
 	--blurple-hover: #4752c4;
 	--subtle: light-dark(#a1a1aa, #71717a);
+	--chart-1: light-dark(#2a78d6, #4a90e2);
+	--chart-2: light-dark(#1baf7a, #2bc48a);
+	--chart-3: light-dark(#eb6834, #f2804f);
+	--chart-4: light-dark(#a1a1aa, #71717a);
 }
 :root.light {
 	color-scheme: light;

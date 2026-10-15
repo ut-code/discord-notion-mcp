@@ -13,18 +13,22 @@ const STATS_RANGES = [7, 30, 90] as const;
 export type StatsRange = (typeof STATS_RANGES)[number];
 const DEFAULT_RANGE: StatsRange = 30;
 
-/** Chart groups in stacking order: the permission a tool needs, then tools no longer served. */
+/**
+ * Chart groups in stacking order: the permission a tool needs, then tools no longer served.
+ * Colors are palette slots defined per theme in app.css (the shadcn `--chart-N` convention).
+ */
 const CATEGORIES = [
-  { key: "discord:read", label: PERMISSION_LABELS["discord:read"], color: "#2a78d6" },
-  { key: "notion:read", label: PERMISSION_LABELS["notion:read"], color: "#1baf7a" },
-  { key: "notion:write", label: PERMISSION_LABELS["notion:write"], color: "#eb6834" },
-  { key: "other", label: m.stats_category_other(), color: "#a1a1aa" },
+  { key: "discord:read", label: PERMISSION_LABELS["discord:read"], color: "var(--chart-1)" },
+  { key: "notion:read", label: PERMISSION_LABELS["notion:read"], color: "var(--chart-2)" },
+  { key: "notion:write", label: PERMISSION_LABELS["notion:write"], color: "var(--chart-3)" },
+  { key: "other", label: m.stats_category_other(), color: "var(--chart-4)" },
 ] as const;
 type CategoryKey = (typeof CATEGORIES)[number]["key"];
 
 export interface ChartSeries {
   key: string;
   label: string;
+  /** A CSS color, e.g. `var(--chart-1)`. */
   color: string;
 }
 

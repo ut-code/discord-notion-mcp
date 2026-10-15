@@ -1,5 +1,6 @@
 <script lang="ts">
   import { labelIndexes, niceScale } from "$lib/chart-scale";
+  import { m } from "$lib/paraglide/messages.js";
   import type { ChartRow, ChartSeries } from "$lib/server/dashboard/stats";
 
   let { rows, series, label }: { rows: ChartRow[]; series: ChartSeries[]; label: string } = $props();
@@ -59,8 +60,9 @@
 </script>
 
 <div class="flex flex-col gap-3">
-  <div class="chart" role="img" aria-label={label}>
-    <div class="y-axis" style:width={`${Y_AXIS_WIDTH}px`} style:height={`${PLOT_HEIGHT}px`} aria-hidden="true">
+  <!-- Screen readers get the same numbers from the table below. -->
+  <div class="chart" aria-hidden="true">
+    <div class="y-axis" style:width={`${Y_AXIS_WIDTH}px`} style:height={`${PLOT_HEIGHT}px`}>
       {#each scale.ticks as tick (tick)}
         <span style:top={`${y(tick)}px`}>{tick.toLocaleString("ja-JP")}</span>
       {/each}
@@ -87,7 +89,7 @@
               width={`${band * BAR_SHARE}%`}
               y={segment.y}
               height={segment.height}
-              fill={segment.color}
+              style:fill={segment.color}
             />
           {/each}
         {/each}
@@ -96,7 +98,7 @@
         {/each}
       </svg>
       {#if tip}
-        <div class="tip" style:left={`${tip.left}px`} bind:offsetWidth={tipWidth} aria-hidden="true">
+        <div class="tip" style:left={`${tip.left}px`} bind:offsetWidth={tipWidth}>
           <p>{tip.row.date}</p>
           {#each series as entry (entry.key)}
             <div>
@@ -109,11 +111,28 @@
       {/if}
     </div>
   </div>
-  <ul class="chart-legend">
+  <ul class="chart-legend" aria-hidden="true">
     {#each series as entry (entry.key)}
       <li><span class="chart-swatch" style:background={entry.color}></span>{entry.label}</li>
     {/each}
   </ul>
+  <table class="sr-only">
+    <caption>{label}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{m.stats_date()}</th>
+        {#each series as entry (entry.key)}<th scope="col">{entry.label}</th>{/each}
+      </tr>
+    </thead>
+    <tbody>
+      {#each rows as row (row.date)}
+        <tr>
+          <th scope="row">{row.date}</th>
+          {#each series as entry (entry.key)}<td>{count(row, entry.key).toLocaleString("ja-JP")}</td>{/each}
+        </tr>
+      {/each}
+    </tbody>
+  </table>
 </div>
 
 <style>

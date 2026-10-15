@@ -100,6 +100,7 @@
   "stats_rate_limited": "レート制限",
   "stats_daily_heading": "日別の呼び出し",
   "stats_daily_chart_label": "日別・権限別の呼び出し回数",
+  "stats_date": "日付",
   "stats_category_other": "その他",
   "stats_last_used": "最終利用",
   "stats_tools": "ツール",
