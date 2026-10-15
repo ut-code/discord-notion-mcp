@@ -5,7 +5,15 @@ import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
 import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
 import { requireAdminViewer } from "../../src/lib/server/dashboard/guard";
 import { MemberSearch } from "../../src/lib/server/dashboard/member-search";
-import { consentPage, NOT_MEMBER, signInErrorMessage, signInPage, signOut } from "../../src/lib/server/dashboard/session";
+import {
+  consentPage,
+  metadataHost,
+  NOT_MEMBER,
+  redirectTarget,
+  signInErrorMessage,
+  signInPage,
+  signOut,
+} from "../../src/lib/server/dashboard/session";
 import { revokeTokens, USER_SEARCH_SCAN_LIMIT, usersPage, type UserTableRow } from "../../src/lib/server/dashboard/users";
 import type { LoginUser } from "../../src/lib/server/auth/users";
 import { ADMINISTRATOR } from "../../src/lib/server/discord/permissions";
@@ -512,11 +520,26 @@ describe("sign-in and sign-out", () => {
 });
 
 describe("consent", () => {
+  test("tells callbacks on this device from websites, and metadata-document clients from self-named ones", () => {
+    expect(redirectTarget("http://127.0.0.1:5555/cb")).toEqual({ origin: "http://127.0.0.1:5555", local: true });
+    expect(redirectTarget("cursor://anysphere.cursor-retrieval/oauth")).toEqual({
+      origin: "cursor://anysphere.cursor-retrieval",
+      local: true,
+    });
+    expect(redirectTarget("https://app.example.com/cb")).toEqual({ origin: "https://app.example.com", local: false });
+    expect(redirectTarget("http://evil.example/cb")).toEqual({ origin: "http://evil.example", local: false });
+    expect(redirectTarget(null)).toBeNull();
+    expect(metadataHost("https://claude.ai/oauth/mcp-client.json")).toBe("claude.ai");
+    expect(metadataHost("Yx3kLq9")).toBeNull();
+    expect(metadataHost("http://client.example/metadata.json")).toBeNull();
+  });
+
   test("lists only the signed-in user's effective permissions", async () => {
     await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
     const page = await consentFor(READER);
     expect(page.clientName).toBe("E2E CLI");
-    expect(page.redirectOrigin).toBe(new URL(REDIRECT_URI).origin);
+    expect(page.redirect).toEqual({ origin: new URL(REDIRECT_URI).origin, local: true });
+    expect(page.verifiedHost).toBeNull();
     expect(page.account).toMatchObject({ name: "Reader", username: "reader" });
     expect(page.guildName).toBe("Test Guild");
     expect(page.switchNext.startsWith("/sign-in?")).toBe(true);

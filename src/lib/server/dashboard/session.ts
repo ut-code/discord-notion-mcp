@@ -4,6 +4,7 @@ import { parseSetCookieHeader, toCookieOptions } from "better-auth/cookies";
 import { AUTH_BASE_PATH } from "../auth/auth";
 import { clientNameBeforeSignIn, clientNameForSession } from "../auth/clients";
 import { displayName } from "../lib/display-name";
+import { isLoopbackHost } from "../lib/loopback";
 import { errorMessage } from "../lib/errors";
 import { PERMISSIONS, type Permission } from "../permissions/permissions";
 import type { EffectiveAccess } from "../permissions/resolver";
@@ -103,8 +104,13 @@ export interface ConsentPageData {
   endpoint: string;
   oauthQuery: string;
   clientName: string;
-  /** Where the client receives the authorization code; null when the request names none. */
-  redirectOrigin: string | null;
+  /**
+   * The domain that published the client's metadata (a Client ID Metadata Document client);
+   * null when the name is only self-asserted at dynamic registration.
+   */
+  verifiedHost: string | null;
+  /** Where the authorization code goes; `local` is a loopback or app-scheme callback on this device. */
+  redirect: { origin: string; local: boolean } | null;
   account: { name: string; username: string; avatarUrl: string | null };
   guildName: string;
   /** Effective permissions in display order; empty when nothing is granted. */
@@ -117,14 +123,22 @@ export type ConsentResult =
   { kind: "ok"; data: ConsentPageData } | { kind: "error"; status: 400 | 401 | 403 | 503; title: string; message: string };
 
 /**
- * Origin of a redirect URI, so the consent page can tell a CLI's loopback callback from a
- * website; custom schemes (opaque origins) show their scheme and host.
+ * Where a redirect URI points, so the consent page can tell a CLI's loopback or app-scheme
+ * callback from a website; custom schemes (opaque origins) show their scheme and host.
  */
-function redirectOrigin(redirectUri: string | null): string | null {
+export function redirectTarget(redirectUri: string | null): ConsentPageData["redirect"] {
   const url = redirectUri ? URL.parse(redirectUri) : null;
   if (!url) return null;
-  if (url.origin !== "null") return url.origin;
-  return url.host ? `${url.protocol}//${url.host}` : url.protocol;
+  if (url.protocol === "https:" || url.protocol === "http:") {
+    return { origin: url.origin, local: url.protocol === "http:" && isLoopbackHost(url.hostname) };
+  }
+  return { origin: url.host ? `${url.protocol}//${url.host}` : url.protocol, local: true };
+}
+
+/** CIMD clients use the https URL of their metadata document as client_id; its host vouches for the name. */
+export function metadataHost(clientId: string): string | null {
+  const url = URL.parse(clientId);
+  return url?.protocol === "https:" ? url.host : null;
 }
 
 export async function consentPage(deps: DashboardDeps, url: URL, headers: Headers): Promise<ConsentResult> {
@@ -154,7 +168,8 @@ export async function consentPage(deps: DashboardDeps, url: URL, headers: Header
       endpoint: `${AUTH_BASE_PATH}/oauth2/consent`,
       oauthQuery,
       clientName: await clientLabel(deps, clientId, () => clientNameForSession(deps.auth, clientId, headers)),
-      redirectOrigin: redirectOrigin(signedOAuthParam(oauthQuery, "redirect_uri")),
+      verifiedHost: metadataHost(clientId),
+      redirect: redirectTarget(signedOAuthParam(oauthQuery, "redirect_uri")),
       account: { name: displayName(access.member), username: access.member.username, avatarUrl: access.member.avatarUrl },
       guildName: access.guild.name,
       features: consentPermissions(access).map((permission) => ({ permission, ...FEATURES[permission] })),

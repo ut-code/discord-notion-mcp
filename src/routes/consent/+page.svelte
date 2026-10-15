@@ -1,8 +1,11 @@
 <script lang="ts">
+  import BadgeCheckIcon from "@lucide/svelte/icons/badge-check";
+  import CircleAlertIcon from "@lucide/svelte/icons/circle-alert";
   import EyeIcon from "@lucide/svelte/icons/eye";
   import FileTextIcon from "@lucide/svelte/icons/file";
   import PenLineIcon from "@lucide/svelte/icons/pen-line";
   import SettingsIcon from "@lucide/svelte/icons/settings";
+  import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
   import AuthLayout from "$lib/components/app/auth-layout.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -47,8 +50,29 @@
     <div class="stack gap-2">
       <h1><span>{data.clientName}</span> {m.consent_heading_suffix()}</h1>
       <p class="lead">{m.consent_lead()}</p>
-      {#if data.redirectOrigin}<p class="mono break-all">{m.consent_redirect({ origin: data.redirectOrigin })}</p>{/if}
     </div>
+
+    <ul class="stack gap-1.5 text-[13px]">
+      {#if data.verifiedHost}
+        <li class="flex items-center gap-1.5">
+          <BadgeCheckIcon class="size-4 shrink-0 text-ok-fg" />{m.consent_publisher_verified({ host: data.verifiedHost })}
+        </li>
+      {:else}
+        <li class="flex items-center gap-1.5 text-warn-text">
+          <CircleAlertIcon class="size-4 shrink-0" />{m.consent_publisher_unverified()}
+        </li>
+      {/if}
+      {#if data.redirect?.local}
+        <li class="break-all">{m.consent_redirect_local({ origin: data.redirect.origin })}</li>
+        {#if data.verifiedHost}<li class="text-muted-foreground">{m.consent_redirect_local_unverifiable()}</li>{/if}
+      {:else if data.redirect}
+        <li
+          class="flex items-center gap-1.5 rounded-md border border-warn-border bg-warn-bg px-2 py-1.5 font-medium break-all text-warn-text"
+        >
+          <TriangleAlertIcon class="size-4 shrink-0" />{m.consent_redirect_external({ origin: data.redirect.origin })}
+        </li>
+      {/if}
+    </ul>
 
     <div class="flex items-center gap-3 rounded-[10px] border p-3">
       <AppAvatar name={data.account.name} url={data.account.avatarUrl} size="lg" />
