@@ -11,10 +11,11 @@ function isNativeRedirectUri(uri: unknown): boolean {
 }
 
 /**
- * MCP CLIs (Claude Code, Codex) register via DCR as public clients with loopback
- * redirect URIs but omit `application_type`, which RFC 7591/OIDC default to "web".
- * Better Auth then rejects the http loopback redirects. Such clients are native
- * apps per RFC 8252, so we fill in `application_type: "native"` for them only.
+ * Some MCP clients register via DCR (RFC 7591) as public clients with loopback redirect
+ * URIs but omit `application_type`. That field comes from OpenID Connect Dynamic Client
+ * Registration, where it defaults to "web", and Better Auth rejects http loopback
+ * redirects for web clients. Such clients are native apps per RFC 8252, so we fill in
+ * `application_type: "native"` for them only.
  */
 export function withInferredApplicationType(metadata: unknown): Record<string, unknown> | null {
   if (!isRecord(metadata)) return null;
