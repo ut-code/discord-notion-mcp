@@ -31,11 +31,12 @@
         window.location.href = result.url;
         return;
       }
-      throw new Error(result.message || result.error_description || m.sign_in_start_failed());
+      console.error("sign-in start failed", res.status, result);
     } catch (error) {
-      status = error instanceof Error ? error.message : String(error);
-      busy = false;
+      console.error(error);
     }
+    status = m.sign_in_start_failed();
+    busy = false;
   }
 </script>
 

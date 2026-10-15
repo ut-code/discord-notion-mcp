@@ -83,7 +83,7 @@ export class MemberLookup {
         location.reload();
         return;
       }
-      const body = parseBody(await response.json().catch(() => ({})));
+      const body = parseBody(await response.json());
       if (key !== this.latest) return;
       if (response.ok && body.members) {
         this.cache.set(key, body.members);

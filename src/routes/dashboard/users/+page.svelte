@@ -7,6 +7,7 @@
   import ToneBadge from "$lib/components/app/tone-badge.svelte";
   import { Input } from "$lib/components/ui/input";
   import * as Table from "$lib/components/ui/table";
+  import { onDestroy } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { useHydrated } from "$lib/hydrated.svelte";
   import { m } from "$lib/paraglide/messages.js";
@@ -26,7 +27,7 @@
   afterNavigate(({ type }) => {
     if (type !== "goto") query = data.query;
   });
-  $effect(() => () => clearTimeout(timer));
+  onDestroy(() => clearTimeout(timer));
 
   function searchAsYouType() {
     clearTimeout(timer);

@@ -8,7 +8,7 @@
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
   import SearchIcon from "@lucide/svelte/icons/search";
   import XIcon from "@lucide/svelte/icons/x";
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import AppAvatar from "$lib/components/app/app-avatar.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -59,14 +59,12 @@
     members.length > 0 || lookup.loading ? null : (lookup.error ?? (roleOptions.length > 0 ? null : m.grants_picker_no_match())),
   );
 
-  $effect(() => {
-    lookup.search(query);
-  });
-  $effect(() => () => lookup.cancel());
+  onDestroy(() => lookup.cancel());
 
   async function choose(subject: GrantSubject) {
     selected = subject;
     query = "";
+    lookup.search(query);
     activeKey = null;
     await tick();
     clear?.focus();
@@ -172,7 +170,10 @@
         aria-controls={listId}
         aria-activedescendant={open && active ? optionId(active) : undefined}
         class="pr-9"
-        oninput={() => (dismissed = false)}
+        oninput={(event) => {
+          dismissed = false;
+          lookup.search(event.currentTarget.value);
+        }}
         {onkeydown}
       />
       {#if lookup.loading}

@@ -37,11 +37,12 @@
         window.location.href = target;
         return;
       }
-      throw new Error(result.message || result.error_description || m.consent_failed());
+      console.error("consent decision failed", res.status, result);
     } catch (error) {
-      status = error instanceof Error ? error.message : String(error);
-      busy = false;
+      console.error(error);
     }
+    status = m.consent_failed();
+    busy = false;
   }
 </script>
 
