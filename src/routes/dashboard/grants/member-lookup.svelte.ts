@@ -37,7 +37,8 @@ export class MemberLookup {
   private readonly cache = new Map<string, CandidateView[]>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private controller: AbortController | null = null;
-  private latest = "";
+  /** The query on screen; null after a failure so typing the same query again retries it. */
+  private latest: string | null = "";
 
   constructor(private readonly endpoint: string) {}
 
@@ -88,15 +89,19 @@ export class MemberLookup {
         this.cache.set(key, body.members);
         this.members = body.members;
       } else {
-        this.members = [];
-        this.error = body.error ?? m.grants_member_search_failed();
+        this.fail(body.error ?? m.grants_member_search_failed());
       }
     } catch (error) {
       if (controller.signal.aborted || key !== this.latest) return;
-      this.members = [];
-      this.error = m.grants_member_search_failed();
+      this.fail(m.grants_member_search_failed());
       console.error(error);
     }
     this.loading = false;
+  }
+
+  private fail(message: string): void {
+    this.members = [];
+    this.error = message;
+    this.latest = null;
   }
 }
