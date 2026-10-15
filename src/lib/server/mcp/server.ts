@@ -17,7 +17,7 @@ export interface McpServerDeps {
   /** Re-resolves the caller's access right before a tool runs (defense in depth). */
   resolveAccess: (discordUserId: string) => Promise<EffectiveAccess>;
   /** Per-user tool call budget, shared across requests; every call (admins too) takes one token. */
-  rateLimit?: { take(key: string): RateLimitDecision };
+  rateLimit?: { take(discordUserId: string): RateLimitDecision };
   /** Tool call log; defaults to stdout. */
   log?: (entry: ToolCallLogEntry) => void;
   /** Usage statistics; a failure here never fails the tool call. */
