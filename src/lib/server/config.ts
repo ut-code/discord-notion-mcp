@@ -1,22 +1,26 @@
-import { z } from "zod";
+import { z, type core } from "zod";
 import { isLoopbackHost } from "./lib/loopback";
 import { snowflakeSchema } from "./lib/snowflake";
 
+/** An origin; normalized by URL (lower-case host, no default port or trailing slash) so it matches what clients derive. */
 const publicUrl = z
   .url()
-  .transform((value) => value.replace(/\/+$/, ""))
   .superRefine((value, ctx) => {
     const url = new URL(value);
-    if (url.pathname !== "/" && url.pathname !== "") {
+    if (!/^\/*$/.test(url.pathname)) {
       ctx.addIssue({ code: "custom", message: "must be an origin without a path (e.g. https://mcp.example.com)" });
     }
     if (url.search || url.hash) {
       ctx.addIssue({ code: "custom", message: "must not contain a query or fragment" });
     }
+    if (url.username || url.password) {
+      ctx.addIssue({ code: "custom", message: "must not contain credentials" });
+    }
     if (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopbackHost(url.hostname))) {
       ctx.addIssue({ code: "custom", message: "must use https (http is allowed only for localhost)" });
     }
-  });
+  })
+  .transform((value) => new URL(value).origin);
 
 const EnvSchema = z.object({
   PUBLIC_URL: publicUrl,
@@ -53,15 +57,33 @@ export class ConfigError extends Error {
   override name = "ConfigError";
 }
 
+/**
+ * Wording for Zod's built-in checks that never echoes the value, which may be a secret.
+ * Messages written in EnvSchema take precedence over this map.
+ */
+function envIssueMessage(issue: core.$ZodRawIssue): string {
+  switch (issue.code) {
+    case "invalid_type":
+      if (issue.input === undefined) return "is required";
+      return issue.expected === "int" ? "must be an integer" : `must be a ${issue.expected}`;
+    case "too_small":
+      return issue.origin === "string"
+        ? `must be at least ${String(issue.minimum)} characters`
+        : `must be at least ${String(issue.minimum)}`;
+    case "too_big":
+      return issue.origin === "string" ? `must be at most ${String(issue.maximum)} characters` : `must be at most ${String(issue.maximum)}`;
+    case "invalid_format":
+      return `must be a valid ${issue.format}`;
+    default:
+      return "is invalid";
+  }
+}
+
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const normalized = Object.fromEntries(Object.entries(env).map(([key, value]) => [key, value === "" ? undefined : value]));
-  const parsed = EnvSchema.safeParse(normalized);
+  const parsed = EnvSchema.safeParse(normalized, { error: envIssueMessage });
   if (!parsed.success) {
-    const lines = parsed.error.issues.map((issue) => {
-      const key = issue.path.join(".") || "(root)";
-      const message = issue.code === "invalid_type" && issue.input === undefined ? "is required" : issue.message;
-      return `  - ${key}: ${message}`;
-    });
+    const lines = parsed.error.issues.map((issue) => `  - ${issue.path.join(".") || "(root)"}: ${issue.message}`);
     throw new ConfigError(`Invalid environment configuration:\n${lines.join("\n")}`);
   }
   const e = parsed.data;
