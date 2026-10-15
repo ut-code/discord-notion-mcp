@@ -29,8 +29,12 @@ export const NOTION_AUDIT_OPERATIONS = [
 ] as const;
 export type NotionAuditOperation = (typeof NOTION_AUDIT_OPERATIONS)[number];
 
-/** `pending` is transient: an archive is recorded before its comment and the archive itself. */
-export const NOTION_AUDIT_STATUSES = ["pending", "ok", "failed"] as const;
+/**
+ * Every write is recorded as `pending` before it touches Notion. `interrupted`: the process
+ * died while it was pending, so whether Notion applied it is unknown; a late outcome may still
+ * replace it.
+ */
+export const NOTION_AUDIT_STATUSES = ["pending", "ok", "failed", "interrupted"] as const;
 export type NotionAuditStatus = (typeof NOTION_AUDIT_STATUSES)[number];
 
 export const notionAudit = sqliteTable(
@@ -53,23 +57,27 @@ export const notionAudit = sqliteTable(
     snapshot: text("snapshot", { mode: "json" }).$type<unknown>(),
     result: text("result", { mode: "json" }).$type<unknown>(),
     status: text("status", { enum: NOTION_AUDIT_STATUSES }).notNull(),
+    /** Why a `failed` write failed. */
     error: text("error"),
+    /** A warning on a successful write or the note of a revert (AuditNoteSchema). */
+    note: text("note", { mode: "json" }).$type<unknown>(),
     commentError: text("comment_error"),
     resultLastEditedTime: text("result_last_edited_time"),
     revertedAt: integer("reverted_at", { mode: "timestamp_ms" }),
     revertedBy: text("reverted_by"),
     revertAuditId: integer("revert_audit_id"),
-    revertNote: text("revert_note"),
+    /** The revert's note, on the reverted row (AuditNoteSchema). */
+    revertNote: text("revert_note", { mode: "json" }).$type<unknown>(),
     /** On a `revert` row: the audit id it reverted. */
     revertOfAuditId: integer("revert_of_audit_id"),
   },
   (table) => [
     index("notion_audit_created_at_idx").on(table.createdAt),
     index("notion_audit_discord_user_idx").on(table.discordUserId),
-    // At most one revert of a row is pending or done; failed attempts do not count.
+    // At most one revert of a row is pending or done; failed and interrupted attempts do not count.
     uniqueIndex("notion_audit_one_revert_idx")
       .on(table.revertOfAuditId)
-      .where(sql`${table.status} <> 'failed'`),
+      .where(sql`${table.status} in ('pending', 'ok')`),
   ],
 );
 

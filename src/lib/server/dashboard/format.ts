@@ -1,6 +1,5 @@
 import type { Permission } from "../permissions/permissions";
 import type { NotionAuditOperation } from "../db/schema";
-import { OPERATION_LABELS } from "../notion/changes/attribution";
 import { isRecord } from "../../guards";
 import { m } from "../../paraglide/messages.js";
 
@@ -19,12 +18,20 @@ export const PERMISSION_HINTS: Record<Permission, string> = {
   admin: m.permission_hint_admin(),
 };
 
-export const AUDIT_OPERATION_LABELS: Record<NotionAuditOperation, string> = { ...OPERATION_LABELS, revert: m.operation_revert() };
+export const AUDIT_OPERATION_LABELS: Record<NotionAuditOperation, string> = {
+  create_page: m.operation_create_page(),
+  append_content: m.operation_append_content(),
+  edit_content: m.operation_edit_content(),
+  update_properties: m.operation_update_properties(),
+  archive_page: m.operation_archive_page(),
+  revert: m.operation_revert(),
+};
 
 /** Status filter of the audit list: row status, or rows that were reverted later. */
 export const AUDIT_STATUS_FILTERS = {
   ok: m.audit_status_ok(),
   failed: m.audit_status_failed(),
+  interrupted: m.audit_status_interrupted(),
   reverted: m.audit_status_reverted(),
 } as const;
 export type AuditStatusFilter = keyof typeof AUDIT_STATUS_FILTERS;

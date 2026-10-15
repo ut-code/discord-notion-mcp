@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { isRecord } from "../../../guards";
 import type { ContentHunk } from "../content/content-diff";
-import type { PagePropertyValue } from "../content/properties";
+import type { PagePropertyValue, PropertyWriteRefusal } from "../content/properties";
 import type { PageMarkdownUpdate } from "../client/types";
 
 /*
@@ -60,8 +60,8 @@ export const ContentSnapshotSchema = z.object({
 });
 export type ContentSnapshot = z.infer<typeof ContentSnapshotSchema>;
 
-/** A content write that failed only records the hash of the content it was applied to. */
-export const FailedContentSnapshotSchema = ContentSnapshotSchema.pick({ beforeSha256: true });
+/** A content write as recorded before it runs (and kept when it fails): the hash of the content it applies to. */
+export const ContentBeforeSnapshotSchema = ContentSnapshotSchema.pick({ beforeSha256: true });
 
 export const ContentWriteResultSchema = z.object({ changedHunks: z.number().int().nonnegative() });
 export type ContentWriteResult = z.infer<typeof ContentWriteResultSchema>;
@@ -84,7 +84,15 @@ export type ArchivePageSnapshot = z.infer<typeof ArchivePageSnapshotSchema>;
 
 export const ArchivePageResultSchema = z.object({ inTrash: z.boolean() });
 
-/** Why a successful write carries a note; stored as JSON in the `error` column of ok rows. */
+const PropertyWriteRefusalSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("hosted_files"), files: z.array(z.string()) }),
+  z.object({ kind: z.literal("unsupported_type"), type: z.string() }),
+]) satisfies z.ZodType<PropertyWriteRefusal>;
+
+const PropertySkipSchema = z.object({ name: z.string(), refusal: PropertyWriteRefusalSchema });
+export type PropertySkip = z.infer<typeof PropertySkipSchema>;
+
+/** A successful write that needs a word of caution. */
 export const WriteWarningSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("content_failed"), error: z.string() }),
   /** A RevertBlocker code (revert-reasons.ts). */
@@ -92,15 +100,19 @@ export const WriteWarningSchema = z.discriminatedUnion("kind", [
 ]);
 export type WriteWarning = z.infer<typeof WriteWarningSchema>;
 
-/** Parses JSON kept in a text column; null for empty values and for the plain English text of older rows. */
-export function parseStoredJson<T>(schema: z.ZodType<T>, raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return schema.safeParse(JSON.parse(raw)).data ?? null;
-  } catch {
-    return null;
-  }
-}
+/** What a successful revert wants the reader to know. */
+export const RevertNoteSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("already_in_trash") }),
+  z.object({ kind: z.literal("nothing_to_restore") }),
+  z.object({ kind: z.literal("content_differs") }),
+  z.object({ kind: z.literal("already_restored") }),
+  z.object({ kind: z.literal("properties_partial"), restored: z.array(z.string()), skipped: z.array(PropertySkipSchema) }),
+]);
+export type RevertNote = z.infer<typeof RevertNoteSchema>;
+
+/** The `note` of a row and the `revert_note` of a reverted row; `legacy` holds the free text of older rows. */
+export const AuditNoteSchema = z.union([WriteWarningSchema, RevertNoteSchema, z.object({ kind: z.literal("legacy"), text: z.string() })]);
+export type AuditNote = z.infer<typeof AuditNoteSchema>;
 
 /** Validates a value against its column schema and returns it as stored JSON. */
 export function toAuditJson<S extends z.ZodType<Record<string, unknown>>>(schema: S, value: z.input<S>): Record<string, unknown> {

@@ -10,10 +10,10 @@ import { revokeTokens, USER_SEARCH_SCAN_LIMIT, usersPage, type UserTableRow } fr
 import type { LoginUser } from "../../src/lib/server/auth/users";
 import { ADMINISTRATOR } from "../../src/lib/server/discord/permissions";
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
-import { storedNoteText } from "../../src/lib/server/dashboard/revert-text";
+import { auditNoteText } from "../../src/lib/server/dashboard/outcome-text";
 import { NotionAuditService } from "../../src/lib/server/notion/changes/audit-service";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
-import type { RevertNote } from "../../src/lib/server/notion/changes/revert-reasons";
+import type { RevertNote } from "../../src/lib/server/notion/changes/audit-records";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { overwriteAuditRow } from "../support/audit-rows";
 import { FakeDiscordApi, makeGuild, makeMember, OWNER_ID } from "../support/fakes";
@@ -754,8 +754,8 @@ describe("audit log", () => {
     const { rows } = await h.server.notionAudit.listAudit({ status: "failed", limit: 1 });
     const detail = (await auditDetail(deps, String(rows[0]!.id), owner))!;
     expect(detail.badges).toEqual([{ label: "失敗", tone: "destructive" }]);
-    expect(detail.details.error).toMatchObject({ label: "エラー", failed: true });
-    expect(detail.details.error?.text).toContain("No matches found");
+    expect(detail.details.error).toContain("No matches found");
+    expect(detail.details.note).toBeNull();
     expect(detail.summary).toEndWith("「Broken page」の本文の編集に失敗しました。");
     expect(detail.change).toMatchObject({
       kind: "diff",
@@ -791,7 +791,7 @@ describe("audit log", () => {
     expect(detail.revert).toEqual({
       state: "reverted",
       revert: { id: row.revertAuditId!, href: `/dashboard/audit/${row.revertAuditId}` },
-      note: row.revertNote,
+      note: null,
     });
     expect(detail.badges.map((badge) => badge.label)).toEqual(["成功", "取り消し済み"]);
 
@@ -846,6 +846,25 @@ describe("audit log", () => {
     expect(detail.revert).toBeNull();
   });
 
+  test("an interrupted write says its outcome is unknown and offers no revert", async () => {
+    const stuck = await store.insert({
+      discordUserId: MEMBER,
+      discordDisplayName: "Mina",
+      operation: "create_page",
+      targetTitle: "Draft",
+      request: {},
+      status: "pending",
+    });
+    await h.server.notionAudit.markInterruptedWrites(new Date(Date.now() + 11 * 60_000));
+    const detail = (await auditDetail(deps, String(stuck.id), owner))!;
+    expect(detail.badges).toEqual([{ label: "中断", tone: "warn" }]);
+    expect(detail.summary).toEndWith("「Draft」を作成しようとしましたが、途中で中断しました（反映されたかは不明です）。");
+    expect(detail.revert).toBeNull();
+    const listed = await auditList(deps, params("status=interrupted"));
+    expect(listed.rows.map((row) => row.id)).toContain(stuck.id);
+    expect(listed.rows.every((row) => row.badge?.label === "中断")).toBe(true);
+  });
+
   test("a row the service would refuse shows why instead of a revert button", async () => {
     const parent = h.notion.addPage({ title: "Unreadable root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Broken", request: {} });
@@ -856,18 +875,20 @@ describe("audit log", () => {
     });
   });
 
-  test("stored notes are shown in Japanese; older English notes as is", () => {
+  test("stored notes are shown in Japanese; older free text as is; unknown kinds generically", () => {
     const note: RevertNote = {
       kind: "properties_partial",
       restored: ["Count"],
       skipped: [{ name: "Files", refusal: { kind: "hosted_files", files: ["a.png"] } }],
     };
-    expect(storedNoteText(JSON.stringify(note))).toBe(
+    expect(auditNoteText(note)).toBe(
       "「Count」を戻しました。「Files」（Notion にアップロードされたファイル（a.png）は API で設定し直せません）は戻せませんでした。",
     );
-    expect(storedNoteText(JSON.stringify({ kind: "revert_blocked", blocker: "no_anchor" }))).toBe(
+    expect(auditNoteText({ kind: "revert_blocked", blocker: "no_anchor" })).toBe(
       "書き込みは反映しましたが、自動では取り消せません: ページに文字が残っておらず、元に戻す位置を決められません。",
     );
-    expect(storedNoteText("The page was already in the trash.")).toBe("The page was already in the trash.");
+    expect(auditNoteText({ kind: "legacy", text: "The page was already in the trash." })).toBe("The page was already in the trash.");
+    expect(auditNoteText({ kind: "from_a_newer_version" })).toBe("この注記は、より新しいバージョンで記録されたため表示できません。");
+    expect(auditNoteText(null)).toBeNull();
   });
 });

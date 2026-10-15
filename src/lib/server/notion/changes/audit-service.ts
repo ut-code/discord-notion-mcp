@@ -13,18 +13,13 @@ import {
   UpdatePropertiesSnapshotSchema,
   type ContentSnapshot,
   type CreatePageResult,
+  type PropertySkip,
+  type RevertNote,
   type UpdatePropertiesSnapshot,
 } from "./audit-records";
 import type { AuditActor, AuditListQuery, AuditListResult, NotionAuditStore } from "./audit-store";
-import {
-  revertFailureText,
-  type PropertySkip,
-  type RevertConflict,
-  type RevertFailure,
-  type RevertNote,
-  type RevertReason,
-  type RevertResult,
-} from "./revert-reasons";
+import { revertFailureText } from "./outcome-text";
+import type { RevertConflict, RevertFailure, RevertReason, RevertResult } from "./revert-reasons";
 
 const MAX_AUDIT_PAGE_SIZE = 200;
 
@@ -146,9 +141,9 @@ export class NotionAuditService {
     return this.store.listActors();
   }
 
-  /** Marks writes left pending by a previous process as failed; returns how many were marked. */
-  failInterruptedWrites(now: Date = new Date()): Promise<number> {
-    return this.store.failPendingBefore(new Date(now.getTime() - STALE_PENDING_MS));
+  /** Marks writes a dead process left pending as interrupted; returns how many were marked. */
+  markInterruptedWrites(now: Date = new Date()): Promise<number> {
+    return this.store.interruptPendingBefore(new Date(now.getTime() - STALE_PENDING_MS));
   }
 
   /**
@@ -217,18 +212,17 @@ export class NotionAuditService {
       return { ok: false, reason: { kind: "failed", failure, revertAuditId: revertRow.id } };
     }
 
-    const note = executed.note ? JSON.stringify(executed.note) : null;
     const finished = await this.store.finishRevert(
       revertRow.id,
       row.id,
       {
         status: "ok",
         result: executed.result,
-        error: executed.partial ? note : null,
+        note: executed.note,
         commentError: executed.commentError,
         resultLastEditedTime: executed.lastEditedTime,
       },
-      { revertedBy: options.actorDiscordUserId, revertNote: note },
+      { revertedBy: options.actorDiscordUserId, revertNote: executed.note },
     );
     if (!finished) return { ok: false, reason: { kind: "failed", failure: { kind: "superseded" }, revertAuditId: revertRow.id } };
     return { ok: true, revertAuditId: revertRow.id, forced: conflict !== null, partial: executed.partial, note: executed.note };
@@ -354,7 +348,7 @@ export class NotionAuditService {
 const SWEEP_INTERVAL_MS = 60_000;
 
 export interface InterruptedWriteSweepOptions {
-  audit: Pick<NotionAuditService, "failInterruptedWrites">;
+  audit: Pick<NotionAuditService, "markInterruptedWrites">;
   log: EventSink;
   logError: ErrorSink;
   intervalMs?: number;
@@ -371,9 +365,9 @@ export function startInterruptedWriteSweep({
   intervalMs = SWEEP_INTERVAL_MS,
 }: InterruptedWriteSweepOptions): () => void {
   return runPeriodically(() => {
-    audit.failInterruptedWrites().then(
+    audit.markInterruptedWrites().then(
       (count) => {
-        if (count > 0) log({ event: "audit_pending_marked_failed", count });
+        if (count > 0) log({ event: "audit_pending_interrupted", count });
       },
       (error: unknown) => logError({ event: "audit_sweep_failed", error: errorMessage(error) }),
     );

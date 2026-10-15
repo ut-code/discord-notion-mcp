@@ -69,7 +69,8 @@ export class UsageStats {
       .select({
         writes: tally(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} != 'revert'`),
         reverts: tally(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} = 'revert'`),
-        failures: tally(sql`${notionAudit.status} = 'failed'`),
+        // Interrupted writes may or may not have been applied: they need a look like failures do.
+        failures: tally(sql`${notionAudit.status} in ('failed', 'interrupted')`),
       })
       .from(notionAudit)
       .where(gte(notionAudit.createdAt, since))

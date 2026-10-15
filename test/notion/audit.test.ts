@@ -6,14 +6,10 @@ import { NotionRequestError, type NotionPage } from "../../src/lib/server/notion
 import type { Actor } from "../../src/lib/server/notion/changes/attribution";
 import { NotionAuditService, startInterruptedWriteSweep } from "../../src/lib/server/notion/changes/audit-service";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
-import { parseStoredJson, WriteWarningSchema, type WriteWarning } from "../../src/lib/server/notion/changes/audit-records";
-import {
-  RevertNoteSchema,
-  revertSuccessText,
-  type RevertNote,
-  type RevertResult,
-} from "../../src/lib/server/notion/changes/revert-reasons";
-import { NotionWriteService, writeWarningText } from "../../src/lib/server/notion/changes/write-service";
+import type { RevertNote, WriteWarning } from "../../src/lib/server/notion/changes/audit-records";
+import { revertSuccessText, writeWarningText } from "../../src/lib/server/notion/changes/outcome-text";
+import type { RevertResult } from "../../src/lib/server/notion/changes/revert-reasons";
+import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { sha256 } from "../../src/lib/server/notion/content/content-diff";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 import { insertAuditRow, overwriteAuditRow } from "../support/audit-rows";
@@ -53,6 +49,38 @@ function addRow(properties: Record<string, PagePropertyValue> = {}): NotionPage 
 }
 
 describe("NotionWriteService", () => {
+  test("every write is recorded as pending before Notion is touched", async () => {
+    const statusesSeen: string[] = [];
+    const seen = async () => {
+      const { rows } = await store.list({ limit: 1, offset: 0 });
+      statusesSeen.push(rows[0]?.status ?? "none");
+    };
+    const wrap = <K extends "createPage" | "updatePageMarkdown" | "updatePage">(method: K) => {
+      const original = api[method].bind(api) as (...args: unknown[]) => Promise<unknown>;
+      Object.assign(api, { [method]: async (...args: unknown[]) => (await seen(), original(...args)) });
+    };
+    wrap("createPage");
+    wrap("updatePageMarkdown");
+    wrap("updatePage");
+    const row = addRow({ Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue });
+
+    await writes.createPage(ACTOR, { parentId: parent.id, title: "P", request: {} });
+    await writes.appendContent(ACTOR, { pageId: parent.id, content: "a", request: {} });
+    await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
+    expect(statusesSeen).toEqual(["pending", "pending", "pending"]);
+    expect((await store.list({ limit: 10, offset: 0 })).rows.map((r) => r.status)).toEqual(["ok", "ok", "ok"]);
+  });
+
+  test("a crash between the Notion write and its outcome leaves an interrupted row", async () => {
+    api.updatePageMarkdown = () => new Promise(() => {});
+    void writes.appendContent(ACTOR, { pageId: parent.id, content: "lost", request: {} });
+    await Bun.sleep(10);
+    const [pending] = (await store.list({ limit: 1, offset: 0 })).rows;
+    expect(pending).toMatchObject({ status: "pending", operation: "append_content", targetPageId: parent.id });
+    expect(await audit.markInterruptedWrites(new Date(Date.now() + 11 * 60_000))).toBe(1);
+    expect(audit.revertability((await store.get(pending!.id))!)).toEqual({ kind: "not_ok", status: "interrupted" });
+  });
+
   test("create_page under a page: properties only, then the content (leading H1 included) is inserted at the end", async () => {
     const outcome = await writes.createPage(ACTOR, {
       parentId: parent.id,
@@ -140,8 +168,7 @@ describe("NotionWriteService", () => {
     expect(outcome.warning).toEqual(warning);
     expect(writeWarningText(outcome.warning!)).toStartWith("Page created, but adding its content failed: ");
     const stored = (await store.get(outcome.auditId))!;
-    expect(stored.status).toBe("ok");
-    expect(parseStoredJson(WriteWarningSchema, stored.error)).toEqual(warning);
+    expect(stored).toMatchObject({ status: "ok", error: null, note: warning });
     expect((await audit.revert(outcome.auditId, ADMIN)).ok).toBe(true);
     expect(api.pages.get(outcome.pageId)!.in_trash).toBe(true);
   });
@@ -580,7 +607,7 @@ describe("NotionAuditService.revert", () => {
     const result = await audit.revert(inserted.id, ADMIN);
     expect(result).toMatchObject({ ok: true, partial: true, note });
     expect(api.callsOf("updatePage").at(-1).properties).toEqual({ cnt: { number: 1 } });
-    expect(parseStoredJson(RevertNoteSchema, (await store.get(inserted.id))!.revertNote)).toEqual(note);
+    expect((await store.get(inserted.id))!.revertNote).toEqual(note);
     expect(revertSuccessText(inserted.id, result as Extract<RevertResult, { ok: true }>)).toBe(
       `Reverted audit #${inserted.id}: Restored Count; could not restore "Files" (contains Notion-hosted file(s) (a.png) that cannot be re-set through the API).`,
     );
@@ -647,11 +674,11 @@ describe("NotionAuditService.failInterruptedWrites", () => {
     const recent = await insertAuditRow(db, { ...base, status: "pending", createdAt: new Date(now.getTime() - 5 * 60_000) });
     const done = await insertAuditRow(db, { ...base, status: "ok", createdAt: new Date(now.getTime() - 60 * 60_000) });
 
-    expect(await audit.failInterruptedWrites(now)).toBe(1);
-    expect(await store.get(stale.id)).toMatchObject({ status: "failed", error: "interrupted (server restarted)" });
+    expect(await audit.markInterruptedWrites(now)).toBe(1);
+    expect(await store.get(stale.id)).toMatchObject({ status: "interrupted", error: null });
     expect(await store.get(recent.id)).toMatchObject({ status: "pending", error: null });
     expect(await store.get(done.id)).toMatchObject({ status: "ok", error: null });
-    expect(await audit.failInterruptedWrites(now)).toBe(0);
+    expect(await audit.markInterruptedWrites(now)).toBe(0);
   });
 });
 
@@ -670,7 +697,7 @@ describe("NotionAuditStore", () => {
       // @ts-expect-error the store's clock sets createdAt
       () => store.insert({ ...archiveRow, status: "ok", createdAt: new Date(0) }),
       // @ts-expect-error the actor stays as recorded
-      () => store.recordAttribution(1, { commentError: null, targetUrl: null, resultLastEditedTime: null, discordUserId: "2" }),
+      () => store.finishPending(1, { status: "ok", discordUserId: "2" }),
       // @ts-expect-error the operation and its request stay as recorded
       () => store.finishPending(1, { status: "failed", error: "x", request: {} }),
     ];
@@ -684,9 +711,9 @@ describe("NotionAuditStore", () => {
     expect(await store.get(pending.id)).toMatchObject({ status: "failed", error: "nope" });
 
     const old = await insertAuditRow(db, { ...archiveRow, status: "pending", createdAt: new Date(Date.now() - 11 * 60_000) });
-    expect(await audit.failInterruptedWrites()).toBe(1);
+    expect(await audit.markInterruptedWrites()).toBe(1);
     expect(await store.finishPending(old.id, { status: "ok", result: {} })).toBe(true);
-    expect(await store.get(old.id)).toMatchObject({ status: "ok", error: null });
+    expect(await store.get(old.id)).toMatchObject({ status: "ok" });
     expect(await store.finishPending(old.id, { status: "failed", error: "late" })).toBe(false);
   });
 
@@ -696,13 +723,13 @@ describe("NotionAuditStore", () => {
     const first = (await store.startRevert(revert))!;
     expect(await store.startRevert(revert)).toBeNull();
     await overwriteAuditRow(db, first.id, { createdAt: new Date(Date.now() - 11 * 60_000) });
-    expect(await audit.failInterruptedWrites()).toBe(1);
+    expect(await audit.markInterruptedWrites()).toBe(1);
 
     const second = (await store.startRevert(revert))!;
     expect(await store.finishRevert(first.id, original.id, { status: "ok", result: {} }, { revertedBy: "a", revertNote: null })).toBe(
       false,
     );
-    expect(await store.get(first.id)).toMatchObject({ status: "failed" });
+    expect(await store.get(first.id)).toMatchObject({ status: "interrupted" });
     expect(await store.finishRevert(second.id, original.id, { status: "ok", result: {} }, { revertedBy: "b", revertNote: null })).toBe(
       true,
     );
@@ -715,7 +742,7 @@ describe("NotionAuditStore", () => {
     const stop = startInterruptedWriteSweep({ audit, log: (entry) => events.push(entry), logError: () => {}, intervalMs: 60_000 });
     await Bun.sleep(10);
     stop();
-    expect(events).toEqual([{ event: "audit_pending_marked_failed", count: 1 }]);
+    expect(events).toEqual([{ event: "audit_pending_interrupted", count: 1 }]);
   });
 });
 

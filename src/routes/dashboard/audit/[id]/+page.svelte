@@ -109,8 +109,12 @@
           {/if}
         </dd>
         {#if details.error}
-          <dt>{details.error.label}</dt>
-          <dd class={details.error.failed ? "text-bad-fg" : undefined}>{details.error.text}</dd>
+          <dt>{m.audit_error_label()}</dt>
+          <dd class="text-bad-fg">{details.error}</dd>
+        {/if}
+        {#if details.note}
+          <dt>{m.audit_note_label()}</dt>
+          <dd>{details.note}</dd>
         {/if}
       </dl>
     </section>

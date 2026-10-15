@@ -2,7 +2,8 @@
 import { z } from "zod";
 import { defineTool, type AnyToolDefinition } from "../../mcp/registry";
 import { actorOf } from "../changes/attribution";
-import { MAX_CONTENT_EDITS, writeWarningText, type WriteOutcome } from "../changes/write-service";
+import { writeWarningText } from "../changes/outcome-text";
+import { MAX_CONTENT_EDITS, type WriteOutcome } from "../changes/write-service";
 import { requireNotionId } from "../client/ids";
 import { idOrUrl, withNotionErrors, type NotionToolDeps } from "./shared";
 

@@ -1,6 +1,5 @@
 import { errorMessage, ToolError } from "../../lib/errors";
 import type { NotionApi, NotionPage, PageMarkdown } from "../client/api";
-import { notionUrlFor } from "../client/ids";
 import { resolveParent, toToolError } from "../client/resolve";
 import type { ContentUpdate, PageMarkdownUpdate, PageParent } from "../client/types";
 import { buildRevertPlan, sha256 } from "../content/content-diff";
@@ -8,7 +7,6 @@ import { assertNoChildObjects, stripUserMentionLabels } from "../content/enhance
 import {
   mayBeTruncated,
   pageTitle,
-  propertyWriteRefusalText,
   titlePropertyName,
   toWritablePropertyValue,
   valueFromPropertyItems,
@@ -16,7 +14,8 @@ import {
 } from "../content/properties";
 import { literalRichText } from "../content/rich-text";
 import { postComment, writeCommentText, type Actor, type WriteOperation } from "./attribution";
-import { revertBlockerText, type RevertBlocker } from "./revert-reasons";
+import { propertyWriteRefusalText } from "./outcome-text";
+import type { RevertBlocker } from "./revert-reasons";
 import {
   ArchivePageResultSchema,
   ArchivePageSnapshotSchema,
@@ -24,7 +23,7 @@ import {
   ContentWriteResultSchema,
   CreatePageResultSchema,
   CreatePageSnapshotSchema,
-  FailedContentSnapshotSchema,
+  ContentBeforeSnapshotSchema,
   toAuditJson,
   UpdatePropertiesResultSchema,
   UpdatePropertiesSnapshotSchema,
@@ -33,6 +32,7 @@ import {
   type WriteWarning,
   type PropertySnapshotEntry,
 } from "./audit-records";
+import type { NotionAuditRow } from "../../db/schema";
 import type { NotionAuditStore } from "./audit-store";
 
 export type PropertyValues = Record<string, Record<string, unknown>>;
@@ -46,18 +46,6 @@ export interface WriteOutcome {
   warning: WriteWarning | null;
 }
 
-export function writeWarningText(warning: WriteWarning): string {
-  switch (warning.kind) {
-    case "content_failed":
-      return `Page created, but adding its content failed: ${warning.error}`;
-    case "revert_blocked":
-      return warning.blocker === ("truncated_after_write" satisfies RevertBlocker)
-        ? `The change was applied, but automatic revert may not be possible: ${revertBlockerText(warning.blocker)}.`
-        : `The change was applied, but automatic revert is not possible: ${revertBlockerText(warning.blocker)}.`;
-    default:
-      throw new Error(`Unknown write warning: ${warning satisfies never}`);
-  }
-}
 export type ContentWriteOutcome = WriteOutcome & ContentWriteResult;
 
 interface AuditBase {
@@ -81,8 +69,8 @@ function prepareContent(content: string, field: string): string {
 }
 
 /**
- * Executes the allowed Notion writes. Each write snapshots what is needed to revert
- * it, executes, records an audit row and comments on the affected page to attribute
+ * Executes the allowed Notion writes. Each write is recorded as pending with what is needed
+ * to revert it, executes, ends its audit row and comments on the affected page to attribute
  * the change to the Discord user. Comment failures never fail a write.
  */
 export class NotionWriteService {
@@ -99,42 +87,50 @@ export class NotionWriteService {
     };
   }
 
-  private async recordFailure(actor: Actor, base: AuditBase, error: unknown, hint?: string): Promise<never> {
-    const row = await this.audit.insert({ ...this.actorColumns(actor), ...base, status: "failed", error: errorMessage(error) });
+  /** Records the write as pending before Notion is touched: a crash leaves an interrupted row, never an unrecorded write. */
+  private begin(actor: Actor, base: AuditBase): Promise<NotionAuditRow> {
+    return this.audit.insert({ ...this.actorColumns(actor), ...base, status: "pending" });
+  }
+
+  /** Ends a write Notion refused and rethrows it naming the audit row. */
+  private async fail(row: NotionAuditRow, error: unknown, hint?: string): Promise<never> {
+    await this.audit.finishPending(row.id, { status: "failed", error: errorMessage(error) });
     const mapped = toToolError(error);
     if (mapped instanceof ToolError) throw new ToolError(`${mapped.message} (audit #${row.id})${hint ? ` ${hint}` : ""}`);
     throw error;
   }
 
   /**
-   * Records a successful write, comments, then stores the page's last_edited_time after
-   * all our changes. `fallbackLastEdited` is kept when the page cannot be read back;
-   * null when no trustworthy value is known.
+   * Ends a successful write: comments on the page, then records its last_edited_time after
+   * all our changes. `fallbackLastEdited` is kept when the page cannot be read back; null
+   * when no trustworthy value is known.
    */
-  private async recordSuccess(
+  private async succeed(
     actor: Actor,
-    base: AuditBase & { targetPageId: string },
-    result: Record<string, unknown>,
-    fallbackLastEdited: string | null,
-    warning: WriteWarning | null,
+    row: NotionAuditRow,
+    operation: WriteOperation,
+    page: { id: string; url: string },
+    outcome: {
+      result: Record<string, unknown>;
+      snapshot?: Record<string, unknown>;
+      warning: WriteWarning | null;
+      fallbackLastEdited: string | null;
+    },
   ): Promise<WriteOutcome> {
-    const row = await this.audit.insert({
-      ...this.actorColumns(actor),
-      ...base,
-      result,
+    const commentError = await postComment(this.api, page.id, writeCommentText(actor, operation, row.id));
+    const final = await this.api.retrievePage(page.id).catch(() => null);
+    const url = final?.url ?? page.url;
+    await this.audit.finishPending(row.id, {
       status: "ok",
-      error: warning ? JSON.stringify(warning) : null,
-      resultLastEditedTime: fallbackLastEdited,
-    });
-    const commentError = await postComment(this.api, base.targetPageId, writeCommentText(actor, base.operation, row.id));
-    const final = await this.api.retrievePage(base.targetPageId).catch(() => null);
-    const url = final?.url ?? base.targetUrl ?? notionUrlFor(base.targetPageId);
-    await this.audit.recordAttribution(row.id, {
+      result: outcome.result,
+      ...(outcome.snapshot ? { snapshot: outcome.snapshot } : {}),
+      note: outcome.warning,
       commentError,
+      resultLastEditedTime: final?.last_edited_time ?? outcome.fallbackLastEdited,
+      targetPageId: page.id,
       targetUrl: url,
-      resultLastEditedTime: final?.last_edited_time ?? fallbackLastEdited,
     });
-    return { auditId: row.id, pageId: base.targetPageId, url, commentError, warning };
+    return { auditId: row.id, pageId: page.id, url, commentError, warning: outcome.warning };
   }
 
   /**
@@ -172,13 +168,20 @@ export class NotionWriteService {
 
     const parentId = parentRef.type === "page_id" ? parentRef.page_id : parentRef.data_source_id;
     const snapshot = toAuditJson(CreatePageSnapshotSchema, { parent: { type: parentRef.type, id: parentId } });
-    const base = { operation: "create_page" as const, request: input.request, snapshot, targetTitle: input.title };
+    const row = await this.begin(actor, {
+      operation: "create_page",
+      request: input.request,
+      snapshot,
+      targetPageId: null,
+      targetUrl: null,
+      targetTitle: input.title,
+    });
 
     let page: NotionPage;
     try {
       page = await this.api.createPage({ parent: parentRef, properties });
     } catch (error) {
-      return this.recordFailure(actor, { ...base, targetPageId: null, targetUrl: null }, error);
+      return this.fail(row, error);
     }
 
     let warning: WriteWarning | null = null;
@@ -192,13 +195,11 @@ export class NotionWriteService {
         warning = { kind: "content_failed", error: errorMessage(toToolError(error)) };
       }
     }
-    return this.recordSuccess(
-      actor,
-      { ...base, targetPageId: page.id, targetUrl: page.url },
-      toAuditJson(CreatePageResultSchema, { pageId: page.id, url: page.url }),
-      page.last_edited_time,
+    return this.succeed(actor, row, "create_page", page, {
+      result: toAuditJson(CreatePageResultSchema, { pageId: page.id, url: page.url }),
       warning,
-    );
+      fallbackLastEdited: page.last_edited_time,
+    });
   }
 
   async appendContent(
@@ -255,24 +256,20 @@ export class NotionWriteService {
       throw new ToolError("This page is too large to edit revertibly (Notion returned truncated content), so it was not changed.");
     }
     const beforeSha256 = sha256(before.markdown);
-    const base = {
+    const row = await this.begin(actor, {
       operation: input.operation,
       request: input.request,
+      snapshot: toAuditJson(ContentBeforeSnapshotSchema, { beforeSha256 }),
       targetPageId: page.id,
       targetUrl: page.url,
       targetTitle: pageTitle(page),
-    };
+    });
 
     let after: PageMarkdown;
     try {
       after = await this.api.updatePageMarkdown(page.id, input.update);
     } catch (error) {
-      return this.recordFailure(
-        actor,
-        { ...base, snapshot: toAuditJson(FailedContentSnapshotSchema, { beforeSha256 }) },
-        error,
-        failureHint,
-      );
+      return this.fail(row, error, failureHint);
     }
 
     const snapshot: ContentSnapshot = { beforeSha256, afterSha256: null, inverse: null, revertBlocker: null, hunks: [] };
@@ -295,13 +292,12 @@ export class NotionWriteService {
     const result: ContentWriteResult = { changedHunks: snapshot.hunks.length };
     // No fallback timestamp: content reverts compare content hashes, and the server
     // clock would not be a real Notion last_edited_time.
-    const outcome = await this.recordSuccess(
-      actor,
-      { ...base, snapshot: toAuditJson(ContentSnapshotSchema, snapshot) },
-      toAuditJson(ContentWriteResultSchema, result),
-      null,
+    const outcome = await this.succeed(actor, row, input.operation, page, {
+      result: toAuditJson(ContentWriteResultSchema, result),
+      snapshot: toAuditJson(ContentSnapshotSchema, snapshot),
       warning,
-    );
+      fallbackLastEdited: null,
+    });
     return { ...outcome, ...result };
   }
 
@@ -334,28 +330,26 @@ export class NotionWriteService {
       entries.push({ name, id: value.id, type: value.type, value: full });
     }
 
-    const base = {
-      operation: "update_properties" as const,
+    const row = await this.begin(actor, {
+      operation: "update_properties",
       request: input.request,
       snapshot: toAuditJson(UpdatePropertiesSnapshotSchema, { properties: entries }),
       targetPageId: page.id,
       targetUrl: page.url,
       targetTitle: pageTitle(page),
-    };
+    });
     let updated: NotionPage;
     try {
       updated = await this.api.updatePage({ pageId: page.id, properties: input.properties });
     } catch (error) {
-      return this.recordFailure(actor, base, error);
+      return this.fail(row, error);
     }
     const changed = entries.map((entry) => entry.name);
-    const outcome = await this.recordSuccess(
-      actor,
-      base,
-      toAuditJson(UpdatePropertiesResultSchema, { changed }),
-      updated.last_edited_time,
-      null,
-    );
+    const outcome = await this.succeed(actor, row, "update_properties", page, {
+      result: toAuditJson(UpdatePropertiesResultSchema, { changed }),
+      warning: null,
+      fallbackLastEdited: updated.last_edited_time,
+    });
     return { ...outcome, changed };
   }
 
@@ -363,15 +357,13 @@ export class NotionWriteService {
   async archivePage(actor: Actor, input: { pageId: string; request: Record<string, unknown> }): Promise<WriteOutcome> {
     const page = await this.api.retrievePage(input.pageId);
     if (page.in_trash) throw new ToolError("This page is already in the trash.");
-    const row = await this.audit.insert({
-      ...this.actorColumns(actor),
+    const row = await this.begin(actor, {
       operation: "archive_page",
       request: input.request,
       snapshot: toAuditJson(ArchivePageSnapshotSchema, { inTrash: false }),
       targetPageId: page.id,
       targetUrl: page.url,
       targetTitle: pageTitle(page),
-      status: "pending",
     });
     const commentError = await postComment(this.api, page.id, writeCommentText(actor, "archive_page", row.id));
     let trashed: NotionPage;

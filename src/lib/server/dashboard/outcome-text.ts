@@ -1,15 +1,8 @@
 import { m } from "../../paraglide/messages.js";
 import { getLocale } from "../../paraglide/runtime.js";
-import { parseStoredJson, WriteWarningSchema, type WriteWarning } from "../notion/changes/audit-records";
+import { AuditNoteSchema, type PropertySkip, type RevertNote, type WriteWarning } from "../notion/changes/audit-records";
+import type { RevertBlocker, RevertFailure, RevertReason } from "../notion/changes/revert-reasons";
 import type { PropertyWriteRefusal } from "../notion/content/properties";
-import {
-  RevertNoteSchema,
-  type PropertySkip,
-  type RevertBlocker,
-  type RevertFailure,
-  type RevertNote,
-  type RevertReason,
-} from "../notion/changes/revert-reasons";
 import { formatJst } from "./format";
 
 /* Dashboard wording of write notes and revert outcomes; the MCP tools word the same data in English. */
@@ -79,12 +72,22 @@ function writeWarningText(warning: WriteWarning): string {
   }
 }
 
-/** A note stored as JSON (write warning or revert note); older rows hold English text, shown as is. */
-export function storedNoteText(raw: string): string {
-  const note = parseStoredJson(RevertNoteSchema, raw);
-  if (note) return noteText(note);
-  const warning = parseStoredJson(WriteWarningSchema, raw);
-  return warning ? writeWarningText(warning) : raw;
+/** The `note` or `revert_note` of a row; null when there is none. */
+export function auditNoteText(stored: unknown): string | null {
+  if (stored === null || stored === undefined) return null;
+  const parsed = AuditNoteSchema.safeParse(stored);
+  // A note of a kind this version does not know (written by a newer one, read after a rollback).
+  if (!parsed.success) return m.audit_note_unreadable();
+  const note = parsed.data;
+  switch (note.kind) {
+    case "legacy":
+      return note.text;
+    case "content_failed":
+    case "revert_blocked":
+      return writeWarningText(note);
+    default:
+      return noteText(note);
+  }
 }
 
 function failureText(failure: RevertFailure): string {
@@ -111,7 +114,16 @@ export function revertReasonText(reason: RevertReason): string {
     case "is_revert":
       return m.revert_reason_is_revert();
     case "not_ok":
-      return reason.status === "failed" ? m.revert_reason_not_ok_failed() : m.revert_reason_not_ok_pending();
+      switch (reason.status) {
+        case "failed":
+          return m.revert_reason_not_ok_failed();
+        case "pending":
+          return m.revert_reason_not_ok_pending();
+        case "interrupted":
+          return m.revert_reason_not_ok_interrupted();
+        default:
+          throw new Error(`Unknown audit status: ${reason.status satisfies never}`);
+      }
     case "already_reverted":
       return m.revert_reason_already_reverted({ time: formatJst(reason.revertedAt) });
     case "notion_disabled":

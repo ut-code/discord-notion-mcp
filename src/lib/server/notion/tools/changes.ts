@@ -6,7 +6,7 @@ import { defineTool, type AnyToolDefinition } from "../../mcp/registry";
 import { dashboardAuditPath } from "../../../paths";
 import { actorOf } from "../changes/attribution";
 import type { NotionAuditService } from "../changes/audit-service";
-import { revertConflictText, revertReasonText, revertSuccessText } from "../changes/revert-reasons";
+import { revertConflictText, revertReasonText, revertSuccessText } from "../changes/outcome-text";
 
 export interface NotionChangeToolDeps {
   audit: NotionAuditService;

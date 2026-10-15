@@ -206,17 +206,6 @@ export type PropertyWriteRefusal = { kind: "hosted_files"; files: string[] } | {
 
 export type WritableResult = { ok: true; value: Record<string, unknown> } | { ok: false; refusal: PropertyWriteRefusal };
 
-export function propertyWriteRefusalText(refusal: PropertyWriteRefusal): string {
-  switch (refusal.kind) {
-    case "hosted_files":
-      return `contains Notion-hosted file(s) (${refusal.files.join(", ")}) that cannot be re-set through the API`;
-    case "unsupported_type":
-      return `property type "${refusal.type}" is read-only or not supported for writes`;
-    default:
-      throw new Error(`Unknown property write refusal: ${refusal satisfies never}`);
-  }
-}
-
 /** Converts a page-format (read) property value into the format pages.update accepts. */
 export function toWritablePropertyValue(value: PagePropertyValue): WritableResult {
   switch (value.type) {

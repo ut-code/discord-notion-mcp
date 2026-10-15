@@ -1,4 +1,4 @@
-import { and, count, desc, eq, isNotNull, isNull, lt, max, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, max, ne, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../../db/client";
 import {
   notionAudit,
@@ -7,9 +7,6 @@ import {
   type NotionAuditRow,
   type NotionAuditStatus,
 } from "../../db/schema";
-
-/** The error of a pending row given up on at startup; a guess that the real outcome may still replace. */
-export const INTERRUPTED_ERROR = "interrupted (server restarted)";
 
 export interface AuditListQuery {
   limit: number;
@@ -36,26 +33,22 @@ export interface AuditListResult {
 /** A new row; the database assigns the id and the store's clock the creation time. */
 export type AuditInsert = Omit<NewNotionAuditRow, "id" | "createdAt">;
 
-/** Details known only after a successful write: the attribution comment and the final page state. */
-export type AuditAttribution = Pick<NewNotionAuditRow, "commentError" | "targetUrl" | "resultLastEditedTime">;
-
-/** How a pending write ended. */
+/** How a pending write ended, with what became known only by writing (the created page, the change made). */
 export type PendingOutcome =
-  | ({ status: "ok" } & Pick<NewNotionAuditRow, "result" | "error" | "commentError" | "resultLastEditedTime">)
+  | ({ status: "ok" } & Pick<
+      NewNotionAuditRow,
+      "result" | "snapshot" | "note" | "commentError" | "resultLastEditedTime" | "targetPageId" | "targetUrl"
+    >)
   | ({ status: "failed"; error: string } & Pick<NewNotionAuditRow, "commentError">);
 
 /** What the original row records about its revert. */
 export type RevertMark = Pick<NewNotionAuditRow, "revertedBy" | "revertNote">;
 
-/** Still open: pending, or given up on as interrupted while the write may have gone on. */
-const stillOpen = (id: number) =>
-  and(
-    eq(notionAudit.id, id),
-    or(eq(notionAudit.status, "pending"), and(eq(notionAudit.status, "failed"), eq(notionAudit.error, INTERRUPTED_ERROR))),
-  );
+/** Still open: pending, or interrupted while the write may have gone on. */
+const stillOpen = (id: number) => and(eq(notionAudit.id, id), inArray(notionAudit.status, ["pending", "interrupted"]));
 
 /** The partial unique index on revert_of_audit_id: reverts that are pending or done. */
-const activeRevert = sql`${notionAudit.status} <> 'failed'`;
+const activeRevert = sql`${notionAudit.status} in ('pending', 'ok')`;
 
 /** The unique index on active reverts rejected an insert; other constraint errors are real failures. */
 function isActiveRevertConflict(error: unknown): boolean {
@@ -68,8 +61,9 @@ function isActiveRevertConflict(error: unknown): boolean {
 }
 
 /**
- * The audit log. Rows are written once and then only move forward: a pending write ends
- * once, and a write is reverted at most once. Who did what, and when, never changes.
+ * The audit log. A write is recorded as pending before it touches Notion, then ends once
+ * (an interrupted one may still end late), and is reverted at most once. Who did what, and
+ * when, never changes.
  */
 export class NotionAuditStore {
   constructor(private readonly db: AppDatabase) {}
@@ -80,26 +74,17 @@ export class NotionAuditStore {
     return inserted;
   }
 
-  async recordAttribution(id: number, attribution: AuditAttribution): Promise<void> {
-    await this.db.update(notionAudit).set(attribution).where(eq(notionAudit.id, id));
-  }
-
   /** Ends a pending write; false when it already ended (a real outcome is never replaced). */
   async finishPending(id: number, outcome: PendingOutcome): Promise<boolean> {
-    // `error: null` first: an outcome replacing the interruption guess must not keep its marker.
-    const updated = await this.db
-      .update(notionAudit)
-      .set({ error: null, ...outcome })
-      .where(stillOpen(id))
-      .returning({ id: notionAudit.id });
+    const updated = await this.db.update(notionAudit).set(outcome).where(stillOpen(id)).returning({ id: notionAudit.id });
     return updated.length > 0;
   }
 
   /** Marks rows still `pending` that were created before `cutoff` as interrupted; returns how many. */
-  async failPendingBefore(cutoff: Date): Promise<number> {
+  async interruptPendingBefore(cutoff: Date): Promise<number> {
     const updated = await this.db
       .update(notionAudit)
-      .set({ status: "failed", error: INTERRUPTED_ERROR })
+      .set({ status: "interrupted" })
       .where(and(eq(notionAudit.status, "pending"), lt(notionAudit.createdAt, cutoff)))
       .returning({ id: notionAudit.id });
     return updated.length;
@@ -120,8 +105,8 @@ export class NotionAuditStore {
 
   /**
    * Ends a pending revert successfully and marks the original reverted, atomically. False when the
-   * log moved on meanwhile: the revert already ended, or it was given up on as interrupted and
-   * another revert of the same row started.
+   * log moved on meanwhile: the revert already ended, or it was interrupted and another revert of
+   * the same row started.
    */
   finishRevert(revertId: number, originalId: number, outcome: PendingOutcome & { status: "ok" }, mark: RevertMark): Promise<boolean> {
     const finished = this.db.transaction((tx) => {
@@ -131,12 +116,7 @@ export class NotionAuditStore {
         .where(and(eq(notionAudit.revertOfAuditId, originalId), ne(notionAudit.id, revertId), activeRevert))
         .get();
       if (other) return false;
-      const ended = tx
-        .update(notionAudit)
-        .set({ error: null, ...outcome })
-        .where(stillOpen(revertId))
-        .returning({ id: notionAudit.id })
-        .all();
+      const ended = tx.update(notionAudit).set(outcome).where(stillOpen(revertId)).returning({ id: notionAudit.id }).all();
       if (ended.length === 0) return false;
       tx.update(notionAudit)
         .set({ ...mark, revertedAt: new Date(), revertAuditId: revertId })

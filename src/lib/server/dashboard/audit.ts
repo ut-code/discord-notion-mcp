@@ -28,7 +28,7 @@ import {
   renderRequestedPropertyValue,
   type AuditStatusFilter,
 } from "./format";
-import { revertReasonText, revertSuccessText, storedNoteText } from "./revert-text";
+import { auditNoteText, revertReasonText, revertSuccessText } from "./outcome-text";
 import { formString, pageLinks, pageParam, type ActionResult, type Option } from "./shared";
 
 const AUDIT_PAGE_SIZE = 50;
@@ -66,6 +66,7 @@ function auditTitle(row: NotionAuditRow): string {
 const BADGES = {
   failed: { label: m.audit_status_failed(), tone: "destructive" },
   pending: { label: m.audit_status_pending(), tone: "secondary" },
+  interrupted: { label: m.audit_status_interrupted(), tone: "warn" },
   ok: { label: m.audit_status_ok(), tone: "success" },
   reverted: { label: m.audit_status_reverted(), tone: "secondary" },
 } as const satisfies Record<string, BadgeView>;
@@ -152,7 +153,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams): P
       offset: (page - 1) * AUDIT_PAGE_SIZE,
       discordUserId: filters.user,
       operation: filters.operation,
-      status: filters.status === "ok" || filters.status === "failed" ? filters.status : undefined,
+      status: filters.status === "reverted" ? undefined : filters.status,
       reverted: filters.status === "reverted" ? true : undefined,
     }),
     deps.audit.listActors(),
@@ -203,6 +204,14 @@ const SUMMARY: Record<NotionAuditRow["status"], Record<NotionAuditOperation, (in
     update_properties: m.audit_summary_pending_update_properties,
     archive_page: m.audit_summary_pending_archive_page,
     revert: m.audit_summary_pending_revert,
+  },
+  interrupted: {
+    create_page: m.audit_summary_interrupted_create_page,
+    append_content: m.audit_summary_interrupted_append_content,
+    edit_content: m.audit_summary_interrupted_edit_content,
+    update_properties: m.audit_summary_interrupted_update_properties,
+    archive_page: m.audit_summary_interrupted_archive_page,
+    revert: m.audit_summary_interrupted_revert,
   },
 };
 
@@ -314,9 +323,12 @@ export interface AuditDetailData {
     targetUrl: string | null;
     createdAt: string;
     comment: { kind: "error"; text: string } | { kind: "posted" } | { kind: "none" };
-    error: { label: string; text: string; failed: boolean } | null;
+    /** Why a failed write failed. */
+    error: string | null;
+    /** A warning on a successful write or the note of a revert. */
+    note: string | null;
   };
-  /** Null for rows that are never revertible (failed or pending writes, reverts) and for non-admin viewers. */
+  /** Null for rows that are never revertible (unfinished or failed writes, reverts) and for non-admin viewers. */
   revert: RevertView | null;
 }
 
@@ -343,11 +355,8 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
       targetUrl: row.targetUrl,
       createdAt: formatJst(row.createdAt),
       comment: row.commentError ? { kind: "error", text: row.commentError } : row.status === "ok" ? { kind: "posted" } : { kind: "none" },
-      error: row.error
-        ? row.status === "failed"
-          ? { label: m.audit_error_label(), text: row.error, failed: true }
-          : { label: m.audit_note_label(), text: storedNoteText(row.error), failed: false }
-        : null,
+      error: row.status === "failed" ? row.error : null,
+      note: auditNoteText(row.note),
     },
     revert: viewer.isAdmin ? revertView(deps, row) : null,
   };
@@ -362,7 +371,7 @@ function revertView(deps: DashboardDeps, row: NotionAuditRow): RevertView | null
       return {
         state: "reverted",
         revert: reason.revertAuditId !== null ? { id: reason.revertAuditId, href: dashboardAuditPath(reason.revertAuditId) } : null,
-        note: row.revertNote ? storedNoteText(row.revertNote) : null,
+        note: auditNoteText(row.revertNote),
       };
     case "notion_disabled":
       return { state: "disabled" };
