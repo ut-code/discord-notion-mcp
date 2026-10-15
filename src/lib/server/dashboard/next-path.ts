@@ -14,6 +14,8 @@ const UNSAFE_CHARACTER = /[\u0000-\u001f\u007f\\]/;
  * 1. a root-relative path: starts with exactly one "/" ("//host" is scheme-relative);
  * 2. no backslashes or control characters;
  * 3. resolved against a fixed base, it stays on that base's origin.
+ * The same checks as ASP.NET Core's `IsLocalUrl` and Better Auth's `isSafeRelativeURL`
+ * (internal to Better Auth, so it cannot be imported).
  */
 export function safeNextPath(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return DEFAULT_NEXT_PATH;
