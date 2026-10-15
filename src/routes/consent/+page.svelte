@@ -47,42 +47,44 @@
 
 <AuthLayout title={`${m.consent_title()} — Discord × Notion MCP`} wide>
   <section class="auth-card">
-    <div class="stack gap-2">
-      <h1><span>{data.clientName}</span> {m.consent_heading_suffix()}</h1>
-      <p class="lead">{m.consent_lead()}</p>
-    </div>
+    <h1><span>{data.clientName}</span> {m.consent_heading_suffix()}</h1>
 
-    <ul class="stack gap-1.5 text-[13px]">
+    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13px]">
+      <dt class="text-muted-foreground">{m.consent_publisher_label()}</dt>
       {#if data.verifiedHost}
-        <li class="flex items-center gap-1.5">
-          <BadgeCheckIcon class="size-4 shrink-0 text-ok-fg" />{m.consent_publisher_verified({ host: data.verifiedHost })}
-        </li>
+        <dd class="flex items-start gap-1.5 break-all">
+          <BadgeCheckIcon class="mt-px size-4 shrink-0 text-ok-fg" />{data.verifiedHost}
+        </dd>
       {:else}
-        <li class="flex items-center gap-1.5 text-warn-text">
-          <CircleAlertIcon class="size-4 shrink-0" />{m.consent_publisher_unverified()}
-        </li>
+        <dd class="flex items-start gap-1.5 text-warn-text">
+          <CircleAlertIcon class="mt-px size-4 shrink-0" />{m.consent_publisher_unverified()}
+        </dd>
       {/if}
-      {#if data.redirect?.local}
-        <li class="break-all">{m.consent_redirect_local({ origin: data.redirect.origin })}</li>
-        {#if data.verifiedHost}<li class="text-muted-foreground">{m.consent_redirect_local_unverifiable()}</li>{/if}
-      {:else if data.redirect}
-        <li
-          class="flex items-center gap-1.5 rounded-md border border-warn-border bg-warn-bg px-2 py-1.5 font-medium break-all text-warn-text"
-        >
-          <TriangleAlertIcon class="size-4 shrink-0" />{m.consent_redirect_external({ origin: data.redirect.origin })}
-        </li>
+      {#if data.redirect}
+        <dt class="text-muted-foreground">{m.consent_redirect_label()}</dt>
+        {#if data.redirect.local}
+          <dd class="break-all">
+            {m.consent_redirect_local({ origin: data.redirect.origin })}
+            {#if data.verifiedHost}<span class="block text-muted-foreground">{m.consent_redirect_local_unverifiable()}</span>{/if}
+          </dd>
+        {:else}
+          <dd class="flex items-start gap-1.5 font-medium break-all text-warn-text">
+            <TriangleAlertIcon class="mt-px size-4 shrink-0" />{data.redirect.origin}
+          </dd>
+        {/if}
       {/if}
-    </ul>
+    </dl>
 
     <div class="flex items-center gap-3 rounded-[10px] border p-3">
       <AppAvatar name={data.account.name} url={data.account.avatarUrl} size="lg" />
-      <div class="stack grow">
+      <div class="stack min-w-0 grow">
         <span class="truncate text-sm font-medium">{data.account.name}</span>
-        <span class="mono">@{data.account.username} · {data.guildName}</span>
+        <span class="mono truncate">@{data.account.username}</span>
+        <span class="truncate text-[13px] text-muted-foreground">{data.guildName}</span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>
         <input type="hidden" name="next" value={data.switchNext} />
-        <button class="cursor-pointer text-[13px] text-text-4 underline hover:text-foreground" type="submit"
+        <button class="shrink-0 cursor-pointer text-[13px] whitespace-nowrap text-text-4 underline hover:text-foreground" type="submit"
           >{m.consent_switch_account()}</button
         >
       </form>
