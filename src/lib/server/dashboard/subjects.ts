@@ -73,8 +73,13 @@ export class SubjectResolver {
     await Promise.all(
       unique.map((id) =>
         this.limit(async () => {
-          const member = await this.directory.fetchMember(id).catch(() => null);
-          if (member?.avatarUrl) avatars.set(id, member.avatarUrl);
+          try {
+            const member = await this.directory.fetchMember(id);
+            if (member?.avatarUrl) avatars.set(id, member.avatarUrl);
+          } catch (error) {
+            // An avatar is decoration: the row shows initials instead.
+            this.logFailure({ event: "admin_lookup_failed", lookup: "avatar", userId: id, error: errorMessage(error) });
+          }
         }),
       ),
     );

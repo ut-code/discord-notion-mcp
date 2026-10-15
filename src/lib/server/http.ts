@@ -37,7 +37,8 @@ export function withSecurityHeaders(response: Response): Response {
   let target = response;
   try {
     target.headers.set("X-Frame-Options", "DENY");
-  } catch {
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
     // Immutable headers (e.g. a fetched response): copy once, then set in place.
     target = new Response(response.body, response);
     target.headers.set("X-Frame-Options", "DENY");

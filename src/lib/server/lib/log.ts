@@ -39,11 +39,14 @@ export type ErrorEntry =
   | { event: "tool_call_prune_failed"; error: string }
   | { event: "oauth_client_prune_failed"; error: string }
   | { event: "audit_sweep_failed"; error: string }
-  | { event: "access_resolution_failed"; source: "mcp" | "dashboard"; discordUserId: string; error: string }
+  | { event: "notion_readback_failed"; pageId: string; error: string }
+  | { event: "access_resolution_failed"; source: "mcp" | "dashboard" | "consent"; discordUserId: string; error: string }
   | { event: "membership_check_failed"; error: string }
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }
   | { event: "admin_lookup_failed"; lookup: "member_search"; error: string }
+  | { event: "admin_lookup_failed"; lookup: "avatar"; userId: string; error: string }
   | { event: "sign_out_failed"; error: string }
+  | { event: "sign_in_lookup_failed"; lookup: "guild" | "client"; error: string }
   | BetterAuthLog<"error">;
 
 export type EventSink = (entry: EventEntry) => void;

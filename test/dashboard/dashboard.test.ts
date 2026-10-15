@@ -546,6 +546,24 @@ describe("consent", () => {
     });
   });
 
+  test("a membership check that fails says so (503) instead of calling the user a non-member", async () => {
+    const signed = new URL("http://x/consent?client_id=x&ba_param=client_id&sig=abc");
+    const flaky = await signIn(h, FLAKY);
+    expect(await consentPage(deps, signed, new Headers({ cookie: flaky.cookie }))).toMatchObject({
+      kind: "error",
+      status: 503,
+      title: "一時的に確認できません",
+    });
+    expect(h.errors.at(-1)).toMatchObject({ event: "access_resolution_failed", source: "consent", discordUserId: FLAKY });
+  });
+
+  test("display-only lookups that fail unexpectedly are logged, and the page still renders", async () => {
+    const failing = { ...deps, directory: { ...deps.directory, fetchGuild: () => Promise.reject(new Error("discord down")) } };
+    const page = await signInPage(failing, new URL("http://x/sign-in"));
+    expect(page.guildName).toBeNull();
+    expect(h.errors.at(-1)).toEqual({ event: "sign_in_lookup_failed", lookup: "guild", error: "discord down" });
+  });
+
   test("the client id comes from the signed query only", async () => {
     const { cookie } = await signIn(h, READER);
     const headers = new Headers({ cookie });
@@ -630,7 +648,8 @@ describe("user search scan cap", () => {
         },
       },
       resolver: { resolve: async () => Promise.reject(new Error("unlinked logins are not resolved")) },
-    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver">;
+      logError: () => {},
+    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "logError">;
 
     const found = await usersPage(fakeDeps, params("q=needle"), owner);
     expect(queries).toEqual([{ limit: USER_SEARCH_SCAN_LIMIT, offset: 0 }]);

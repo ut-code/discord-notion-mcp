@@ -20,12 +20,8 @@ const ALLOWED_HOSTS = new Set([
 ]);
 
 export function parseMessageLink(link: string, expectedGuildId: string): MessageLinkResult {
-  let url: URL;
-  try {
-    url = new URL(link.trim());
-  } catch {
-    return { ok: false, error: "Malformed message link." };
-  }
+  const url = URL.parse(link.trim());
+  if (!url) return { ok: false, error: "Malformed message link." };
   if (url.protocol !== "https:" || !ALLOWED_HOSTS.has(url.hostname)) {
     return { ok: false, error: "Not a Discord message link." };
   }

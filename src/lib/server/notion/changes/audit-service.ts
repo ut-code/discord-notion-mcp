@@ -1,6 +1,6 @@
 import type { NotionAuditRow } from "../../db/schema";
 import { errorMessage } from "../../lib/errors";
-import type { ErrorSink, EventSink } from "../../lib/log";
+import { logError, type ErrorSink, type EventSink } from "../../lib/log";
 import { runPeriodically } from "../../lib/periodic";
 import { isNotionMiss, NotionRequestError, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
 import { sha256 } from "../content/content-diff";
@@ -123,6 +123,7 @@ export class NotionAuditService {
   constructor(
     private readonly store: NotionAuditStore,
     private readonly api: NotionApi | null,
+    private readonly reportError: ErrorSink = logError,
   ) {}
 
   listAudit(query: Partial<AuditListQuery> = {}): Promise<AuditListResult> {
@@ -340,7 +341,11 @@ export class NotionAuditService {
   }
 
   private async lastEdited(api: NotionApi, pageId: string): Promise<string | null> {
-    const page = await api.retrievePage(pageId).catch(() => null);
+    // The revert is done: a failed read-back only loses its edit time (a later revert then sees a conflict).
+    const page = await api.retrievePage(pageId).catch((error: unknown) => {
+      this.reportError({ event: "notion_readback_failed", pageId, error: errorMessage(error) });
+      return null;
+    });
     return page?.last_edited_time ?? null;
   }
 }

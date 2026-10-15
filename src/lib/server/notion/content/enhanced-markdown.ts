@@ -30,19 +30,15 @@ export function stripUserMentionLabels(content: string): string {
   return content.replace(LABELED_USER_MENTION, (_whole, id: string) => `<mention-user url="user://${id}"/>`);
 }
 
-/** Adds display names to unlabeled user mentions; lookups that fail leave the mention as is. */
+/** Adds display names to unlabeled user mentions; users the lookup returns no name for keep the bare mention. */
 export async function labelUserMentions(markdown: string, lookup: (userId: string) => Promise<string | null>): Promise<string> {
   const ids = [...new Set([...markdown.matchAll(BARE_USER_MENTION)].flatMap((match) => match[1] ?? []))].slice(0, MAX_USER_LOOKUPS);
   if (ids.length === 0) return markdown;
   const names = new Map<string, string>();
   await Promise.all(
     ids.map(async (id) => {
-      try {
-        const name = await lookup(id);
-        if (name) names.set(id, name);
-      } catch {
-        // Unknown or inaccessible users keep the bare mention.
-      }
+      const name = await lookup(id);
+      if (name) names.set(id, name);
     }),
   );
   return markdown.replace(BARE_USER_MENTION, (whole, id: string) => {

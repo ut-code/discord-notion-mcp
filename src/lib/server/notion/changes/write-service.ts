@@ -1,4 +1,5 @@
 import { errorMessage, ToolError } from "../../lib/errors";
+import { logError, type ErrorSink } from "../../lib/log";
 import type { NotionApi, NotionPage, PageMarkdown } from "../client/api";
 import { resolveParent, toToolError } from "../client/resolve";
 import type { ContentUpdate, PageMarkdownUpdate, PageParent } from "../client/types";
@@ -77,6 +78,7 @@ export class NotionWriteService {
   constructor(
     private readonly api: NotionApi,
     private readonly audit: NotionAuditStore,
+    private readonly reportError: ErrorSink = logError,
   ) {}
 
   private actorColumns(actor: Actor) {
@@ -118,7 +120,11 @@ export class NotionWriteService {
     },
   ): Promise<WriteOutcome> {
     const commentError = await postComment(this.api, page.id, writeCommentText(actor, operation, row.id));
-    const final = await this.api.retrievePage(page.id).catch(() => null);
+    // The write succeeded: a failed read-back only loses the final URL and edit time, so log it and go on.
+    const final = await this.api.retrievePage(page.id).catch((error: unknown) => {
+      this.reportError({ event: "notion_readback_failed", pageId: page.id, error: errorMessage(error) });
+      return null;
+    });
     const url = final?.url ?? page.url;
     await this.audit.finishPending(row.id, {
       status: "ok",

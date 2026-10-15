@@ -3,12 +3,8 @@ import { isLoopbackHost } from "../lib/loopback";
 
 function isNativeRedirectUri(uri: unknown): boolean {
   if (typeof uri !== "string") return false;
-  let url: URL;
-  try {
-    url = new URL(uri);
-  } catch {
-    return false;
-  }
+  const url = URL.parse(uri);
+  if (!url) return false;
   if (url.protocol === "https:") return false;
   if (url.protocol === "http:") return isLoopbackHost(url.hostname);
   return true;

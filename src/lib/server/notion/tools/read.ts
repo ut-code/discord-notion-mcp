@@ -1,7 +1,7 @@
 // Read-only Notion tools: search, get_page, query_database, get_database, get_comments.
 import { z } from "zod";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
-import type { NotionDataSource, NotionPage, SearchResult } from "../client/api";
+import { NotionRequestError, type NotionDataSource, type NotionPage, type SearchResult } from "../client/api";
 import { requireNotionId } from "../client/ids";
 import { dataSourceTitle, resolveDatabaseView, resolveDataSource } from "../client/resolve";
 import { labelUserMentions } from "../content/enhanced-markdown";
@@ -116,7 +116,11 @@ export function createReadTools(deps: NotionToolDeps): {
       const lookup = (userId: string) => {
         let name = names.get(userId);
         if (!name) {
-          name = api.retrieveUser(userId);
+          // Unknown or inaccessible users (and Notion errors) keep the bare mention; bugs still surface.
+          name = api.retrieveUser(userId).catch((error: unknown) => {
+            if (error instanceof NotionRequestError) return null;
+            throw error;
+          });
           names.set(userId, name);
         }
         return name;

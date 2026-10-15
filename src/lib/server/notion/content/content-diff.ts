@@ -161,7 +161,8 @@ export function buildRevertPlan(before: string, after: string): RevertPlan {
   let restored: string | null;
   try {
     restored = applyContentUpdates(after, updates);
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ContentUpdateError)) throw error;
     restored = null;
   }
   if (restored !== before) return { kind: "unsupported", blocker: "ambiguous_inverse", hunks };

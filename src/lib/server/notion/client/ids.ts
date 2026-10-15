@@ -32,13 +32,8 @@ export function parseNotionId(input: string, options: ParseIdOptions = {}): stri
   const raw = normalizeRaw(value);
   if (raw) return raw;
 
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return null;
-  }
-  if (!isNotionHost(url.hostname)) return null;
+  const url = URL.parse(value);
+  if (!url || !isNotionHost(url.hostname)) return null;
 
   if (options.allowBlockAnchor && url.hash) {
     const anchor = normalizeRaw(url.hash.slice(1));

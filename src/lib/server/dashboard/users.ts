@@ -118,7 +118,7 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
 }
 
 export async function usersPage(
-  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver">,
+  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "logError">,
   params: URLSearchParams,
   viewer: Viewer,
 ): Promise<UsersPageData> {
@@ -133,6 +133,12 @@ export async function usersPage(
       try {
         return buildUserRow(user, await deps.resolver.resolve(user.discordUserId), guild, grants);
       } catch (error) {
+        deps.logError({
+          event: "access_resolution_failed",
+          source: "dashboard",
+          discordUserId: user.discordUserId,
+          error: errorMessage(error),
+        });
         return buildUserRow(user, error instanceof Error ? error : new Error(errorMessage(error)), guild, grants);
       }
     });

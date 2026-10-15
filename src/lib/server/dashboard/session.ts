@@ -13,17 +13,23 @@ import { extractSignedOAuthQuery, signedOAuthParam } from "./oauth-query";
 
 const PRODUCT_NAME = "Discord × Notion MCP";
 
-async function orNull<T>(load: () => Promise<T>): Promise<T | null> {
+/** For values the page only displays: an unexpected failure is logged and the page renders without the value. */
+async function displayLookup<T>(
+  deps: Pick<DashboardDeps, "logError">,
+  lookup: "guild" | "client",
+  load: () => Promise<T>,
+): Promise<T | null> {
   try {
     return await load();
-  } catch {
+  } catch (error) {
+    deps.logError({ event: "sign_in_lookup_failed", lookup, error: errorMessage(error) });
     return null;
   }
 }
 
 /** The client's registered name, else its id. */
-async function clientLabel(clientId: string, lookup: () => Promise<string | null>): Promise<string> {
-  return (await orNull(lookup)) ?? clientId;
+async function clientLabel(deps: Pick<DashboardDeps, "logError">, clientId: string, lookup: () => Promise<string | null>): Promise<string> {
+  return (await displayLookup(deps, "client", lookup)) ?? clientId;
 }
 
 export interface SignInPageData {
@@ -44,8 +50,10 @@ export async function signInPage(deps: DashboardDeps, url: URL): Promise<SignInP
   const oauthQuery = extractSignedOAuthQuery(url.search) ?? null;
   const clientId = oauthQuery ? signedOAuthParam(oauthQuery, "client_id") : null;
   const [guildName, clientName] = await Promise.all([
-    orNull(async () => (await deps.directory.fetchGuild()).name),
-    oauthQuery && clientId ? clientLabel(clientId, () => clientNameBeforeSignIn(deps.auth, clientId, oauthQuery)) : Promise.resolve(null),
+    displayLookup(deps, "guild", async () => (await deps.directory.fetchGuild()).name),
+    oauthQuery && clientId
+      ? clientLabel(deps, clientId, () => clientNameBeforeSignIn(deps.auth, clientId, oauthQuery))
+      : Promise.resolve(null),
   ]);
   return {
     heading: guildName ? m.sign_in_heading_guild({ guild: guildName }) : PRODUCT_NAME,
@@ -106,7 +114,7 @@ export interface ConsentPageData {
 }
 
 export type ConsentResult =
-  { kind: "ok"; data: ConsentPageData } | { kind: "error"; status: 400 | 401 | 403; title: string; message: string };
+  { kind: "ok"; data: ConsentPageData } | { kind: "error"; status: 400 | 401 | 403 | 503; title: string; message: string };
 
 /**
  * Origin of a redirect URI, so the consent page can tell a CLI's loopback callback from a
@@ -129,17 +137,23 @@ export async function consentPage(deps: DashboardDeps, url: URL, headers: Header
   if (!session) {
     return { kind: "error", status: 401, title: m.consent_session_expired_title(), message: m.sign_in_error_expired() };
   }
-  const access = await orNull(async () => {
-    const discordUserId = await deps.identity.discordUserIdForUser(session.user.id);
-    return discordUserId ? deps.resolver.resolve(discordUserId) : null;
-  });
-  if (!access?.isMember) return { kind: "error", status: 403, ...NOT_MEMBER };
+  const discordUserId = await deps.identity.discordUserIdForUser(session.user.id);
+  if (!discordUserId) return { kind: "error", status: 403, ...NOT_MEMBER };
+  let access: EffectiveAccess;
+  try {
+    access = await deps.resolver.resolve(discordUserId);
+  } catch (error) {
+    // Discord could not be asked: say so rather than claim the user is not a member.
+    deps.logError({ event: "access_resolution_failed", source: "consent", discordUserId, error: errorMessage(error) });
+    return { kind: "error", status: 503, title: m.access_unavailable_title(), message: m.access_unavailable() };
+  }
+  if (!access.isMember) return { kind: "error", status: 403, ...NOT_MEMBER };
   return {
     kind: "ok",
     data: {
       endpoint: `${AUTH_BASE_PATH}/oauth2/consent`,
       oauthQuery,
-      clientName: await clientLabel(clientId, () => clientNameForSession(deps.auth, clientId, headers)),
+      clientName: await clientLabel(deps, clientId, () => clientNameForSession(deps.auth, clientId, headers)),
       redirectOrigin: redirectOrigin(signedOAuthParam(oauthQuery, "redirect_uri")),
       account: { name: displayName(access.member), username: access.member.username, avatarUrl: access.member.avatarUrl },
       guildName: access.guild.name,

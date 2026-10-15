@@ -85,7 +85,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   const channels = new ChannelDirectory(discord);
   const notion = options.notionApi ?? (config.notion ? new SdkNotionApi(config.notion.token) : null);
   const auditStore = new NotionAuditStore(database.db);
-  const notionAudit = new NotionAuditService(auditStore, notion);
+  const notionAudit = new NotionAuditService(auditStore, notion, reportError);
   startInterruptedWriteSweep({ audit: notionAudit, log: reportEvent, logError: reportError });
   const tools: AnyToolDefinition[] = [
     ...createDiscordTools({
@@ -96,7 +96,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     }),
     ...(notion
       ? [
-          ...createNotionTools({ api: notion, writes: new NotionWriteService(notion, auditStore) }),
+          ...createNotionTools({ api: notion, writes: new NotionWriteService(notion, auditStore, reportError) }),
           ...createNotionChangeTools({ audit: notionAudit, publicUrl: config.publicUrl }),
         ]
       : []),
