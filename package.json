@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "prepare": "bun scripts/compile-messages.ts; svelte-kit sync || echo ''; lefthook install || echo ''",
+    "prepare": "bun scripts/compile-messages.ts && (svelte-kit sync || echo ''; lefthook install || echo '')",
     "dev": "bun --bun vite dev",
     "build": "bun --bun vite build",
     "start": "NODE_ENV=production BODY_SIZE_LIMIT=4M bun build/index.js",
