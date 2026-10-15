@@ -8,6 +8,7 @@ export const MANAGE_THREADS = PermissionFlagsBits.ManageThreads;
 
 export const ALL_PERMISSIONS: bigint = Object.values(PermissionFlagsBits).reduce((acc, bit) => acc | bit, 0n);
 
+/** True when every bit of `flag` is set. */
 export function hasPermission(permissions: bigint, flag: bigint): boolean {
   return (permissions & flag) === flag;
 }
@@ -37,6 +38,7 @@ export function isGuildOwner(guild: GuildInfo, member: MemberInfo): boolean {
 export function computeBasePermissions(guild: GuildInfo, member: MemberInfo): bigint {
   if (isGuildOwner(guild, member)) return ALL_PERMISSIONS;
   const roleById = new Map(guild.roles.map((role) => [role.id, role]));
+  // The @everyone role has the same id as the guild.
   let permissions = roleById.get(guild.id)?.permissions ?? 0n;
   for (const roleId of member.roles) {
     permissions |= roleById.get(roleId)?.permissions ?? 0n;
@@ -45,7 +47,11 @@ export function computeBasePermissions(guild: GuildInfo, member: MemberInfo): bi
   return permissions;
 }
 
-/** Applies channel overwrites in Discord's documented order: @everyone, roles (aggregated), member. */
+/**
+ * Applies channel overwrites in Discord's documented order: @everyone, roles (aggregated), member;
+ * each denies before it allows. ADMINISTRATOR is not subject to overwrites.
+ * https://docs.discord.com/developers/topics/permissions
+ */
 function applyOverwrites(
   basePermissions: bigint,
   guild: GuildInfo,
