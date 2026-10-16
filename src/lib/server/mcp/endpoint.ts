@@ -68,7 +68,6 @@ export function createMcpEndpoint(deps: McpEndpointDeps): (request: Request) => 
   const reportError = deps.logError ?? logError;
   const serverDeps: McpServerDeps = {
     tools: deps.tools,
-    resolveAccess: deps.resolveAccess,
     rateLimit: deps.rateLimit ?? new TokenBucketLimiter({ capacity: TOOL_CALL_BURST, refillPerSecond: TOOL_CALLS_PER_SECOND }),
     log: deps.log,
     record: deps.record,

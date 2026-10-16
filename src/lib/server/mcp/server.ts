@@ -2,7 +2,6 @@ import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
 import type { ToolCallErrorKind } from "../db/schema";
 import { errorMessage, ToolError } from "../lib/errors";
 import { logError, logEvent, type ErrorSink, type ToolCallLogEntry } from "../lib/log";
-import type { EffectiveAccess } from "../permissions/resolver";
 import type { RateLimitDecision } from "../lib/rate-limit";
 import { toolsForPermissions, type AnyToolArgs, type AnyToolDefinition, type Principal, type ToolResult } from "./registry";
 
@@ -14,8 +13,6 @@ export const NO_PERMISSIONS_INSTRUCTIONS =
 
 export interface McpServerDeps {
   tools: readonly AnyToolDefinition[];
-  /** Re-resolves the caller's access right before a tool runs (defense in depth). */
-  resolveAccess: (discordUserId: string) => Promise<EffectiveAccess>;
   /** Per-user tool call budget, shared across requests; every call (admins too) takes one token. */
   rateLimit?: { take(discordUserId: string): RateLimitDecision };
   /** Tool call log; defaults to stdout. */
@@ -37,10 +34,15 @@ function errorResult(message: string): CallToolResult {
 /**
  * Logged and stored instead of the text of an error result a tool returns (which may
  * quote content) and of an unexpected crash (whose details go to the error log only).
+ * A ToolError contributes its logMessage, never the message the client sees.
  */
 export const TOOL_RESULT_ERROR = "tool returned an error";
 export const TOOL_CRASH_ERROR = "internal error";
 
+/**
+ * Runs a tool for a caller whose access the endpoint resolved for this request; the server
+ * only registers the tools that access allows, so no check is repeated here.
+ */
 export async function runTool(
   tool: AnyToolDefinition,
   args: AnyToolArgs,
@@ -73,16 +75,12 @@ export async function runTool(
       finish(false, { kind: "rate_limited", message });
       return errorResult(message);
     }
-    const current = await deps.resolveAccess(principal.discordUserId);
-    if (!current.isMember || !current.permissions.has(tool.permission)) {
-      throw new ToolError(`You do not have the "${tool.permission}" permission required for this tool.`);
-    }
-    const result = toCallToolResult(await tool.handler(args, { principal: { ...principal, access: current } }));
+    const result = toCallToolResult(await tool.handler(args, { principal }));
     finish(!result.isError, result.isError ? { kind: "error", message: TOOL_RESULT_ERROR } : undefined);
     return result;
   } catch (error) {
     if (error instanceof ToolError) {
-      finish(false, { kind: "error", message: error.message });
+      finish(false, { kind: "error", message: error.logMessage });
       return errorResult(error.message);
     }
     reportError({ event: "tool_crash", tool: tool.name, error: errorMessage(error) });

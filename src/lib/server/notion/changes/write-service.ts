@@ -63,6 +63,14 @@ export const MAX_CONTENT_EDITS = 20;
 const EDIT_HINT =
   "Call notion_get_page and copy old_str exactly from the current content; include more surrounding text when it matches several places.";
 
+/** A Notion error as the tool error to throw, naming the audit row that recorded the failed write. */
+function namingAuditRow(error: unknown, auditId: number, hint?: string): unknown {
+  const mapped = toToolError(error);
+  if (!(mapped instanceof ToolError)) return error;
+  const suffix = ` (audit #${auditId})${hint ? ` ${hint}` : ""}`;
+  return new ToolError(`${mapped.message}${suffix}`, { logMessage: `${mapped.logMessage}${suffix}` });
+}
+
 /** Validates content written to a page and normalizes labeled user mentions. */
 function prepareContent(content: string, field: string): string {
   assertNoChildObjects(content, field);
@@ -97,9 +105,7 @@ export class NotionWriteService {
   /** Ends a write Notion refused and rethrows it naming the audit row. */
   private async fail(row: NotionAuditRow, error: unknown, hint?: string): Promise<never> {
     await this.audit.finishPending(row.id, { status: "failed", error: errorMessage(error) });
-    const mapped = toToolError(error);
-    if (mapped instanceof ToolError) throw new ToolError(`${mapped.message} (audit #${row.id})${hint ? ` ${hint}` : ""}`);
-    throw error;
+    throw namingAuditRow(error, row.id, hint);
   }
 
   /**
@@ -409,9 +415,7 @@ export class NotionWriteService {
         error: errorMessage(error),
         commentError: retractError ? `The attribution comment could not be removed: ${retractError}` : commentError,
       });
-      const mapped = toToolError(error);
-      if (mapped instanceof ToolError) throw new ToolError(`${mapped.message} (audit #${row.id})`);
-      throw error;
+      throw namingAuditRow(error, row.id);
     }
     await this.audit.finishPending(row.id, {
       status: "ok",

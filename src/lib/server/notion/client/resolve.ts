@@ -15,7 +15,12 @@ class NotionNotAccessibleError extends ToolError {
 export function toToolError(error: unknown): unknown {
   if (!(error instanceof NotionRequestError)) return error;
   if (error.status === 404 || error.status === 403) return new NotionNotAccessibleError();
-  if (error.status === 400 || error.status === 409) return new ToolError(`Notion rejected the request: ${error.message}`);
+  if (error.status === 400 || error.status === 409) {
+    // Notion's message may quote page text (an old_str it did not find), so logs keep its code only.
+    return new ToolError(`Notion rejected the request: ${error.message}`, {
+      logMessage: `Notion rejected the request (${error.status} ${error.code})`,
+    });
+  }
   if (error.status === 429) return new ToolError("Notion rate limit reached; please retry in a moment.");
   return error;
 }

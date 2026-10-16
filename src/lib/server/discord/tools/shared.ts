@@ -65,7 +65,9 @@ export function withDiscordErrors<A>(handler: (args: A, principal: Principal) =>
         throw new NotAccessibleError("Not found or not accessible.");
       }
       if (error instanceof DiscordAPIError && error.status === 400) {
-        throw new ToolError(`Discord rejected the request: ${error.message}`);
+        throw new ToolError(`Discord rejected the request: ${error.message}`, {
+          logMessage: `Discord rejected the request (400 ${String(error.code)})`,
+        });
       }
       throw error;
     }

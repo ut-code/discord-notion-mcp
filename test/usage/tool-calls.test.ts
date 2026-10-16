@@ -37,9 +37,14 @@ const echo = defineTool({
   title: "Echo",
   description: "Echoes or fails on request",
   permission: "discord:read",
-  inputSchema: z.object({ mode: z.enum(["ok", "tool-error", "error-result", "crash"]) }),
+  inputSchema: z.object({ mode: z.enum(["ok", "tool-error", "upstream-error", "error-result", "crash"]) }),
   handler: async ({ mode }) => {
     if (mode === "tool-error") throw new ToolError("Channel not found or not accessible.");
+    if (mode === "upstream-error") {
+      throw new ToolError('Notion rejected the request: No matches found for old_str "secret plan".', {
+        logMessage: "Notion rejected the request (400 validation_error)",
+      });
+    }
     if (mode === "error-result") return { content: [{ type: "text" as const, text: "quoted page content" }], isError: true };
     if (mode === "crash") throw new Error("database path /secret/app.db is locked");
     return "done";
@@ -51,7 +56,6 @@ function serverDeps(store: ToolCallStore, extra: Partial<McpServerDeps> = {}) {
   const errors: ErrorEntry[] = [];
   const deps: McpServerDeps = {
     tools: [echo],
-    resolveAccess: async () => access,
     log: (entry) => logs.push(entry),
     record: (entry) => store.record(entry),
     logError: (entry) => errors.push(entry),
@@ -64,25 +68,33 @@ describe("tool call recording", () => {
   test("successes, failures and crashes are stored without arguments or tool output", async () => {
     const { store, rows } = newStore();
     const { deps, logs, errors } = serverDeps(store);
-    for (const mode of ["ok", "tool-error", "error-result", "crash"] as const) await runTool(echo, { mode }, principal, deps);
+    const results = [];
+    for (const mode of ["ok", "tool-error", "upstream-error", "error-result", "crash"] as const) {
+      results.push(await runTool(echo, { mode }, principal, deps));
+    }
 
     expect(rows().map((row) => [row.discordUserId, row.tool, row.ok, row.errorKind, row.error])).toEqual([
       [USER, "test_echo", true, null, null],
       [USER, "test_echo", false, "error", "Channel not found or not accessible."],
+      [USER, "test_echo", false, "error", "Notion rejected the request (400 validation_error)"],
       [USER, "test_echo", false, "error", TOOL_RESULT_ERROR],
       [USER, "test_echo", false, "error", TOOL_CRASH_ERROR],
     ]);
+    // The caller still gets Notion's explanation.
+    expect(results[2]).toMatchObject({ isError: true, content: [{ text: expect.stringContaining("secret plan") }] });
     expect(rows().every((row) => row.durationMs >= 0 && row.createdAt instanceof Date)).toBe(true);
     expect(Object.keys(rows()[0]!).sort()).toEqual(["createdAt", "discordUserId", "durationMs", "error", "errorKind", "id", "ok", "tool"]);
     // The stdout JSON line carries the same fixed strings; crash details go to the error log only.
     expect(logs.map((entry) => [entry.event, entry.ok, entry.errorKind, entry.error])).toEqual([
       ["tool_call", true, undefined, undefined],
       ["tool_call", false, "error", "Channel not found or not accessible."],
+      ["tool_call", false, "error", "Notion rejected the request (400 validation_error)"],
       ["tool_call", false, "error", TOOL_RESULT_ERROR],
       ["tool_call", false, "error", TOOL_CRASH_ERROR],
     ]);
     expect(errors).toEqual([{ event: "tool_crash", tool: "test_echo", error: "database path /secret/app.db is locked" }]);
     expect(JSON.stringify([rows(), logs])).not.toContain("quoted page content");
+    expect(JSON.stringify([rows(), logs])).not.toContain("secret plan");
   });
 
   test("long error messages are truncated", () => {
