@@ -2,7 +2,7 @@ import { ADMINISTRATOR, computeBasePermissions, hasPermission } from "../discord
 import type { GuildInfo, MemberInfo } from "../discord/types";
 import type { GuildDirectory } from "../discord/directory";
 import type { GrantLookup } from "./grants";
-import { PERMISSIONS, type Permission } from "./permissions";
+import { PERMISSIONS, withIncluded, type Permission } from "./permissions";
 
 /**
  * What a Discord user may do. Admins hold every permission, so callers check
@@ -34,7 +34,7 @@ export class PermissionResolver {
       return { isMember: true, discordUserId, guild, member, permissions: new Set(PERMISSIONS), isAdmin: true };
     }
     const roleIds = [...new Set([guild.id, ...member.roles])];
-    const granted = await this.grants.permissionsFor(discordUserId, roleIds);
+    const granted = withIncluded(await this.grants.permissionsFor(discordUserId, roleIds));
     if (granted.has("admin")) {
       return { isMember: true, discordUserId, guild, member, permissions: new Set(PERMISSIONS), isAdmin: true };
     }

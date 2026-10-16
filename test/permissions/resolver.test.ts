@@ -93,6 +93,12 @@ describe("PermissionResolver", () => {
     expect([...(await resolver.resolve(USER)).permissions].sort()).toEqual(["discord:read", "notion:read"]);
   });
 
+  test("Notion write includes Notion read", async () => {
+    await grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    api.members.set(USER, makeMember(USER, [ROLE_MOD]));
+    expect([...(await resolver.resolve(USER)).permissions].sort()).toEqual(["notion:read", "notion:write"]);
+  });
+
   test("an explicit admin grant implies every permission", async () => {
     await grants.createGrant({ permission: "admin", subjectType: "user", subjectId: USER });
     api.members.set(USER, makeMember(USER));

@@ -315,12 +315,32 @@ describe("grants", () => {
     expect((await grantsPage(deps, params())).rows.some((row) => row.redundancy)).toBe(false);
   });
 
+  test("a Notion read grant is flagged when Notion write already gives it", async () => {
+    await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER });
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
+    expect((await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []))).toEqual([
+      {
+        label: "Notion 書き込みに含まれる",
+        tone: "warn",
+        title: "この権限は Notion 書き込み の権限に含まれるため、この個人付与は効果がありません",
+      },
+    ]);
+
+    await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    expect((await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy.label] : []))).toEqual([
+      "@Moderator で付与済み",
+    ]);
+    await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER });
+  });
+
   test("member search lists matches; a preselected user labels the submit button", async () => {
     const search = await grantsPage(deps, params("q=min&permission=notion%3Awrite"));
     expect(search.form).toMatchObject({ permission: "notion:write", subjectType: "user", query: "min" });
     expect(search.form?.candidates.map((candidate) => candidate.id)).toContain(MEMBER);
     expect(search.form?.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
-      "ページの作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
+      "Notion 読み取りに加えて、ページの作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
     );
 
     const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`));

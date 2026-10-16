@@ -116,12 +116,20 @@ function userSubject(guild: GuildInfo, user: UserSubject | null, fallbackId: str
 }
 
 function redundancyBadge(redundancy: Redundancy): BadgeView {
-  const role = redundancy.kind === "role" ? roleHandle(redundancy.role.name) : null;
-  return {
-    label: role ? m.grants_redundant_role({ role }) : m.grants_redundant_admin(),
-    tone: "warn",
-    title: role ? m.grants_redundant_role_title({ role }) : m.grants_redundant_admin_title(),
-  };
+  switch (redundancy.kind) {
+    case "role": {
+      const role = roleHandle(redundancy.role.name);
+      return { label: m.grants_redundant_role({ role }), tone: "warn", title: m.grants_redundant_role_title({ role }) };
+    }
+    case "admin":
+      return { label: m.grants_redundant_admin(), tone: "warn", title: m.grants_redundant_admin_title() };
+    case "included": {
+      const permission = PERMISSION_LABELS[redundancy.by];
+      return { label: m.grants_redundant_included({ permission }), tone: "warn", title: m.grants_redundant_included_title({ permission }) };
+    }
+    default:
+      throw new Error(`Unknown redundancy: ${redundancy satisfies never}`);
+  }
 }
 
 function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {

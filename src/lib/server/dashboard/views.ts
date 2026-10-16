@@ -1,13 +1,13 @@
 import type { LoginUser } from "../auth/users";
-import { PERMISSIONS, type Permission } from "../permissions/permissions";
+import { givesPermission, PERMISSIONS, type Permission } from "../permissions/permissions";
 import { isGuildAdmin, type EffectiveAccess } from "../permissions/resolver";
 import type { GrantRow } from "../db/schema";
 import type { GuildInfo, RoleInfo } from "../discord/types";
 import { displayName } from "../lib/display-name";
 import { administratorRoles, heldRoles, type UserSubject } from "./subjects";
 
-/** Why an individual grant has no effect: a role of the user, or admin status, already provides it. */
-export type Redundancy = { kind: "role"; role: RoleInfo } | { kind: "admin" };
+/** Why an individual grant has no effect: a role of the user, admin status, or a broader grant of their own already provides it. */
+export type Redundancy = { kind: "role"; role: RoleInfo } | { kind: "admin" } | { kind: "included"; by: Permission };
 
 export type GrantRowView =
   | { kind: "admin-role"; permission: "admin"; role: RoleInfo }
@@ -35,15 +35,20 @@ function redundancyOf(guild: GuildInfo, grants: readonly GrantRow[], grant: Gran
   const providing = new Set(
     grants
       .filter((other) => other.subjectType === "role" && roleIds.has(other.subjectId))
-      .filter((other) => other.permission === grant.permission || other.permission === "admin")
+      .filter((other) => givesPermission(other.permission, grant.permission))
       .map((other) => other.subjectId),
   );
   const role = guild.roles.filter((candidate) => providing.has(candidate.id)).sort((a, b) => b.position - a.position)[0];
   if (role) return { kind: "role", role };
-  const individualAdmin = grants.some(
-    (other) => other.subjectType === "user" && other.subjectId === grant.subjectId && other.permission === "admin",
+  const broader = grants.find(
+    (other) =>
+      other.subjectType === "user" &&
+      other.subjectId === grant.subjectId &&
+      other.permission !== grant.permission &&
+      givesPermission(other.permission, grant.permission),
   );
-  return grant.permission !== "admin" && individualAdmin ? { kind: "admin" } : null;
+  if (!broader) return null;
+  return broader.permission === "admin" ? { kind: "admin" } : { kind: "included", by: broader.permission };
 }
 
 /** Implicit admins (ADMINISTRATOR roles, the owner) first, then grants: roles before users, by permission and name. */
