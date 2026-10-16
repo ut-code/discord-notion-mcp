@@ -2,7 +2,7 @@ import type { Database } from "bun:sqlite";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { mcp } from "@better-auth/mcp";
-import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { betterAuth, type Auth as BetterAuth, type BetterAuthOptions } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { getMigrations } from "better-auth/db/migration";
 import { jwt } from "better-auth/plugins";
@@ -86,6 +86,8 @@ function authOptions({ config, sqlite, isGuildMember, logEvent: reportEvent = lo
         resource: config.mcpResource,
         loginPage: SIGN_IN_PATH,
         consentPage: CONSENT_PATH,
+        // MCP clients register themselves. The provider limits /oauth2/register to 5 a minute per
+        // IP by default, and clients that never complete a sign-in are pruned (client-cleanup.ts).
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         // Lets the sign-in page name the client before a session exists (signed oauth_query required).
@@ -94,6 +96,7 @@ function authOptions({ config, sqlite, isGuildMember, logEvent: reportEvent = lo
         refreshTokenExpiresIn: REFRESH_TOKEN_TTL_SECONDS,
         postLogin: {
           page: NOT_MEMBER_PATH,
+          // Consents belong to the user alone: there is no organization or team to scope them to.
           consentReferenceId: () => undefined,
           shouldRedirect: async ({ user }) => {
             try {
@@ -113,11 +116,7 @@ function authOptions({ config, sqlite, isGuildMember, logEvent: reportEvent = lo
   } satisfies BetterAuthOptions;
 }
 
-function instantiate(options: ReturnType<typeof authOptions>) {
-  return betterAuth(options);
-}
-
-export type Auth = ReturnType<typeof instantiate>;
+export type Auth = BetterAuth<ReturnType<typeof authOptions>>;
 
 /**
  * Creates or updates Better Auth's own tables first (so the container self-migrates
@@ -127,5 +126,5 @@ export async function createAuth(deps: AuthDeps): Promise<Auth> {
   const options = authOptions(deps);
   const { runMigrations } = await getMigrations(options);
   await runMigrations();
-  return instantiate(options);
+  return betterAuth(options);
 }
