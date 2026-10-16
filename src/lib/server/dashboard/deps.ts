@@ -9,7 +9,7 @@ import type { GrantStore } from "../permissions/grants";
 import type { Permission } from "../permissions/permissions";
 import type { PermissionResolver } from "../permissions/resolver";
 import type { UsageStats } from "../usage/usage-stats";
-import type { MemberSearch } from "./member-search";
+import type { MemberRoster } from "./member-roster";
 import type { SubjectResolver } from "./subjects";
 
 /** Everything the browser-facing pages (dashboard, sign-in, consent) read or change. */
@@ -22,8 +22,8 @@ export interface DashboardDeps {
   /** Cached guild/member lookups. */
   directory: GuildDirectory;
   subjects: SubjectResolver;
-  /** Grant form member search (briefly cached). */
-  memberSearch: Pick<MemberSearch, "search">;
+  /** The guild's members for the grant form (briefly cached). */
+  members: Pick<MemberRoster, "roster" | "search">;
   grants: GrantStore;
   users: LoginUserStore;
   audit: NotionAuditService;

@@ -104,7 +104,7 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
     permissions: permissionBadges(row),
     lastLogin: formatShortJst(row.user.lastLoginAt),
     revoked: wasRevokedSinceLogin(row.user) ? m.users_revoked_at({ time: formatShortJst(row.user.revokedAt) }) : null,
-    grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
+    grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subject=${encodeURIComponent(`user:${discordUserId}`)}` : null,
     // Non-admin writers only have their own history.
     auditHref: !discordUserId
       ? null

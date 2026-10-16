@@ -4,7 +4,7 @@ import { auditDetail, auditList, revertAudit } from "../../src/lib/server/dashbo
 import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
 import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
 import { requireAdminViewer } from "../../src/lib/server/dashboard/guard";
-import { MemberSearch } from "../../src/lib/server/dashboard/member-search";
+import { MemberRoster } from "../../src/lib/server/dashboard/member-roster";
 import {
   consentPage,
   metadataHost,
@@ -188,8 +188,8 @@ describe("grants", () => {
   test("the form knows before granting what is already granted and what would add nothing, and why", async () => {
     await h.server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
     await h.server.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER });
-    const page = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}`));
-    expect(page.form.candidates.find((candidate) => candidate.id === MEMBER)).toMatchObject({
+    const page = await grantsPage(deps, params());
+    expect(page.form.members.find((member) => member.id === MEMBER)).toMatchObject({
       granted: ["discord:read"],
       notices: {
         "notion:read": "@Moderator ロールで既に付与されているため、付与しても効果がありません。",
@@ -200,8 +200,7 @@ describe("grants", () => {
       granted: ["notion:write"],
       notices: { "notion:read": "Notion 編集に含まれるため、付与しても効果がありません。" },
     });
-    const admin = await grantsPage(deps, params(`subjectType=user&userId=${ADMIN_MEMBER}`));
-    expect(admin.form.candidates.find((candidate) => candidate.id === ADMIN_MEMBER)?.notices["discord:read"]).toBe(
+    expect(page.form.members.find((member) => member.id === ADMIN_MEMBER)?.notices["discord:read"]).toBe(
       "管理者の権限があるため、付与しても効果がありません。",
     );
     expect((await memberSearchResult(deps, "mi", owner)).body).toMatchObject({ members: [{ id: MEMBER, granted: ["discord:read"] }] });
@@ -247,23 +246,20 @@ describe("grants", () => {
     expect(await deleteGrant(deps, form(fields), owner)).toMatchObject({ kind: "warn", message: "この付与は既に削除されています。" });
   });
 
-  test("the grant form sends roleId or userId depending on the target", async () => {
-    const byRole = await createGrant(
-      deps,
-      form({ permission: "notion:read", subjectType: "role", roleId: ROLE_MOD, userId: MEMBER }),
-      owner,
-    );
+  test("the grant form sends the subject as role:<id> or user:<id>", async () => {
+    const byRole = await createGrant(deps, form({ permission: "notion:read", subject: `role:${ROLE_MOD}` }), owner);
     expect(byRole.message).toBe("ロール「Moderator」に「Notion 閲覧」を付与しました。");
-    const byUser = await createGrant(
-      deps,
-      form({ permission: "notion:read", subjectType: "user", roleId: ROLE_MOD, userId: READER }),
-      owner,
-    );
+    const byUser = await createGrant(deps, form({ permission: "notion:read", subject: `user:${READER}` }), owner);
     expect(byUser.message).toBe("ユーザー「Reader」に「Notion 閲覧」を付与しました。");
-    expect(await createGrant(deps, form({ permission: "notion:read", subjectType: "user", roleId: ROLE_MOD }), owner)).toEqual({
-      kind: "error",
-      message: "ユーザーを選んでください。",
-    });
+    for (const subject of [undefined, "user:"]) {
+      expect(await createGrant(deps, form({ permission: "notion:read", ...(subject ? { subject } : {}) }), owner)).toEqual({
+        kind: "error",
+        message: "対象を選んでください。",
+      });
+    }
+    expect((await createGrant(deps, form({ permission: "notion:read", subject: `team:${MEMBER}` }), owner)).message).toBe(
+      "対象の種類が不正です。",
+    );
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD });
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
   });
@@ -299,7 +295,7 @@ describe("grants", () => {
     expect(subjects).toContainEqual(expect.objectContaining({ name: "Stranger", secondary: "@stranger · 非メンバー" }));
     expect(subjects).toContainEqual(expect.objectContaining({ name: "399999999999999999", secondary: "不明なユーザー", unknown: true }));
     expect(data.rows.find((row) => row.subject.name === "Mina")?.remove?.label).toBe("Mina の Notion 閲覧を削除");
-    expect(data.form?.roles.map((role) => role.name)).toEqual(["Staff", "Moderator", "@everyone"]);
+    expect(data.form?.roles.map((role) => role.label)).toEqual(["@Staff", "@Moderator", "@everyone"]);
   });
 
   test("implicit admins are listed as locked rows under すべて and 管理者", async () => {
@@ -360,39 +356,61 @@ describe("grants", () => {
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: MEMBER });
   });
 
-  test("member search lists matches; a preselected user labels the submit button", async () => {
-    const search = await grantsPage(deps, params("q=min&permission=notion%3Awrite"));
-    expect(search.form).toMatchObject({ permission: "notion:write", subjectType: "user", query: "min" });
-    expect(search.form?.candidates.map((candidate) => candidate.id)).toContain(MEMBER);
-    expect(search.form?.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
-      "ページの閲覧に加えて、作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
-    );
-
-    const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`));
-    expect(preselected.form?.selectedUserId).toBe(MEMBER);
-    expect(preselected.form?.candidates[0]?.id).toBe(MEMBER);
-    expect(preselected.form?.submitLabel).toBe("Mina に Notion 編集を付与");
-
-    expect((await grantsPage(deps, params(`q=${STRANGER}`))).form?.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
-    expect((await grantsPage(deps, params("q=zzz"))).form?.candidates).toEqual([]);
+  test("the form lists every role and the members by name; a search and a chosen subject come from the URL", async () => {
     const plain = await grantsPage(deps, params());
-    expect(plain.form).toMatchObject({ subjectType: "role", roleId: ROLE_ADMIN, submitLabel: "@Staff に Discord 閲覧を付与" });
-    expect(plain.form?.roles.find((role) => role.id === ROLE_MOD)).toEqual({
+    expect(plain.form).toMatchObject({ query: "", results: [], selected: null, moreMembers: 0, submitLabel: "付与する" });
+    expect(plain.form.roles.find((role) => role.id === ROLE_MOD)).toEqual({
+      key: `role:${ROLE_MOD}`,
+      type: "role",
       id: ROLE_MOD,
-      name: "Moderator",
-      handle: "@Moderator",
+      label: "@Moderator",
+      secondLine: null,
       color: "#3498db",
+      avatarUrl: null,
       granted: [],
       notices: {},
     });
+    const labels = plain.form.members.map((member) => member.label);
+    expect(labels).toEqual([...labels].sort(new Intl.Collator("ja").compare));
+    expect(labels).toContain("Mina");
+
+    const search = await grantsPage(deps, params("q=ina&permission=notion%3Awrite"));
+    expect(search.form).toMatchObject({ permission: "notion:write", query: "ina" });
+    expect(search.form.results.map((member) => member.id)).toEqual([MEMBER]);
+    expect(search.form.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
+      "ページの閲覧に加えて、作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
+    );
+    expect((await grantsPage(deps, params(`q=${STRANGER}`))).form.results.map((member) => member.id)).toEqual([STRANGER]);
+    expect((await grantsPage(deps, params("q=zzz"))).form.results).toEqual([]);
+
+    const chosenUser = await grantsPage(deps, params(`subject=user%3A${MEMBER}&permission=notion%3Awrite`));
+    expect(chosenUser.form.selected).toMatchObject({ key: `user:${MEMBER}`, label: "Mina" });
+    expect(chosenUser.form.submitLabel).toBe("Mina に Notion 編集を付与");
+    expect((await grantsPage(deps, params(`subject=role%3A${ROLE_MOD}`))).form.submitLabel).toBe("@Moderator に Discord 閲覧を付与");
+    expect((await grantsPage(deps, params("subject=role%3A12ab"))).form.selected).toBeNull();
   });
 
-  test("the inline member search returns candidates for admins and validates the query", async () => {
-    expect(await memberSearchResult(deps, "mi", owner)).toEqual({
+  test("the member search matches any part of a name and validates the query; admins only", async () => {
+    expect(await memberSearchResult(deps, "in", owner)).toEqual({
       status: 200,
-      body: { members: [{ id: MEMBER, name: "Mina", secondLine: "@mina · Moderator", avatarUrl: null, granted: [], notices: {} }] },
+      body: {
+        members: [
+          {
+            key: `user:${MEMBER}`,
+            type: "user",
+            id: MEMBER,
+            label: "Mina",
+            secondLine: "@mina · Moderator",
+            color: null,
+            avatarUrl: null,
+            granted: [],
+            notices: {},
+          },
+        ],
+      },
     });
-    expect((await memberSearchResult(deps, `@${STRANGER}`, owner)).body).toMatchObject({ members: [{ id: STRANGER, name: "Stranger" }] });
+    expect((await memberSearchResult(deps, "ＥＡＤ", owner)).body).toMatchObject({ members: [{ id: READER }] });
+    expect((await memberSearchResult(deps, `@${STRANGER}`, owner)).body).toMatchObject({ members: [{ id: STRANGER, label: "Stranger" }] });
     expect(await memberSearchResult(deps, "zzz", owner)).toEqual({ status: 200, body: { members: [] } });
     for (const query of [null, "", "   ", "x".repeat(101)]) {
       expect(await memberSearchResult(deps, query, owner)).toEqual({
@@ -403,7 +421,7 @@ describe("grants", () => {
     expect((await memberSearchResult(deps, ` ${"x".repeat(100)} `, owner)).status).toBe(200);
 
     let searched = false;
-    const spied = { ...deps, memberSearch: { search: async () => ((searched = true), []) } };
+    const spied = { ...deps, members: { ...deps.members, search: async () => ((searched = true), []) } };
     expect(await memberSearchResult(spied, "mi", await viewerFor(MEMBER))).toEqual({
       status: 403,
       body: { error: "この操作は管理者だけが行えます。" },
@@ -411,34 +429,58 @@ describe("grants", () => {
     expect(searched).toBe(false);
   });
 
-  test("member search results are cached briefly per normalized query; failures are not", async () => {
-    let now = 0;
-    const queries: string[] = [];
+  const listedMembers = (count: number) =>
+    Array.from({ length: count }, (_, index) => {
+      const id = String(400000000000000000n + BigInt(index));
+      return { ...makeMember(id), username: `member${String(index).padStart(5, "0")}` };
+    });
+
+  test("the member roster is listed page by page without bots and cached for a minute; failures are not cached", async () => {
+    const discord = new FakeDiscordApi();
+    for (const member of listedMembers(1001)) discord.members.set(member.userId, member);
+    discord.members.set("499999999999999999", { ...makeMember("499999999999999999"), username: "a-bot" });
+    discord.bots.add("499999999999999999");
+    const pages: Array<string | undefined> = [];
     let failing = false;
-    const discord = {
-      searchMembers: async (query: string, limit: number) => {
-        queries.push(query);
-        if (failing) throw new Error("discord down");
-        return [makeMember(MEMBER, [ROLE_MOD])].slice(0, limit);
-      },
+    const listMembers = discord.listMembers.bind(discord);
+    discord.listMembers = async (limit, after) => {
+      pages.push(after);
+      if (failing) throw new Error("discord down");
+      return listMembers(limit, after);
     };
-    const search = new MemberSearch(discord, deps.subjects, () => now);
-    const cached = { ...deps, memberSearch: search, logError: () => {} };
+    let now = 0;
+    const roster = new MemberRoster(discord, deps.subjects, () => now);
 
-    for (const query of ["ta", " Ta ", "@ta"]) expect((await memberSearchResult(cached, query, owner)).status).toBe(200);
-    expect(queries).toEqual(["ta"]);
-    await Promise.all([search.search("tan"), search.search("TAN")]);
-    expect(queries).toEqual(["ta", "tan"]);
+    const [first] = await Promise.all([roster.roster(), roster.roster()]);
+    expect(first).toMatchObject({ complete: true });
+    expect(first.members).toHaveLength(1001);
+    expect(first.members.some((member) => member.username === "a-bot")).toBe(false);
+    expect(pages).toEqual([undefined, "400000000000000999"]);
+    await roster.search("member0", 5);
+    expect(pages).toHaveLength(2);
 
-    now = 30_000;
+    now = 60_000;
     failing = true;
-    expect(await memberSearchResult(cached, "ta", owner)).toEqual({
+    const failingDeps = { ...deps, members: roster, logError: () => {} };
+    expect(await memberSearchResult(failingDeps, "member", owner)).toEqual({
       status: 502,
       body: { error: "メンバー検索に失敗しました。しばらくしてから再試行してください。" },
     });
+    expect((await grantsPage(failingDeps, params())).form).toMatchObject({
+      members: [],
+      membersError: "メンバーを取得できませんでした。しばらくしてから再読み込みしてください。",
+    });
     failing = false;
-    expect((await memberSearchResult(cached, "ta", owner)).status).toBe(200);
-    expect(queries).toEqual(["ta", "tan", "ta", "ta"]);
+    expect((await memberSearchResult(failingDeps, "member01000", owner)).body).toMatchObject({ members: [{ id: "400000000000001000" }] });
+  });
+
+  test("a guild too large to list is searched by name prefix on Discord as well", async () => {
+    const discord = new FakeDiscordApi();
+    for (const member of listedMembers(10_001)) discord.members.set(member.userId, member);
+    const roster = new MemberRoster(discord, deps.subjects);
+    expect(await roster.roster()).toMatchObject({ complete: false });
+    expect((await roster.roster()).members).toHaveLength(10_000);
+    expect((await roster.search("member10000", 5)).map((member) => member.id)).toEqual(["400000000000010000"]);
   });
 });
 
@@ -675,7 +717,7 @@ describe("users", () => {
   test("row menu links grant and audit pages of the Discord account", async () => {
     const member = await signIn(h, MEMBER);
     const row = await userRow(member.userId);
-    expect(row.grantHref).toBe(`/dashboard/grants?subjectType=user&userId=${MEMBER}`);
+    expect(row.grantHref).toBe(`/dashboard/grants?subject=user%3A${MEMBER}`);
     expect(row.auditHref).toBe(`/dashboard/audit?user=${MEMBER}`);
   });
 

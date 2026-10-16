@@ -18,7 +18,7 @@ import {
 } from "discord-api-types/v10";
 import type { GuildDirectory } from "./directory";
 import { memberAvatarUrl, userAvatarUrl } from "./avatar";
-import type { GuildInfo, MemberInfo, UserInfo } from "./types";
+import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "./types";
 
 /** A non-thread guild channel as returned by GET /guilds/{id}/channels. */
 export type GuildChannel = APIGuildChannel & { position?: number; topic?: string | null };
@@ -61,6 +61,8 @@ export interface DiscordApi extends GuildDirectory {
   searchMessages(query: RESTGetAPIGuildMessagesSearchQuery): Promise<MessageSearchResponse>;
   /** Guild members whose username or nickname starts with the query. */
   searchMembers(query: string, limit: number): Promise<MemberInfo[]>;
+  /** A page of guild members by ascending user id, after the `after` id; needs the Server Members intent. */
+  listMembers(limit: number, after?: string): Promise<ListedMember[]>;
   /** Returns null when the user does not exist. */
   fetchUser(userId: string): Promise<UserInfo | null>;
 }
@@ -205,6 +207,13 @@ export class RestDiscordApi implements DiscordApi {
       query: makeURLSearchParams({ query, limit }),
     });
     return members.map((member) => toMemberInfo(member, this.guildId));
+  }
+
+  async listMembers(limit: number, after?: string): Promise<ListedMember[]> {
+    const members = await this.get<APIGuildMember[]>(Routes.guildMembers(this.guildId), {
+      query: makeURLSearchParams({ limit, after }),
+    });
+    return members.map((member) => ({ ...toMemberInfo(member, this.guildId), bot: member.user.bot ?? false }));
   }
 
   async fetchUser(userId: string): Promise<UserInfo | null> {

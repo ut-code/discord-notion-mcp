@@ -44,7 +44,7 @@ export type ErrorEntry =
   | { event: "access_resolution_failed"; source: "mcp" | "dashboard" | "consent"; discordUserId: string; error: string }
   | { event: "membership_check_failed"; error: string }
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }
-  | { event: "admin_lookup_failed"; lookup: "member_search"; error: string }
+  | { event: "admin_lookup_failed"; lookup: "member_list" | "member_search"; error: string }
   | { event: "admin_lookup_failed"; lookup: "avatar"; userId: string; error: string }
   | { event: "sign_out_failed"; error: string }
   | { event: "sign_in_lookup_failed"; lookup: "guild" | "client"; error: string }

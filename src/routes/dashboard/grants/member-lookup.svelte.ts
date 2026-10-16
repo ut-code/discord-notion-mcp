@@ -1,16 +1,21 @@
 import { isRecord } from "$lib/guards";
 import { m } from "$lib/paraglide/messages.js";
-import type { CandidateView } from "$lib/server/dashboard/grants";
+import type { SubjectOption } from "$lib/server/dashboard/grants";
 
 const DEBOUNCE_MS = 250;
 
-function isCandidate(value: unknown): value is CandidateView {
+const isNullableString = (value: unknown) => value === null || typeof value === "string";
+
+function isMemberOption(value: unknown): value is SubjectOption {
   return (
     isRecord(value) &&
+    value.type === "user" &&
+    typeof value.key === "string" &&
     typeof value.id === "string" &&
-    typeof value.name === "string" &&
-    typeof value.secondLine === "string" &&
-    (value.avatarUrl === null || typeof value.avatarUrl === "string") &&
+    typeof value.label === "string" &&
+    isNullableString(value.secondLine) &&
+    isNullableString(value.color) &&
+    isNullableString(value.avatarUrl) &&
     Array.isArray(value.granted) &&
     value.granted.every((permission) => typeof permission === "string") &&
     isRecord(value.notices) &&
@@ -19,10 +24,10 @@ function isCandidate(value: unknown): value is CandidateView {
 }
 
 /** The endpoint's JSON; a malformed member list counts as a failed search. */
-function parseBody(body: unknown): { members?: CandidateView[]; error?: string } {
+function parseBody(body: unknown): { members?: SubjectOption[]; error?: string } {
   if (!isRecord(body)) return {};
   return {
-    members: Array.isArray(body.members) && body.members.every(isCandidate) ? body.members : undefined,
+    members: Array.isArray(body.members) && body.members.every(isMemberOption) ? body.members : undefined,
     error: typeof body.error === "string" ? body.error : undefined,
   };
 }
@@ -33,12 +38,12 @@ function parseBody(body: unknown): { members?: CandidateView[]; error?: string }
  */
 export class MemberLookup {
   /** Results of the latest settled query; kept while the next one loads. */
-  members = $state<CandidateView[]>([]);
+  members = $state<SubjectOption[]>([]);
   loading = $state(false);
   error = $state<string | null>(null);
 
   // eslint-disable-next-line svelte/prefer-svelte-reactivity -- a memo read in methods, never rendered
-  private readonly cache = new Map<string, CandidateView[]>();
+  private readonly cache = new Map<string, SubjectOption[]>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private controller: AbortController | null = null;
   /** The query on screen; null after a failure so typing the same query again retries it. */

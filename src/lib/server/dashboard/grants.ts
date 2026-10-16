@@ -1,4 +1,5 @@
 import { grantSubmitLabel } from "../../grant-label";
+import { MAX_QUERY_LENGTH } from "../../name-match";
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import { isPermission, PERMISSIONS, type Permission, type SubjectType } from "../permissions/permissions";
@@ -15,7 +16,9 @@ import { buildGrantRows, redundancyOf, type GrantRowView, type Redundancy } from
 import type { GrantRow } from "../db/schema";
 
 export const GRANTS_PATH = `${DASHBOARD_PATH}/grants`;
-export const MEMBER_QUERY_MAX_LENGTH = 100;
+/** Members listed before searching; the list is server-rendered, so it stays short enough to send. */
+const MEMBER_LIST_LIMIT = 200;
+const MEMBER_SEARCH_LIMIT = 50;
 
 export interface SubjectView {
   kind: "role" | "user";
@@ -53,25 +56,36 @@ export interface GrantState {
   notices: GrantNotices;
 }
 
-export interface CandidateView extends GrantState {
+/** A role or member the grant form offers. */
+export interface SubjectOption extends GrantState {
+  /** The form value: `role:<id>` or `user:<id>`. */
+  key: string;
+  type: SubjectType;
   id: string;
-  name: string;
-  secondLine: string;
+  /** The @role handle or the member's display name. */
+  label: string;
+  /** Members: @username and roles. */
+  secondLine: string | null;
+  color: string | null;
   avatarUrl: string | null;
 }
 
 export interface GrantFormView {
   permissions: Array<{ value: Permission; label: string; hint: string }>;
   permission: Permission;
-  subjectType: SubjectType;
-  roles: Array<GrantState & { id: string; name: string; handle: string; color: string | null }>;
-  roleId: string;
-  preselectedRoleId: string | null;
+  /** Every grantable role, highest first. */
+  roles: SubjectOption[];
+  /** Members by name, the first MEMBER_LIST_LIMIT. */
+  members: SubjectOption[];
+  /** Members left out of `members`; searching finds them. */
+  moreMembers: number;
+  /** The search the page was opened with: without JavaScript the form searches by reloading. */
   query: string;
-  /** Search results, with a preselected user first. */
-  candidates: CandidateView[];
-  selectedUserId: string | null;
-  searchError: string | null;
+  /** Members matching `query`. */
+  results: SubjectOption[];
+  selected: SubjectOption | null;
+  /** Why members are missing from the list or the results. */
+  membersError: string | null;
   submitLabel: string;
 }
 
@@ -195,14 +209,25 @@ function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
   };
 }
 
-async function searchCandidates(deps: DashboardDeps, query: string): Promise<{ candidates: UserSubject[]; error: string | null }> {
+type MemberList = { members: UserSubject[]; error: string | null };
+
+/** The guild's members, or the error to show instead. */
+async function loadMembers(
+  deps: DashboardDeps,
+  load: () => Promise<UserSubject[]>,
+  lookup: "member_list" | "member_search",
+): Promise<MemberList> {
   try {
-    return { candidates: await deps.memberSearch.search(query), error: null };
+    return { members: await load(), error: null };
   } catch (error) {
-    deps.logError({ event: "admin_lookup_failed", lookup: "member_search", error: errorMessage(error) });
-    return { candidates: [], error: m.grants_member_search_failed_retry() };
+    deps.logError({ event: "admin_lookup_failed", lookup, error: errorMessage(error) });
+    return { members: [], error: lookup === "member_list" ? m.grants_member_list_failed() : m.grants_member_search_failed_retry() };
   }
 }
+
+const listMembers = (deps: DashboardDeps) => loadMembers(deps, async () => (await deps.members.roster()).members, "member_list");
+const searchMembers = (deps: DashboardDeps, query: string) =>
+  loadMembers(deps, () => deps.members.search(query, MEMBER_SEARCH_LIMIT), "member_search");
 
 function grantState(
   guild: GuildInfo,
@@ -221,43 +246,66 @@ function grantState(
   return { granted, notices };
 }
 
-function candidateView(guild: GuildInfo, grants: readonly GrantRow[], user: UserSubject): CandidateView {
+function roleOption(guild: GuildInfo, grants: readonly GrantRow[], role: RoleInfo): SubjectOption {
   return {
+    key: `role:${role.id}`,
+    type: "role",
+    id: role.id,
+    label: roleHandle(role.name),
+    secondLine: null,
+    color: roleColor(role.color) ?? null,
+    avatarUrl: null,
+    ...grantState(guild, grants, { type: "role", id: role.id, user: null }),
+  };
+}
+
+function memberOption(guild: GuildInfo, grants: readonly GrantRow[], user: UserSubject): SubjectOption {
+  return {
+    key: `user:${user.id}`,
+    type: "user",
     id: user.id,
-    name: user.displayName ?? user.id,
+    label: user.displayName ?? user.id,
     secondLine: userSecondLine(guild, user),
+    color: null,
     avatarUrl: user.avatarUrl,
     ...grantState(guild, grants, { type: "user", id: user.id, user }),
   };
 }
 
-export type MemberSearchResult = { status: 200; body: { members: CandidateView[] } } | { status: 400 | 403 | 502; body: { error: string } };
+/** `role:<id>` or `user:<id>`, as the grant form sends it. */
+function parseSubjectKey(value: string): { type: SubjectType; id: string } | null {
+  const [type, id] = value.split(":", 2);
+  return (type === "role" || type === "user") && id && isSnowflake(id) ? { type, id } : null;
+}
 
-/** JSON member search behind the grant form's inline picker (`GET members?q=`); admins only. */
+export type MemberSearchResult = { status: 200; body: { members: SubjectOption[] } } | { status: 400 | 403 | 502; body: { error: string } };
+
+/** JSON member search behind the grant form (`GET members?q=`); admins only. */
 export async function memberSearchResult(deps: DashboardDeps, rawQuery: string | null, viewer: Viewer): Promise<MemberSearchResult> {
   if (!viewer.isAdmin) return { status: 403, body: { error: ADMIN_ONLY.message ?? "" } };
   const query = rawQuery?.trim() ?? "";
-  if (query.length < 1 || query.length > MEMBER_QUERY_MAX_LENGTH) {
-    return { status: 400, body: { error: m.grants_member_query_length({ max: MEMBER_QUERY_MAX_LENGTH }) } };
+  if (query.length < 1 || query.length > MAX_QUERY_LENGTH) {
+    return { status: 400, body: { error: m.grants_member_query_length({ max: MAX_QUERY_LENGTH }) } };
   }
-  const [guild, grants, search] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants(), searchCandidates(deps, query)]);
+  const [guild, grants, search] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants(), searchMembers(deps, query)]);
   if (search.error) return { status: 502, body: { error: search.error } };
-  return { status: 200, body: { members: search.candidates.map((user) => candidateView(guild, grants, user)) } };
+  return { status: 200, body: { members: search.members.map((user) => memberOption(guild, grants, user)) } };
 }
 
-/** Admins only (the route checks). Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId`. */
+/** Admins only (the route checks). Query: `filter` (tab), and the grant form state `permission`, `subject`, `q`. */
 export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): Promise<GrantsPageData> {
   const [guild, grants] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants()]);
   const filterParam = params.get("filter") ?? "";
   const filter = isPermission(filterParam) ? filterParam : null;
-  const query = params.get("q")?.trim() ?? "";
-  const userParam = params.get("userId")?.trim() ?? "";
-  const selectedUserId = isSnowflake(userParam) ? userParam : null;
+  const query = params.get("q")?.trim().slice(0, MAX_QUERY_LENGTH) ?? "";
+  const selected = parseSubjectKey(params.get("subject") ?? "");
+  const selectedUserId = selected?.type === "user" ? selected.id : null;
 
   const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
-  const [users, search] = await Promise.all([
+  const [users, roster, search] = await Promise.all([
     deps.subjects.resolveUsers([...userIds, guild.ownerId, ...(selectedUserId ? [selectedUserId] : [])]),
-    query ? searchCandidates(deps, query) : Promise.resolve({ candidates: [], error: null }),
+    listMembers(deps),
+    query ? searchMembers(deps, query) : Promise.resolve({ members: [], error: null }),
   ]);
 
   const owner = users.get(guild.ownerId) ?? (await deps.subjects.resolveUser(guild.ownerId));
@@ -274,71 +322,63 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
       active: filter === value,
     })),
     rows,
-    form: grantForm(guild, params, filter, { grants, query, selectedUserId, users, search }),
+    form: grantForm(guild, params, filter, { grants, query, selected, users, roster, search }),
   };
 }
 
 interface FormLookups {
   grants: readonly GrantRow[];
   query: string;
-  selectedUserId: string | null;
+  selected: { type: SubjectType; id: string } | null;
   users: ReadonlyMap<string, UserSubject>;
-  search: { candidates: UserSubject[]; error: string | null };
+  roster: MemberList;
+  search: MemberList;
 }
 
 function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission | null, lookups: FormLookups): GrantFormView {
-  const { grants, query, selectedUserId, users, search } = lookups;
+  const { grants, query, users, roster, search } = lookups;
   const permissionParam = params.get("permission") ?? "";
-  const typeParam = params.get("subjectType");
-  const subjectType: SubjectType = typeParam === "role" || typeParam === "user" ? typeParam : query || selectedUserId ? "user" : "role";
-  const roles = grantableRoles(guild);
-  const roleParam = params.get("roleId") ?? "";
-  const selected = selectedUserId ? users.get(selectedUserId) : undefined;
-  const candidates =
-    selected?.displayName && !search.candidates.some((candidate) => candidate.id === selected.id)
-      ? [selected, ...search.candidates]
-      : search.candidates;
-
   const permission = isPermission(permissionParam) ? permissionParam : (filter ?? "discord:read");
-  const role = roles.find((candidate) => candidate.id === roleParam) ?? roles[0];
-  const candidateViews = candidates.map((user) => candidateView(guild, grants, user));
-  // Candidates always carry a resolved display name.
-  const selectedName = candidateViews.find((candidate) => candidate.id === selectedUserId)?.name ?? null;
-  const target = subjectType === "role" ? (role ? roleHandle(role.name) : null) : selectedName;
+  const roles = grantableRoles(guild).map((role) => roleOption(guild, grants, role));
+  const members = roster.members.slice(0, MEMBER_LIST_LIMIT).map((user) => memberOption(guild, grants, user));
+  const results = search.members.map((user) => memberOption(guild, grants, user));
+
+  let selected: SubjectOption | null = null;
+  if (lookups.selected?.type === "role") {
+    selected = roles.find((role) => role.id === lookups.selected?.id) ?? null;
+  } else if (lookups.selected) {
+    const user = users.get(lookups.selected.id);
+    selected = user?.displayName ? memberOption(guild, grants, user) : null;
+  }
 
   return {
     permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
     permission,
-    subjectType,
-    roles: roles.map((candidate) => ({
-      id: candidate.id,
-      name: candidate.name,
-      handle: roleHandle(candidate.name),
-      color: roleColor(candidate.color) ?? null,
-      ...grantState(guild, grants, { type: "role", id: candidate.id, user: null }),
-    })),
-    roleId: role?.id ?? "",
-    // Only an explicitly requested role preselects the picker; the no-JS select needs `roleId` regardless.
-    preselectedRoleId: roles.some((candidate) => candidate.id === roleParam) ? roleParam : null,
+    roles,
+    members,
+    moreMembers: roster.members.length - members.length,
     query,
-    candidates: candidateViews,
-    selectedUserId,
-    searchError: search.error,
-    submitLabel: grantSubmitLabel(PERMISSION_LABELS[permission], target),
+    results,
+    selected,
+    membersError: roster.error ?? search.error,
+    submitLabel: grantSubmitLabel(PERMISSION_LABELS[permission], selected?.label ?? null),
   };
 }
 
 type GrantForm = { permission: Permission; subjectType: SubjectType; subjectId: string; label: string; role?: RoleInfo };
 type ParsedGrantForm = { ok: true; form: GrantForm } | { ok: false; message: string };
 
-/** `subjectId` is sent by delete buttons; the grant form sends `roleId` or `userId` per `subjectType`. */
+/** The grant form sends `subject` (`role:<id>` or `user:<id>`); delete buttons send `subjectType` and `subjectId`. */
 async function parseGrantForm(deps: DashboardDeps, body: FormData): Promise<ParsedGrantForm> {
   const permission = formString(body, "permission");
-  const subjectType = formString(body, "subjectType");
   if (!isPermission(permission)) return { ok: false, message: m.grants_unknown_permission() };
+  const subject = formString(body, "subject");
+  const [subjectType = "", subjectId = ""] = subject
+    ? subject.split(":", 2)
+    : [formString(body, "subjectType"), formString(body, "subjectId")];
+  if (!subjectType && !subjectId) return { ok: false, message: m.grants_choose_subject() };
   if (subjectType !== "role" && subjectType !== "user") return { ok: false, message: m.grants_invalid_subject_type() };
-  const subjectId = formString(body, "subjectId") || formString(body, subjectType === "role" ? "roleId" : "userId");
-  if (!subjectId) return { ok: false, message: subjectType === "role" ? m.grants_choose_role() : m.grants_choose_user() };
+  if (!subjectId) return { ok: false, message: m.grants_choose_subject() };
   if (!isSnowflake(subjectId)) return { ok: false, message: m.grants_invalid_snowflake({ id: subjectId }) };
   if (subjectType === "user") {
     const user = await deps.subjects.resolveUser(subjectId);

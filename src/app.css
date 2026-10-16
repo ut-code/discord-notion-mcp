@@ -594,7 +594,7 @@
 		background: var(--subtle);
 	}
 
-	/* Link tabs and the role/user segmented control (work without JavaScript). */
+	/* Link tabs and the segmented control of the grant form (work without JavaScript). */
 	.link-tabs {
 		display: inline-flex;
 		flex-wrap: wrap;
@@ -651,10 +651,19 @@
 	.segmented .link-tab {
 		width: 100%;
 	}
-	.grant-form:has(#target-role:checked) .only-user,
-	.grant-form:has(#target-user:checked) .only-role {
-		/* Must beat the Tailwind `flex` utility on the same element (utilities layer wins otherwise). */
-		display: none !important;
+	.tab-roles,
+	.tab-members {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.subject-field:has(input[name="list"][value="role"]:checked) .tab-members,
+	.subject-field:has(input[name="list"][value="user"]:checked) .tab-roles {
+		display: none;
+	}
+	.subject-list {
+		max-height: 18rem;
+		overflow-y: auto;
 	}
 	.picker {
 		border: 1px solid var(--border);
@@ -665,6 +674,8 @@
 		gap: 2px;
 	}
 	.pick {
+		/* Holds its hidden radio; otherwise it is placed outside a scrolling list and lengthens the page. */
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 10px;
@@ -674,9 +685,6 @@
 	}
 	.pick:hover {
 		background: var(--sidebar);
-	}
-	.pick[data-active] {
-		background: var(--muted);
 	}
 	.pick input {
 		position: absolute;
@@ -994,6 +1002,21 @@
 .search [data-slot="input"] {
 	width: 100%;
 	padding-left: 34px;
+}
+/* The browser's clear button of search boxes, drawn like the other icons (lucide x). */
+input[type="search"]::-webkit-search-cancel-button {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 16px;
+	height: 16px;
+	margin-left: 8px;
+	background-color: var(--muted-foreground);
+	mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E")
+		center / contain no-repeat;
+	cursor: pointer;
+}
+input[type="search"]::-webkit-search-cancel-button:hover {
+	background-color: var(--foreground);
 }
 .data-table th {
 	font-weight: 500;

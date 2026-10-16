@@ -36,6 +36,11 @@ export interface MemberInfo {
   avatarUrl: string | null;
 }
 
+/** A member from the guild member list, which also includes bots. */
+export interface ListedMember extends MemberInfo {
+  bot: boolean;
+}
+
 export interface PermissionOverwrite {
   id: string;
   type: OverwriteType;

@@ -50,6 +50,32 @@ const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...res
   { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
 ];
 
+/** Enough roles and members that the grant form's lists scroll, as on a real server. */
+const EXTRA_ROLES = ["企画", "広報", "デザイン", "開発", "運営", "イベント", "翻訳", "サポート", "記録", "新人", "OB・OG", "ゲスト講師"];
+const EXTRA_MEMBERS = [
+  "青木",
+  "石井",
+  "上田",
+  "遠藤",
+  "大野",
+  "加藤",
+  "木村",
+  "小林",
+  "斎藤",
+  "清水",
+  "高橋",
+  "中村",
+  "西田",
+  "林",
+  "藤井",
+  "松本",
+  "森",
+  "山口",
+  "吉田",
+  "渡辺",
+];
+const PALETTE = [0x1abc9c, 0x9b59b6, 0xe67e22, 0xf1c40f, 0x34495e, 0xe91e63];
+
 type PreviewTool = [tool: string, weight: number, durationMs: number];
 const PREVIEW_TOOLS: [PreviewTool, ...PreviewTool[]] = [
   ["discord_read_messages", 30, 420],
@@ -132,10 +158,28 @@ export async function startPreview(): Promise<Runtime> {
       { id: ROLE_STAFF, name: "staff", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x3498db, position: 3 },
       { id: ROLE_MEMBER, name: "member", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x2ecc71, position: 2 },
       { id: ROLE_BOT, name: "MCP Bot", permissions: VIEW_CHANNEL, managed: true, position: 1 },
+      ...EXTRA_ROLES.map((name, index) => ({
+        id: String(210000000000000000n + BigInt(index)),
+        name,
+        permissions: 0n,
+        color: PALETTE[index % PALETTE.length],
+        position: 1,
+      })),
     ]),
     name: "サンプルサーバー",
   };
   for (const person of people) discord.members.set(person.userId, person);
+  EXTRA_MEMBERS.forEach((name, index) => {
+    const userId = String(310000000000000000n + BigInt(index));
+    discord.members.set(userId, {
+      userId,
+      roles: [ROLE_MEMBER],
+      nick: null,
+      username: `user${index + 1}`,
+      globalName: name,
+      avatarUrl: null,
+    });
+  });
   discord.channels = [textChannel("400000000000000001", "general"), textChannel("400000000000000002", "staff-only")];
 
   const notion = new FakeNotionApi();

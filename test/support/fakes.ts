@@ -13,7 +13,7 @@ import type {
   MessageSearchResponse,
   PinsPage,
 } from "../../src/lib/server/discord/api";
-import type { GuildInfo, MemberInfo, UserInfo } from "../../src/lib/server/discord/types";
+import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "../../src/lib/server/discord/types";
 import { compareSnowflakes } from "../../src/lib/server/lib/snowflake";
 
 export const GUILD_ID = "100000000000000000";
@@ -112,6 +112,8 @@ export class FakeDiscordApi implements DiscordApi {
   threadMembers = new Set<string>();
   messages = new Map<string, APIMessage[]>();
   events: APIGuildScheduledEvent[] = [];
+  /** Members listed as bots. */
+  bots = new Set<string>();
   /** Users that are not guild members but exist on Discord. */
   users = new Map<string, UserInfo>();
   /** fetchMember throws for these user ids (simulates Discord outages). */
@@ -201,6 +203,14 @@ export class FakeDiscordApi implements DiscordApi {
     return [...this.members.values()]
       .filter((member) => [member.username, member.nick, member.globalName].some((name) => name?.toLowerCase().startsWith(prefix)))
       .slice(0, limit);
+  }
+
+  async listMembers(limit: number, after?: string): Promise<ListedMember[]> {
+    return [...this.members.values()]
+      .filter((member) => after === undefined || BigInt(member.userId) > BigInt(after))
+      .sort((a, b) => (BigInt(a.userId) < BigInt(b.userId) ? -1 : 1))
+      .slice(0, limit)
+      .map((member) => ({ ...member, bot: this.bots.has(member.userId) }));
   }
 
   async fetchUser(userId: string): Promise<UserInfo | null> {

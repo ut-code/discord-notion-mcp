@@ -5,7 +5,7 @@ import { TokenRevocationService } from "./auth/revocation";
 import { LoginUserStore } from "./auth/users";
 import type { Config } from "./config";
 import type { DashboardDeps } from "./dashboard/deps";
-import { MemberSearch } from "./dashboard/member-search";
+import { MemberRoster } from "./dashboard/member-roster";
 import { SubjectResolver } from "./dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "./db/client";
 import { ChannelAccess, ChannelDirectory } from "./discord/access";
@@ -119,7 +119,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     resolver,
     directory,
     subjects,
-    memberSearch: new MemberSearch(discord, subjects),
+    members: new MemberRoster(discord, subjects),
     grants,
     users: new LoginUserStore(database.db),
     audit: notionAudit,
