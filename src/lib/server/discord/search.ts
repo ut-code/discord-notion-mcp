@@ -12,6 +12,8 @@ import { canReadMessages } from "./permissions";
 
 /** Discord rejects more channel_id filters than this. */
 const MAX_SEARCH_CHANNELS = 500;
+/** Discord rejects a larger offset. */
+export const MAX_SEARCH_OFFSET = 9975;
 const MAX_INDEX_ATTEMPTS = 3;
 const MAX_INDEX_WAIT_SECONDS = 5;
 
@@ -20,6 +22,10 @@ export type SearchMessage = Omit<APIMessage, "reactions">;
 export interface SearchScope {
   /** Channel filter sent to Discord; undefined searches the whole guild. */
   channelIds?: string[];
+  /**
+   * Discord leaves age-restricted (NSFW) channels out of search unless asked. Only a search
+   * of one named age-restricted channel includes them; a search across channels never does.
+   */
   includeNsfw: boolean;
 }
 
@@ -27,6 +33,7 @@ export type SearchOutcome =
   | {
       status: "ok";
       messages: SearchMessage[];
+      /** Threads the returned messages belong to (never ones the viewer cannot read). */
       threads: APIThreadChannel[];
       /**
        * Discord's total, or null when it may count messages the viewer cannot read: a
@@ -70,8 +77,12 @@ export async function buildSearchScope(deps: SearchDeps, viewer: Viewer, channel
   return { channelIds, includeNsfw: false };
 }
 
-/** Drops results from channels or threads the viewer cannot read. */
-async function filterReadableResults(deps: SearchDeps, viewer: Viewer, result: APIMessageSearchResult): Promise<SearchMessage[]> {
+/** Drops results from channels or threads the viewer cannot read, and the threads of dropped results. */
+async function filterReadableResults(
+  deps: SearchDeps,
+  viewer: Viewer,
+  result: APIMessageSearchResult,
+): Promise<{ messages: SearchMessage[]; threads: APIThreadChannel[] }> {
   const channelsById = new Map((await deps.channels.list()).map((channel) => [channel.id, channel]));
   const threadsById = new Map((result.threads ?? []).map((thread) => [thread.id, thread]));
   const verdicts = new Map<string, boolean>();
@@ -91,11 +102,12 @@ async function filterReadableResults(deps: SearchDeps, viewer: Viewer, result: A
     return verdict;
   };
 
-  const readable: SearchMessage[] = [];
+  const messages: SearchMessage[] = [];
   for (const message of result.messages.flat()) {
-    if (await canRead(message.channel_id)) readable.push(message);
+    if (await canRead(message.channel_id)) messages.push(message);
   }
-  return readable;
+  const shown = new Set(messages.map((message) => message.channel_id));
+  return { messages, threads: [...threadsById.values()].filter((thread) => shown.has(thread.id)) };
 }
 
 /** Runs the search, waiting briefly while Discord builds the guild's search index. */
@@ -108,13 +120,13 @@ export async function searchReadableMessages(
   for (let attempt = 1; ; attempt++) {
     const response = await deps.api.searchMessages(query);
     if (response.status === "ok") {
-      const messages = await filterReadableResults(deps, viewer, response.result);
+      const { messages, threads } = await filterReadableResults(deps, viewer, response.result);
       const dropped = response.result.messages.flat().length - messages.length;
       const scoped = query.channel_id !== undefined;
       return {
         status: "ok",
         messages,
-        threads: response.result.threads ?? [],
+        threads,
         readableTotal: scoped && dropped === 0 ? response.result.total_results : null,
       };
     }

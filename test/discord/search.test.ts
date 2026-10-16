@@ -3,6 +3,7 @@ import type { APIMessage, APIThreadChannel } from "discord-api-types/v10";
 import { ChannelAccess, ChannelDirectory } from "../../src/lib/server/discord/access";
 import type { MessageSearchResponse } from "../../src/lib/server/discord/api";
 import { ADMINISTRATOR, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
+import { searchReadableMessages } from "../../src/lib/server/discord/search";
 import { createDiscordTools } from "../../src/lib/server/discord/tools";
 import { dateToSnowflake } from "../../src/lib/server/lib/snowflake";
 import type { AnyToolDefinition, Principal } from "../../src/lib/server/mcp/registry";
@@ -209,6 +210,22 @@ describe("discord_search_messages results", () => {
     expect(text).not.toContain("private hello");
     expect(text).toContain("1 shown");
     expect(text).not.toContain("total");
+  });
+
+  test("returns only the threads of readable results", async () => {
+    api.searchResponses.push(
+      results(
+        [message("700000000000000001", PUBLIC_THREAD, "open hello"), message("700000000000000003", PRIVATE_THREAD, "private hello")],
+        [api.threads[0]!, api.threads[1]!],
+      ),
+    );
+    const channels = new ChannelDirectory(api);
+    const outcome = await searchReadableMessages(
+      { api, access: new ChannelAccess(api, channels, GUILD_ID), channels },
+      { guild: api.guild, member: makeMember(USER, []) },
+      { content: "hello" },
+    );
+    expect(outcome.status === "ok" && outcome.threads.map((entry) => entry.id)).toEqual([PUBLIC_THREAD]);
   });
 
   test("private thread results are kept for thread members", async () => {

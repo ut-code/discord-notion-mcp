@@ -5,7 +5,7 @@ import { ToolError } from "../../lib/errors";
 import { compareSnowflakes, snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
 import { formatMessage } from "../format";
-import { buildSearchScope, searchReadableMessages } from "../search";
+import { buildSearchScope, MAX_SEARCH_OFFSET, searchReadableMessages } from "../search";
 import { formatContextFor, parseCursor, SEARCH_HAS_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
 export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyToolDefinition } {
@@ -13,7 +13,7 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
     name: "discord_search_messages",
     title: "Search Discord messages",
     description:
-      "Search messages in channels and threads you can read (Discord server search). Combine `query` with filters; newest first by default, page with `offset`. Archived threads are only searched when passed as channel_id. Open a result's link with discord_get_message for surrounding context.",
+      "Search messages in channels and threads you can read (Discord server search). Combine `query` with filters; newest first by default, page with `offset`. Archived threads and age-restricted (NSFW) channels are only searched when passed as channel_id. Open a result's link with discord_get_message for surrounding context.",
     permission: "discord:read",
     inputSchema: z.object({
       query: z.string().min(1).max(1024).optional().describe("Words to search for in message content"),
@@ -27,7 +27,7 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
       after: z.string().optional().describe("Only messages after this message id or ISO 8601 datetime"),
       sort: z.enum(["newest", "oldest", "relevance"]).default("newest"),
       limit: z.number().int().min(1).max(25).default(25).describe("Results per page (1-25)"),
-      offset: z.number().int().min(0).max(9975).default(0).describe("Number of results to skip"),
+      offset: z.number().int().min(0).max(MAX_SEARCH_OFFSET).default(0).describe("Number of results to skip"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withDiscordErrors(async (args, principal) => {
@@ -70,7 +70,7 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
       const nextOffset = args.offset + args.limit;
       // Without a trustworthy total only a full page of readable results suggests another page.
       const hasMore = total !== null ? nextOffset < total : outcome.messages.length === args.limit;
-      const more = hasMore && nextOffset <= 9975 ? `\nMore: offset=${nextOffset}` : "";
+      const more = hasMore && nextOffset <= MAX_SEARCH_OFFSET ? `\nMore: offset=${nextOffset}` : "";
       if (outcome.messages.length === 0) return `${header}${more}\n\nNo messages found.`;
       const blocks = outcome.messages.map(
         (message) => `#${names.get(message.channel_id) ?? message.channel_id}\n${formatMessage(message, ctx)}`,
