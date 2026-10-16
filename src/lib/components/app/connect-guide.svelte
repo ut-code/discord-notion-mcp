@@ -1,6 +1,9 @@
 <script lang="ts">
+  import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
+  import * as Alert from "$lib/components/ui/alert";
   import { m } from "$lib/paraglide/messages.js";
   import CopyButton from "./copy-button.svelte";
+  import ExternalLink from "./external-link.svelte";
 
   let { mcpUrl, heading = "h2" }: { mcpUrl: string; heading?: "h2" | "h3" } = $props();
 
@@ -31,3 +34,15 @@
   <svelte:element this={heading} id="codex" class="text-sm font-semibold">Codex</svelte:element>
   {#each codex as text (text)}{@render command(text, m.connect_copy_command())}{/each}
 </section>
+<Alert.Root class="rounded-lg border-warn-border bg-warn-bg p-3.5 *:[svg]:text-warn-icon">
+  <TriangleAlertIcon />
+  <Alert.Title class="text-note font-semibold text-warn-text">{m.connect_training_title()}</Alert.Title>
+  <Alert.Description class="stack gap-1.5 text-note [word-break:auto-phrase] text-warn-fg">
+    <span>{m.connect_training_note()}</span>
+    <span class="cluster gap-x-4">
+      <ExternalLink href="https://claude.ai/settings/data-privacy-controls">{m.connect_training_claude()}</ExternalLink>
+      <ExternalLink href="https://help.openai.com/en/articles/7730893-data-controls-in-chatgpt">{m.connect_training_chatgpt()}</ExternalLink
+      >
+    </span>
+  </Alert.Description>
+</Alert.Root>
