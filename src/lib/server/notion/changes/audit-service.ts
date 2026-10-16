@@ -386,7 +386,8 @@ export class NotionAuditService {
   }
 }
 
-const SWEEP_INTERVAL_MS = 60_000;
+/** At the pace rows go stale: a dead write is marked within twice STALE_PENDING_MS, which is soon enough. */
+const SWEEP_INTERVAL_MS = STALE_PENDING_MS;
 
 export interface InterruptedWriteSweepOptions {
   audit: Pick<NotionAuditService, "markInterruptedWrites">;
@@ -396,8 +397,10 @@ export interface InterruptedWriteSweepOptions {
 }
 
 /**
- * Marks writes a crashed process left pending as interrupted, now and every minute, so a
- * pending revert claim cannot block its row until the next restart. Returns a stop function.
+ * Marks writes a dead process left pending as interrupted, now and every 10 minutes, so a
+ * pending revert claim cannot block its row until the next restart. Rows written just before
+ * a crash, or by the old process during a rolling deploy, are not stale at startup, hence the
+ * repeats. Returns a stop function.
  */
 export function startInterruptedWriteSweep({
   audit,
