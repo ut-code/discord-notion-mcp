@@ -14,7 +14,7 @@ import {
   WRITABLE_PROPERTY_TYPES,
 } from "../content/properties";
 import { literalRichText } from "../content/rich-text";
-import { postComment, retractComment, writeCommentText, type Actor, type WriteOperation } from "./attribution";
+import { postComment, retractComment, writeComment, type Actor, type WriteOperation } from "./attribution";
 import { propertyWriteRefusalText } from "./outcome-text";
 import type { RevertBlocker } from "./revert-reasons";
 import {
@@ -119,7 +119,7 @@ export class NotionWriteService {
       fallbackLastEdited: string | null;
     },
   ): Promise<WriteOutcome> {
-    const { commentError } = await postComment(this.api, page.id, writeCommentText(actor, operation, row.id));
+    const { commentError } = await postComment(this.api, page.id, writeComment(actor, operation, row.id));
     // The write succeeded: a failed read-back only loses the final URL and edit time, so log it and go on.
     const final = await this.api.retrievePage(page.id).catch((error: unknown) => {
       this.reportError({ event: "notion_readback_failed", pageId: page.id, error: errorMessage(error) });
@@ -398,7 +398,7 @@ export class NotionWriteService {
       targetUrl: page.url,
       targetTitle: pageTitle(page),
     });
-    const { commentId, commentError } = await postComment(this.api, page.id, writeCommentText(actor, "archive_page", row.id));
+    const { commentId, commentError } = await postComment(this.api, page.id, writeComment(actor, "archive_page", row.id));
     let trashed: NotionPage;
     try {
       trashed = await this.api.updatePage({ pageId: page.id, inTrash: true });

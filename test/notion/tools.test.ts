@@ -133,7 +133,7 @@ describe("Notion tools", () => {
     expect(text).toContain("Added content at the end of");
     expect(text).toContain("audit #1");
     expect(api.markdown.get(page.id)).toBe("Existing\n- one\n- two");
-    expect(api.comments[0]!.text).toBe("🤖 Bobby (@bob, Discord) が MCP 経由で内容を追記しました — audit #1");
+    expect(api.comments[0]).toMatchObject({ author: "Bobby (@bob, Discord)", text: "🤖 MCP 経由で内容を追記しました — audit #1" });
   });
 
   test("notion_edit_content applies edits and surfaces Notion validation errors", async () => {

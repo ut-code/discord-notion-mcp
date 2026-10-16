@@ -5,7 +5,7 @@ import { runPeriodically } from "../../lib/periodic";
 import { isNotionMiss, NotionRequestError, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
 import { sha256 } from "../content/content-diff";
 import { mayBeTruncated, samePropertyValue, toWritablePropertyValue, valueFromPropertyItems } from "../content/properties";
-import { postComment, retractComment, revertCommentText } from "./attribution";
+import { postComment, retractComment, revertComment, type AttributionComment } from "./attribution";
 import {
   ArchivePageSnapshotSchema,
   ContentSnapshotSchema,
@@ -227,7 +227,7 @@ export class NotionAuditService {
         : { ok: false, reason: { kind: "in_progress" } };
     }
 
-    const comment = revertCommentText(options.actorDisplayName, row.id);
+    const comment = revertComment(options.actorDisplayName, options.actorUsername ?? null, row.id);
     let executed: Executed;
     try {
       executed = await this.execute(api, record, current, comment);
@@ -267,7 +267,7 @@ export class NotionAuditService {
     };
   }
 
-  private async execute(api: NotionApi, record: RevertRecord, current: NotionPage, comment: string): Promise<Executed> {
+  private async execute(api: NotionApi, record: RevertRecord, current: NotionPage, comment: AttributionComment): Promise<Executed> {
     const pageId = current.id;
     switch (record.operation) {
       case "create_page": {

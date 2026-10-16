@@ -89,7 +89,8 @@ export interface NotionApi {
   listComments(blockId: string, query: CursorQuery): Promise<Paged<NotionComment>>;
   createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage>;
   updatePage(params: { pageId: string; properties?: Record<string, unknown>; inTrash?: boolean }): Promise<NotionPage>;
-  createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<{ id: string }>;
+  /** `displayName` is shown as the comment's author. */
+  createComment(params: { pageId: string; richText: RichTextRequest[]; displayName: string }): Promise<{ id: string }>;
   /** Only comments this integration created can be deleted. */
   deleteComment(commentId: string): Promise<void>;
 }
@@ -239,11 +240,12 @@ export class SdkNotionApi implements NotionApi {
     return expectFull(page, isFullPage, "page");
   }
 
-  async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<{ id: string }> {
+  async createComment(params: { pageId: string; richText: RichTextRequest[]; displayName: string }): Promise<{ id: string }> {
     const comment = await this.call(() =>
       this.client.comments.create({
         parent: { page_id: params.pageId },
         rich_text: sdkRequest<Extract<CreateCommentParameters, { rich_text: unknown }>["rich_text"]>(params.richText),
+        display_name: { type: "custom", custom: { name: params.displayName } },
       }),
     );
     return { id: comment.id };

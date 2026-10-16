@@ -215,7 +215,7 @@ describe("OAuth + MCP end to end", () => {
     const text = created.json.result.content[0].text as string;
     expect(text).toContain('Created page "Minutes"');
     expect(text).toContain("audit #1");
-    expect(notion.comments.at(-1)!.text).toBe("🤖 Ali (@alice, Discord) が MCP 経由でページを作成しました — audit #1");
+    expect(notion.comments.at(-1)).toMatchObject({ author: "Ali (@alice, Discord)", text: "🤖 MCP 経由でページを作成しました — audit #1" });
     expect(await h.server.notionAudit.getAudit(1)).toMatchObject({ discordUserId: MEMBER_ID, discordDisplayName: "Ali", status: "ok" });
 
     const changes = await mcpCall(accessToken, {

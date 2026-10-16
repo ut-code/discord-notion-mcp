@@ -104,7 +104,10 @@ describe("notion_revert_change", () => {
     );
 
     expect(await call("notion_revert_change", principalFor(ALICE), { audit_id: ids.alice })).toBe(`Reverted audit #${ids.alice}.`);
-    expect(api.comments.at(-1)!.text).toBe(`↩️ user0001 が audit #${ids.alice} を取り消しました`);
+    expect(api.comments.at(-1)).toMatchObject({
+      author: expect.stringContaining("user0001"),
+      text: `↩️ audit #${ids.alice} を取り消しました`,
+    });
 
     expect(await call("notion_revert_change", principalFor(ADMIN, true), { audit_id: ids.bob })).toBe(`Reverted audit #${ids.bob}.`);
     const listed = await call("notion_list_recent_changes", principalFor(ALICE));

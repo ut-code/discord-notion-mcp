@@ -105,7 +105,7 @@ describe("NotionWriteService", () => {
     expect(order).toEqual(["createPage", "updatePageMarkdown", "createComment"]);
 
     expect(api.comments).toMatchObject([
-      { pageId: outcome.pageId, text: `🤖 Alice (@alice, Discord) が MCP 経由でページを作成しました — audit #${outcome.auditId}` },
+      { pageId: outcome.pageId, author: "Alice (@alice, Discord)", text: `🤖 MCP 経由でページを作成しました — audit #${outcome.auditId}` },
     ]);
     const row = (await store.get(outcome.auditId))!;
     expect(row).toMatchObject({
@@ -210,7 +210,8 @@ describe("NotionWriteService", () => {
     expect(JSON.stringify(row.snapshot)).not.toContain("Intro");
     expect(api.comments.at(-1)).toMatchObject({
       pageId: parent.id,
-      text: `🤖 Alice (@alice, Discord) が MCP 経由で内容を追記しました — audit #${outcome.auditId}`,
+      author: "Alice (@alice, Discord)",
+      text: `🤖 MCP 経由で内容を追記しました — audit #${outcome.auditId}`,
     });
   });
 
@@ -360,7 +361,7 @@ describe("NotionWriteService", () => {
     const order = api.calls.map((c) => c.method).filter((m) => m === "createComment" || m === "updatePage");
     expect(order).toEqual(["createComment", "updatePage"]);
     expect(api.pages.get(page.id)!.in_trash).toBe(true);
-    expect(api.comments[0]!.text).toBe(`🤖 Alice (@alice, Discord) が MCP 経由でページをアーカイブしました — audit #${outcome.auditId}`);
+    expect(api.comments[0]!.text).toBe(`🤖 MCP 経由でページをアーカイブしました — audit #${outcome.auditId}`);
     expect(await store.get(outcome.auditId)).toMatchObject({
       status: "ok",
       snapshot: { inTrash: false },
@@ -443,7 +444,11 @@ describe("NotionAuditService.revert", () => {
 
     expect(result).toEqual({ ok: true, revertAuditId: 2, forced: false, partial: false, note: null });
     expect(api.pages.get(created.pageId)!.in_trash).toBe(true);
-    expect(api.comments.at(-1)).toMatchObject({ pageId: created.pageId, text: `↩️ Admin が audit #${created.auditId} を取り消しました` });
+    expect(api.comments.at(-1)).toMatchObject({
+      pageId: created.pageId,
+      author: "Admin (Discord)",
+      text: `↩️ audit #${created.auditId} を取り消しました`,
+    });
     const original = (await store.get(created.auditId))!;
     expect(original.revertedBy).toBe(ADMIN.actorDiscordUserId);
     expect(original.revertAuditId).toBe(2);
@@ -466,7 +471,7 @@ describe("NotionAuditService.revert", () => {
     const reverts = api.callsOf("updatePageMarkdown").slice(1);
     expect(reverts.length).toBe(1);
     expect(reverts[0].update.type).toBe("update_content");
-    expect(api.comments.at(-1)!.text).toBe(`↩️ Admin が audit #${appended.auditId} を取り消しました`);
+    expect(api.comments.at(-1)!.text).toBe(`↩️ audit #${appended.auditId} を取り消しました`);
   });
 
   test("append_content into an empty page: revert empties it again", async () => {
@@ -566,7 +571,7 @@ describe("NotionAuditService.revert", () => {
     const result = await audit.revert(archived.auditId, ADMIN);
     expect(result.ok).toBe(true);
     expect(api.pages.get(page.id)!.in_trash).toBe(false);
-    expect(api.comments.at(-1)!.text).toBe(`↩️ Admin が audit #${archived.auditId} を取り消しました`);
+    expect(api.comments.at(-1)!.text).toBe(`↩️ audit #${archived.auditId} を取り消しました`);
   });
 
   test("refuses when a property it set changed afterwards, even within the same minute, unless forced", async () => {

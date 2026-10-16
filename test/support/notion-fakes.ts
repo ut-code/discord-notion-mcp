@@ -56,7 +56,7 @@ export class FakeNotionApi implements NotionApi {
   users = new Map<string, string | null>();
   databases = new Map<string, NotionDatabase>();
   dataSources = new Map<string, NotionDataSource>();
-  comments: Array<{ id: string; pageId: string; text: string }> = [];
+  comments: Array<{ id: string; pageId: string; author: string; text: string }> = [];
   private commentSeq = 0;
   listedComments = new Map<string, NotionComment[]>();
   propertyItems = new Map<string, PropertyItemObjectResponse[]>();
@@ -303,10 +303,11 @@ export class FakeNotionApi implements NotionApi {
     return structuredClone(page);
   }
 
-  async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<{ id: string }> {
+  async createComment(params: { pageId: string; richText: RichTextRequest[]; displayName: string }): Promise<{ id: string }> {
     this.enter("createComment", params);
     const id = `comment-${++this.commentSeq}`;
-    this.comments.push({ id, pageId: params.pageId, text: params.richText.map((t) => ("text" in t ? t.text.content : "")).join("") });
+    const text = params.richText.map((t) => ("text" in t ? t.text.content : "")).join("");
+    this.comments.push({ id, pageId: params.pageId, author: params.displayName, text });
     return { id };
   }
 

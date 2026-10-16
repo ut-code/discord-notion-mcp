@@ -28,23 +28,38 @@ export const OPERATION_LABELS: Record<WriteOperation, string> = {
   archive_page: m.operation_archive_page(),
 };
 
-export function writeCommentText(actor: Actor, operation: WriteOperation, auditId: number): string {
-  const handle = actor.username ? ` (@${actor.username}, Discord)` : " (Discord)";
-  return m.notion_comment_write({ actor: actor.displayName, handle, operation: OPERATION_LABELS[operation], auditId });
+/**
+ * A page comment that attributes a change. Notion shows `author` as the comment's author, so
+ * the comment reads as written by the Discord user instead of the integration's owner.
+ */
+export interface AttributionComment {
+  author: string;
+  text: string;
 }
 
-export function revertCommentText(actorDisplayName: string, auditId: number): string {
-  return m.notion_comment_revert({ actor: actorDisplayName, auditId });
+function commentAuthor(displayName: string, username: string | null): string {
+  return username ? `${displayName} (@${username}, Discord)` : `${displayName} (Discord)`;
+}
+
+export function writeComment(actor: Actor, operation: WriteOperation, auditId: number): AttributionComment {
+  return {
+    author: commentAuthor(actor.displayName, actor.username),
+    text: m.notion_comment_write({ operation: OPERATION_LABELS[operation], auditId }),
+  };
+}
+
+export function revertComment(actorDisplayName: string, actorUsername: string | null, auditId: number): AttributionComment {
+  return { author: commentAuthor(actorDisplayName, actorUsername), text: m.notion_comment_revert({ auditId }) };
 }
 
 /** Posts a page comment; reports an error instead of throwing (writes must not fail on comments). */
 export async function postComment(
   api: NotionApi,
   pageId: string,
-  text: string,
+  comment: AttributionComment,
 ): Promise<{ commentId: string; commentError: null } | { commentId: null; commentError: string }> {
   try {
-    const { id } = await api.createComment({ pageId, richText: literalRichText(text) });
+    const { id } = await api.createComment({ pageId, richText: literalRichText(comment.text), displayName: comment.author });
     return { commentId: id, commentError: null };
   } catch (error) {
     return { commentId: null, commentError: errorMessage(error) };
