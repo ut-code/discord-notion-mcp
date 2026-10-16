@@ -5,7 +5,8 @@ import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
 import { ToolCallStore } from "../../src/lib/server/usage/tool-calls";
-import { jstDay, UsageStats } from "../../src/lib/server/usage/usage-stats";
+import { jstDay } from "../../src/lib/server/lib/jst-day";
+import { UsageStats } from "../../src/lib/server/usage/usage-stats";
 import { insertAuditRow } from "../support/audit-rows";
 import { FakeDiscordApi, makeMember } from "../support/fakes";
 

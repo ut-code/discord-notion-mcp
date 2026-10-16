@@ -2,11 +2,11 @@ import { isOneOf } from "../../one-of";
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import type { Permission } from "../permissions/permissions";
-import { DAY_MS, JST_OFFSET_MS, jstDay } from "../usage/usage-stats";
+import { jstDay, jstDayStart } from "../lib/jst-day";
 import type { Viewer } from "./access";
 import { auditListHref } from "./audit";
 import type { DashboardDeps } from "./deps";
-import { formatShortJst, PERMISSION_LABELS } from "./format";
+import { formatMonthDayJst, formatShortJst, PERMISSION_LABELS } from "./format";
 
 const STATS_PATH = DASHBOARD_PATH;
 const STATS_RANGES = [7, 30, 90] as const;
@@ -87,12 +87,6 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
 }
 
-/** "10/12" of a JST day number. */
-function dayLabel(day: number): string {
-  const date = new Date(day * DAY_MS);
-  return `${String(date.getUTCMonth() + 1).padStart(2, "0")}/${String(date.getUTCDate()).padStart(2, "0")}`;
-}
-
 function categoryOf(permission: Permission | undefined): CategoryKey {
   return permission === "discord:read" || permission === "notion:read" || permission === "notion:write" ? permission : "other";
 }
@@ -106,7 +100,7 @@ export async function statsPage(
 ): Promise<StatsPageData> {
   const range = rangeParam(params.get("range"));
   const firstDay = jstDay(now) - (range - 1);
-  const since = new Date(firstDay * DAY_MS - JST_OFFSET_MS);
+  const since = jstDayStart(firstDay);
   const days = Array.from({ length: range }, (_, index) => firstDay + index);
 
   const usage = deps.usage;
@@ -141,7 +135,10 @@ export async function statsPage(
       series,
       rows: days.map((day) => {
         const bucket = counts.get(day) ?? {};
-        return { date: dayLabel(day), counts: Object.fromEntries(usedCategories.map(({ key }) => [key, bucket[key] ?? 0])) };
+        return {
+          date: formatMonthDayJst(jstDayStart(day)),
+          counts: Object.fromEntries(usedCategories.map(({ key }) => [key, bucket[key] ?? 0])),
+        };
       }),
     },
     users: byUser.map((row) => {

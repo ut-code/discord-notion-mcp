@@ -75,6 +75,12 @@ export function formatShortJst(date: Date | null | undefined): string {
   return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
 }
 
+/** Japan date without year, e.g. "10/12". */
+export function formatMonthDayJst(date: Date): string {
+  const p = jstParts(date);
+  return `${p.month}/${p.day}`;
+}
+
 /** Japan date, e.g. "2026/10/12". */
 export function formatDateJst(date: Date | null | undefined): string {
   if (!date) return "—";
