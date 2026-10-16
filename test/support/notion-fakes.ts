@@ -266,7 +266,10 @@ export class FakeNotionApi implements NotionApi {
 
   async listComments(blockId: string, query: CursorQuery): Promise<Paged<NotionComment>> {
     this.enter("listComments", { blockId, ...query });
-    return { results: this.listedComments.get(blockId) ?? [], nextCursor: null };
+    const all = this.listedComments.get(blockId) ?? [];
+    const start = query.startCursor ? Number(query.startCursor) : 0;
+    const end = start + query.pageSize;
+    return { results: all.slice(start, end), nextCursor: end < all.length ? String(end) : null };
   }
 
   async createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage> {

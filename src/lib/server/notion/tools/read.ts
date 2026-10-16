@@ -12,6 +12,10 @@ import { idOrUrl, withNotionErrors, type NotionToolDeps } from "./shared";
 const MARKDOWN_SYNTAX =
   'Content uses Notion-flavored Markdown: standard Markdown plus user mentions <mention-user url="user://USER_ID">Name</mention-user>, page mentions <mention-page url="PAGE_URL"/>, dates <mention-date start="2026-10-20"/>, toggles <details><summary>Title</summary> followed by tab-indented children and </details>, callouts <callout icon="💡">text</callout>, inline colors <span color="red">text</span> (block colors: {color="blue_bg"} at the end of a block line), and columns <columns><column>…</column></columns>.';
 
+const COMMENT_PAGE_SIZE = 100;
+/** Comments listed per call at most, in pages of COMMENT_PAGE_SIZE. */
+const MAX_COMMENTS = 300;
+
 function parentLabel(parent: SearchResult["parent"]): string {
   switch (parent.type) {
     case "page_id":
@@ -48,24 +52,29 @@ function propertyLines(page: NotionPage, options: { skipTitle: boolean; skipEmpt
 }
 
 function schemaLines(dataSource: NotionDataSource): string[] {
-  return Object.entries(dataSource.properties).map(([name, c]) => {
+  return Object.entries(dataSource.properties).map(([name, property]) => {
     const details: string[] = [];
-    if (c.type === "select" || c.type === "multi_select" || c.type === "status") {
-      const { options } = c.type === "select" ? c.select : c.type === "multi_select" ? c.multi_select : c.status;
-      details.push(`options: ${options.length ? options.map((o) => o.name).join(", ") : "(none)"}`);
+    if (property.type === "select" || property.type === "multi_select" || property.type === "status") {
+      const { options } =
+        property.type === "select" ? property.select : property.type === "multi_select" ? property.multi_select : property.status;
+      details.push(`options: ${options.length ? options.map((option) => option.name).join(", ") : "(none)"}`);
     }
-    if (c.type === "status") {
-      const byId = new Map(c.status.options.map((o) => [o.id, o.name]));
-      const groups = c.status.groups.map((g) => `${g.name} [${g.option_ids.map((id) => byId.get(id) ?? id).join(", ")}]`);
+    if (property.type === "status") {
+      const optionNames = new Map(property.status.options.map((option) => [option.id, option.name]));
+      const groups = property.status.groups.map(
+        (group) => `${group.name} [${group.option_ids.map((id) => optionNames.get(id) ?? id).join(", ")}]`,
+      );
       details.push(`groups: ${groups.join("; ")}`);
     }
-    if (c.type === "relation") details.push(`related data source: ${c.relation.data_source_id}`);
-    if (c.type === "number" && c.number?.format) details.push(`format: ${c.number.format}`);
-    if (c.type === "formula" && c.formula?.expression) details.push(`expression: ${c.formula.expression}`);
-    if (c.type === "rollup")
-      details.push(`rollup: ${c.rollup.function} of ${c.rollup.rollup_property_name} via ${c.rollup.relation_property_name}`);
-    if (!WRITABLE_PROPERTY_TYPES.has(c.type)) details.push("read-only");
-    return `- ${name} (${c.type}, id ${c.id})${details.length ? `: ${details.join(" | ")}` : ""}`;
+    if (property.type === "relation") details.push(`related data source: ${property.relation.data_source_id}`);
+    if (property.type === "number" && property.number?.format) details.push(`format: ${property.number.format}`);
+    if (property.type === "formula" && property.formula?.expression) details.push(`expression: ${property.formula.expression}`);
+    if (property.type === "rollup") {
+      const { rollup } = property;
+      details.push(`rollup: ${rollup.function} of ${rollup.rollup_property_name} via ${rollup.relation_property_name}`);
+    }
+    if (!WRITABLE_PROPERTY_TYPES.has(property.type)) details.push("read-only");
+    return `- ${name} (${property.type}, id ${property.id})${details.length ? `: ${details.join(" | ")}` : ""}`;
   });
 }
 
@@ -92,6 +101,7 @@ export function createReadTools(deps: NotionToolDeps): {
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withNotionErrors(async (args) => {
+      // Since API version 2025-09-03 tables are data sources inside databases; search filters by data source.
       const filter = args.filter === "database" ? "data_source" : args.filter;
       const page = await api.search({ query: args.query, filter, pageSize: args.limit, startCursor: args.start_cursor });
       if (page.results.length === 0) return "No results. Only pages shared with the Notion integration are searchable.";
@@ -112,19 +122,12 @@ export function createReadTools(deps: NotionToolDeps): {
       const pageId = requireNotionId(args.page, "page");
       const page = await api.retrievePage(pageId);
       const body = await api.retrievePageMarkdown(page.id);
-      const names = new Map<string, Promise<string | null>>();
-      const lookup = (userId: string) => {
-        let name = names.get(userId);
-        if (!name) {
-          // Unknown or inaccessible users (and Notion errors) keep the bare mention; bugs still surface.
-          name = api.retrieveUser(userId).catch((error: unknown) => {
-            if (error instanceof NotionRequestError) return null;
-            throw error;
-          });
-          names.set(userId, name);
-        }
-        return name;
-      };
+      // Unknown or inaccessible users (and Notion errors) keep the bare mention; bugs still surface.
+      const lookup = (userId: string) =>
+        api.retrieveUser(userId).catch((error: unknown) => {
+          if (error instanceof NotionRequestError) return null;
+          throw error;
+        });
       const content = await labelUserMentions(body.markdown, lookup);
       const lines = [
         `# ${pageTitle(page)}`,
@@ -228,8 +231,8 @@ export function createReadTools(deps: NotionToolDeps): {
       const comments = [];
       let cursor: string | undefined;
       let more = false;
-      for (let page = 0; page < 3; page++) {
-        const result = await api.listComments(blockId, { startCursor: cursor, pageSize: 100 });
+      while (comments.length < MAX_COMMENTS) {
+        const result = await api.listComments(blockId, { startCursor: cursor, pageSize: COMMENT_PAGE_SIZE });
         comments.push(...result.results);
         cursor = result.nextCursor ?? undefined;
         more = cursor !== undefined;
@@ -241,7 +244,7 @@ export function createReadTools(deps: NotionToolDeps): {
         const kind = comment.display_name?.type ?? "user";
         return `- [${comment.created_time}] ${author} (${kind}): ${plainText(comment.rich_text)}`;
       });
-      if (more) lines.push("(More comments exist; only the first 300 are shown.)");
+      if (more) lines.push(`(More comments exist; only the first ${comments.length} are shown.)`);
       return [`${comments.length} comment(s):`, ...lines].join("\n");
     }),
   });

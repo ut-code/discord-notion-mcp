@@ -6,6 +6,7 @@ import { NotionWriteService } from "../../src/lib/server/notion/changes/write-se
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 import { createNotionTools } from "../../src/lib/server/notion/tools";
 import { makeGuild, makeMember } from "../support/fakes";
+import type { NotionComment } from "../../src/lib/server/notion/client/api";
 import { FakeNotionApi, titleValue } from "../support/notion-fakes";
 
 const USER = "300000000000000001";
@@ -84,6 +85,30 @@ describe("Notion tools", () => {
     expect(Object.keys((tool.inputSchema as { shape: object }).shape)).toEqual(["page"]);
     expect(tool.description).toContain("<details>");
     expect(tool.description).toContain("<mention-user");
+  });
+
+  test("notion_get_comments lists comments page by page, up to 300", async () => {
+    const PAGE_ID = "00000000-0000-4000-8000-0000000000c1";
+    const comment = (index: number) =>
+      ({
+        id: `comment-${index}`,
+        created_time: "2026-10-16T00:00:00.000Z",
+        created_by: { id: "notion-user", object: "user" },
+        rich_text: [{ type: "text", plain_text: `comment ${index}`, text: { content: `comment ${index}` } }],
+      }) as unknown as NotionComment;
+    api.listedComments.set(
+      PAGE_ID,
+      Array.from({ length: 350 }, (_, index) => comment(index)),
+    );
+    const text = await call("notion_get_comments", { target: PAGE_ID });
+    expect(text.split("\n")[0]).toBe("300 comment(s):");
+    expect(text).toContain("comment 299");
+    expect(text).not.toContain("comment 300");
+    expect(text).toContain("(More comments exist; only the first 300 are shown.)");
+    expect(api.callsOf("listComments")).toHaveLength(3);
+
+    api.listedComments.set(PAGE_ID, [comment(0)]);
+    expect(await call("notion_get_comments", { target: PAGE_ID })).not.toContain("More comments exist");
   });
 
   test("notion_get_database and notion_query_database", async () => {
