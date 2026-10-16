@@ -41,6 +41,11 @@ export interface ComposeOptions {
   toolRateLimit?: McpServerDeps["rateLimit"];
   /** Overrides usage recording (tests); defaults to the tool_call table. */
   recordToolCall?: McpServerDeps["record"];
+  /**
+   * Other addresses of this same server whose pages may write, besides PUBLIC_URL (the preview
+   * is opened both at localhost and through a proxy). Production serves one address and sets none.
+   */
+  otherOrigins?: readonly string[];
 }
 
 export interface AppServer {
@@ -142,6 +147,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     }),
     trustedProxyCount: config.trustedProxyCount,
     publicOrigin: new URL(config.publicUrl).origin,
+    otherOrigins: options.otherOrigins,
     logEvent: reportEvent,
     logError: reportError,
   });

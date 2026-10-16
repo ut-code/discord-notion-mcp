@@ -1,3 +1,4 @@
+import { m } from "../paraglide/messages.js";
 import { AUTH_BASE_PATH, type Auth } from "./auth/auth";
 import { clientIpFromForwardedFor, withClientIp } from "./lib/client-ip";
 import { errorMessage } from "./lib/errors";
@@ -16,6 +17,8 @@ export interface HttpDeps {
   trustedProxyCount: number;
   /** Origin of PUBLIC_URL; UI writes must carry it. */
   publicOrigin: string;
+  /** Further origins of this same server accepted for UI writes (the preview's localhost). */
+  otherOrigins?: readonly string[];
   /** Refused cross-origin writes; defaults to stdout. */
   logEvent?: EventSink;
   /** Unhandled request errors; defaults to stderr. */
@@ -51,14 +54,31 @@ export function withSecurityHeaders(response: Response): Response {
 }
 
 /** CSRF for the UI: state-changing requests must carry this origin. */
-function isCrossOriginWrite(request: Request, publicOrigin: string): boolean {
+function isCrossOriginWrite(request: Request, ownOrigins: ReadonlySet<string>): boolean {
   if (SAFE_METHODS.has(request.method)) return false;
-  return request.headers.get("origin") !== publicOrigin;
+  const origin = request.headers.get("origin");
+  return origin === null || !ownOrigins.has(origin);
+}
+
+/**
+ * The refusal of a cross-origin write. A page opened at another address of this server
+ * (e.g. localhost behind a public URL) is the case a person sees, so it names the address.
+ * Like SvelteKit's own CSRF refusal, a request accepting JSON (a form submitted with
+ * use:enhance) gets JSON, here an ActionResult it can show; plain form posts get the text.
+ */
+function crossOriginRefusal(request: Request, publicOrigin: string): Response {
+  const title = m.error_cross_origin_title();
+  const message = m.error_cross_origin({ url: publicOrigin });
+  if (request.headers.get("accept") === "application/json") {
+    return Response.json({ type: "error", error: { title, message } }, { status: 403 });
+  }
+  return new Response(message, { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
 export function createHttpHandler(deps: HttpDeps): HttpHandler {
   const reportEvent = deps.logEvent ?? logEvent;
   const reportError = deps.logError ?? logError;
+  const ownOrigins = new Set([deps.publicOrigin, ...(deps.otherOrigins ?? [])]);
 
   const clientIp = (request: Request, socketAddress?: () => string | null): string | null => {
     if (deps.trustedProxyCount > 0) return clientIpFromForwardedFor(request.headers.get("x-forwarded-for"), deps.trustedProxyCount);
@@ -92,10 +112,10 @@ export function createHttpHandler(deps: HttpDeps): HttpHandler {
     try {
       const response = await route(request, socketAddress);
       if (response) return withSecurityHeaders(response);
-      if (isCrossOriginWrite(request, deps.publicOrigin)) {
+      if (isCrossOriginWrite(request, ownOrigins)) {
         const { pathname } = new URL(request.url);
         reportEvent({ event: "cross_origin_write_refused", method: request.method, path: pathname, origin: request.headers.get("origin") });
-        return withSecurityHeaders(new Response("Forbidden", { status: 403 }));
+        return withSecurityHeaders(crossOriginRefusal(request, deps.publicOrigin));
       }
       return null;
     } catch (error) {

@@ -14,6 +14,8 @@
   "error_title_default": "エラー",
   "error_page_not_found": "ページが見つかりません。",
   "error_unexpected": "予期しないエラーが発生しました。しばらくしてから再度お試しください。",
+  "error_cross_origin_title": "操作を受け付けられませんでした",
+  "error_cross_origin": "このページは {url} 以外のアドレスで開かれています。{url} から開き直してください。",
   "access_denied_title": "アクセスできません",
   "access_not_linked": "このログインには Discord アカウントが連携されていません。",
   "access_not_member": "Discord サーバーのメンバーであることを確認できませんでした。参加してから、MCP クライアントで接続し直してください。",

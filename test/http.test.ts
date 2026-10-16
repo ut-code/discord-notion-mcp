@@ -161,6 +161,38 @@ describe("CSRF", () => {
     expect(events).toHaveLength(4);
   });
 
+  test("other origins of the same server (the preview's localhost) may write too", async () => {
+    const http = createHttpHandler({
+      auth: fakeAuth(async () => new Response("auth")),
+      mcpEndpoint: async () => new Response("mcp"),
+      trustedProxyCount: 0,
+      publicOrigin: PUBLIC_ORIGIN,
+      otherOrigins: ["http://localhost:3920"],
+      logEvent: () => {},
+    });
+    expect(await http(post("/dashboard/grants?/create", "http://localhost:3920"))).toBeNull();
+    expect(await http(post("/dashboard/grants?/create", PUBLIC_ORIGIN))).toBeNull();
+    expect((await http(post("/dashboard/grants?/create", "http://localhost:5173")))!.status).toBe(403);
+  });
+
+  test("the refusal names the address to open, as an ActionResult for enhanced forms", async () => {
+    const http = handler();
+    const enhanced = new Request(`${PUBLIC_ORIGIN}/dashboard/grants?/create`, {
+      method: "POST",
+      headers: { origin: "http://localhost:3920", accept: "application/json" },
+    });
+    const refused = (await http(enhanced))!;
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({
+      type: "error",
+      error: {
+        title: "操作を受け付けられませんでした",
+        message: `このページは ${PUBLIC_ORIGIN} 以外のアドレスで開かれています。${PUBLIC_ORIGIN} から開き直してください。`,
+      },
+    });
+    expect(await (await http(post("/theme", "http://localhost:3920")))!.text()).toContain(PUBLIC_ORIGIN);
+  });
+
   test("MCP and OAuth clients post from other origins", async () => {
     const http = handler();
     expect(await (await http(post("/mcp", "https://claude.ai")))!.text()).toBe("mcp");

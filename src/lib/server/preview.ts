@@ -160,6 +160,7 @@ export async function startPreview(): Promise<Runtime> {
     database,
     logToolCall: () => {},
     logEvent: () => {},
+    otherOrigins: [`http://localhost:${port}`],
   });
   const authContext = await server.auth.$context;
 
