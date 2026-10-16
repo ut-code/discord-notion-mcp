@@ -56,7 +56,8 @@ export class FakeNotionApi implements NotionApi {
   users = new Map<string, string | null>();
   databases = new Map<string, NotionDatabase>();
   dataSources = new Map<string, NotionDataSource>();
-  comments: Array<{ pageId: string; text: string }> = [];
+  comments: Array<{ id: string; pageId: string; text: string }> = [];
+  private commentSeq = 0;
   listedComments = new Map<string, NotionComment[]>();
   propertyItems = new Map<string, PropertyItemObjectResponse[]>();
   calls: Call[] = [];
@@ -302,8 +303,17 @@ export class FakeNotionApi implements NotionApi {
     return structuredClone(page);
   }
 
-  async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<void> {
+  async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<{ id: string }> {
     this.enter("createComment", params);
-    this.comments.push({ pageId: params.pageId, text: params.richText.map((t) => ("text" in t ? t.text.content : "")).join("") });
+    const id = `comment-${++this.commentSeq}`;
+    this.comments.push({ id, pageId: params.pageId, text: params.richText.map((t) => ("text" in t ? t.text.content : "")).join("") });
+    return { id };
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    this.enter("deleteComment", commentId);
+    const index = this.comments.findIndex((comment) => comment.id === commentId);
+    if (index === -1) throw notFound("comment");
+    this.comments.splice(index, 1);
   }
 }

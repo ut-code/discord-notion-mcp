@@ -179,3 +179,92 @@ describe("buildRevertPlan", () => {
     }
   });
 });
+
+describe("buildRevertPlan: someone else's edit between our read and our write", () => {
+  const replace = (oldStr: string, newStr: string): PageMarkdownUpdate => ({
+    type: "update_content",
+    update_content: { content_updates: [{ old_str: oldStr, new_str: newStr }] },
+  });
+  const insert = (content: string, position: "start" | "end"): PageMarkdownUpdate => ({
+    type: "insert_content",
+    insert_content: { content, position: { type: position } },
+  });
+  const isConcurrent = (plan: RevertPlan) => plan.kind === "unsupported" && plan.blocker === "concurrent_edit";
+  const doc = "# Notes\n\nIntro\n\n1. first\n2. second\n\nMiddle\n\nOutro";
+
+  test("our own change alone is not flagged", () => {
+    for (const update of [replace("Middle", "Middle changed"), insert("Added", "end"), insert("Added", "start")]) {
+      const plan = buildRevertPlan(doc, applyInverse(doc, update), update);
+      expect(plan.kind).toBe("revertible");
+    }
+  });
+
+  test("a change elsewhere is flagged, and the write is not revertible", () => {
+    const theirs = doc.replace("Intro", "Intro edited by someone");
+    for (const update of [replace("Middle", "Middle changed"), insert("Added", "end")]) {
+      expect(isConcurrent(buildRevertPlan(doc, applyInverse(theirs, update), update))).toBe(true);
+    }
+    const atEnd = doc.replace("Outro", "Outro edited");
+    expect(isConcurrent(buildRevertPlan(doc, applyInverse(atEnd, insert("Added", "start")), insert("Added", "start")))).toBe(true);
+  });
+
+  test("Notion re-rendering the line next to the edit, or renumbering a list, is not flagged", () => {
+    const update = replace("1. first", "1. first\n2. inserted");
+    const renumbered = applyInverse(doc, update).replace("2. second", "3. second");
+    expect(buildRevertPlan(doc, renumbered, update).kind).toBe("revertible");
+    const blankDropped = applyInverse(doc, replace("Middle", "Middle changed")).replace("\n\nOutro", "\nOutro");
+    expect(isConcurrent(buildRevertPlan(doc, blankDropped, replace("Middle", "Middle changed")))).toBe(false);
+  });
+
+  test("an edit within the lines we changed cannot be told apart", () => {
+    const update = replace("Middle", "Middle changed");
+    const after = applyInverse(doc, update).replace("Middle changed", "Middle changed twice");
+    expect(isConcurrent(buildRevertPlan(doc, after, update))).toBe(false);
+  });
+
+  test("when an old_str cannot be located the check is skipped rather than guessed", () => {
+    const ambiguous = "x\nx\ny";
+    const update = replace("x", "z");
+    expect(isConcurrent(buildRevertPlan(ambiguous, "z\nx\ny edited", update))).toBe(false);
+  });
+
+  test("randomized: never flags our own edit; always flags a change two or more lines away", () => {
+    let seed = 7;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const pick = <T>(items: readonly T[]) => items[Math.floor(random() * items.length)]!;
+    const filler = ["", "", "- item", "1. step", "\tchild", "| a | b |", "<empty-block/>"];
+    for (let i = 0; i < 3000; i++) {
+      const lines = Array.from({ length: 3 + Math.floor(random() * 15) }, (_, n) => (random() < 0.5 ? `line ${n}.` : pick(filler)));
+      lines.push(`line ${lines.length}.`);
+      const before = lines.join("\n");
+      const unique = lines.flatMap((line, n) => (line.startsWith("line ") ? [n] : []));
+      const kind = random();
+      let update: PageMarkdownUpdate;
+      let start: number;
+      let end: number;
+      if (kind < 0.2) {
+        update = insert(`added ${i}\n${pick(filler)}`, "end");
+        [start, end] = [lines.length, lines.length];
+      } else if (kind < 0.3) {
+        update = insert(`added ${i}`, "start");
+        [start, end] = [0, 0];
+      } else {
+        const at = pick(unique);
+        update = replace(lines[at]!, random() < 0.5 ? `${lines[at]} changed` : `${pick(filler)}\nnew ${i}\n${pick(filler)}`);
+        [start, end] = [at, at + 1];
+      }
+
+      expect(isConcurrent(buildRevertPlan(before, applyInverse(before, update), update))).toBe(false);
+
+      const far = lines.flatMap((line, n) => ((n <= start - 2 || n >= end + 1) && line.startsWith("line ") ? [n] : []));
+      if (far.length === 0) continue;
+      const theirs = [...lines];
+      const target = pick(far);
+      theirs[target] = `${theirs[target]} by someone else`;
+      expect(isConcurrent(buildRevertPlan(before, applyInverse(theirs.join("\n"), update), update))).toBe(true);
+    }
+  });
+});

@@ -36,6 +36,8 @@ export function revertBlockerText(blocker: string): string {
       return "no unambiguous inverse edit could be computed";
     case "truncated_after_write" satisfies RevertBlocker:
       return "Notion returned truncated content after the write, so the change could not be captured";
+    case "concurrent_edit" satisfies RevertBlocker:
+      return "someone else edited the page at the same moment, and undoing the change would undo theirs too";
     default:
       return blocker;
   }
@@ -70,6 +72,8 @@ export function revertConflictText(id: number, conflict: RevertConflict): string
       return `The page was edited after audit #${id} (last_edited_time ${conflict.recorded} at the time of the write, now ${conflict.now}); reverting may undo or conflict with those later changes.`;
     case "content_changed":
       return `The page content changed after audit #${id}; reverting may fail or undo those later changes.`;
+    case "properties_changed":
+      return `${conflict.names.join(", ")} changed after audit #${id}; reverting would overwrite those later changes.`;
     default:
       throw new Error(`Unknown revert conflict: ${conflict satisfies never}`);
   }

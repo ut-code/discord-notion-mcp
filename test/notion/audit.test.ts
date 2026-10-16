@@ -104,7 +104,7 @@ describe("NotionWriteService", () => {
     const order = api.calls.map((c) => c.method).filter((m) => ["createPage", "updatePageMarkdown", "createComment"].includes(m));
     expect(order).toEqual(["createPage", "updatePageMarkdown", "createComment"]);
 
-    expect(api.comments).toEqual([
+    expect(api.comments).toMatchObject([
       { pageId: outcome.pageId, text: `🤖 Alice (@alice, Discord) が MCP 経由でページを作成しました — audit #${outcome.auditId}` },
     ]);
     const row = (await store.get(outcome.auditId))!;
@@ -208,7 +208,7 @@ describe("NotionWriteService", () => {
       },
     });
     expect(JSON.stringify(row.snapshot)).not.toContain("Intro");
-    expect(api.comments.at(-1)).toEqual({
+    expect(api.comments.at(-1)).toMatchObject({
       pageId: parent.id,
       text: `🤖 Alice (@alice, Discord) が MCP 経由で内容を追記しました — audit #${outcome.auditId}`,
     });
@@ -368,6 +368,39 @@ describe("NotionWriteService", () => {
     });
   });
 
+  test("a failed archive takes its comment back", async () => {
+    const page = api.addPage({ title: "Old" });
+    api.failNext("updatePage", new NotionRequestError("Conflict occurred while saving.", 409, "conflict_error"));
+    await expect(writes.archivePage(ACTOR, { pageId: page.id, request: {} })).rejects.toThrow("audit #1");
+    expect(api.comments).toEqual([]);
+    expect(await store.get(1)).toMatchObject({ status: "failed", commentError: null });
+  });
+
+  test("a failed archive whose comment cannot be removed says so", async () => {
+    const page = api.addPage({ title: "Old" });
+    api.failNext("updatePage", new NotionRequestError("Conflict occurred while saving.", 409, "conflict_error"));
+    api.failNext("deleteComment", new NotionRequestError("Could not find comment.", 404, "object_not_found"));
+    await expect(writes.archivePage(ACTOR, { pageId: page.id, request: {} })).rejects.toThrow("audit #1");
+    expect(api.comments).toHaveLength(1);
+    expect(await store.get(1)).toMatchObject({
+      status: "failed",
+      commentError: "The attribution comment could not be removed: Could not find comment.",
+    });
+  });
+
+  test("a content write that meets someone else's edit is applied but not revertible", async () => {
+    api.markdown.set(parent.id, "Intro\n\nBody\n\nOutro");
+    const write = api.updatePageMarkdown.bind(api);
+    api.updatePageMarkdown = async (pageId, update) => {
+      api.markdown.set(pageId, api.markdown.get(pageId)!.replace("Intro", "Intro (edited in the browser)"));
+      return write(pageId, update);
+    };
+    const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
+    expect(outcome.warning).toEqual({ kind: "revert_blocked", blocker: "concurrent_edit" });
+    expect((await store.get(outcome.auditId))!.snapshot).toMatchObject({ inverse: null, revertBlocker: "concurrent_edit" });
+    expect(audit.revertability((await store.get(outcome.auditId))!)).toEqual({ kind: "blocked", blocker: "concurrent_edit" });
+  });
+
   test("a failing comment does not fail the write; the error is stored", async () => {
     api.failNext("createComment", new NotionRequestError("Insufficient permissions for this endpoint.", 403, "restricted_resource"));
     const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "hello", request: {} });
@@ -410,7 +443,7 @@ describe("NotionAuditService.revert", () => {
 
     expect(result).toEqual({ ok: true, revertAuditId: 2, forced: false, partial: false, note: null });
     expect(api.pages.get(created.pageId)!.in_trash).toBe(true);
-    expect(api.comments.at(-1)).toEqual({ pageId: created.pageId, text: `↩️ Admin が audit #${created.auditId} を取り消しました` });
+    expect(api.comments.at(-1)).toMatchObject({ pageId: created.pageId, text: `↩️ Admin が audit #${created.auditId} を取り消しました` });
     const original = (await store.get(created.auditId))!;
     expect(original.revertedBy).toBe(ADMIN.actorDiscordUserId);
     expect(original.revertAuditId).toBe(2);
@@ -536,18 +569,53 @@ describe("NotionAuditService.revert", () => {
     expect(api.comments.at(-1)!.text).toBe(`↩️ Admin が audit #${archived.auditId} を取り消しました`);
   });
 
-  test("refuses when the page changed after the write, unless forced", async () => {
+  test("refuses when a property it set changed afterwards, even within the same minute, unless forced", async () => {
     const row = addRow({ Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue });
     const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
-    api.touch(row.id);
+    // Someone sets it again without the minute-truncated last_edited_time moving.
+    api.pages.get(row.id)!.properties.Count = { id: "cnt", type: "number", number: 7 };
 
     const refused = await audit.revert(updated.auditId, ADMIN);
-    expect(refused).toMatchObject({ ok: false, reason: { kind: "conflict", conflict: { kind: "edited_after" } } });
+    expect(refused).toMatchObject({ ok: false, reason: { kind: "conflict", conflict: { kind: "properties_changed", names: ["Count"] } } });
     expect(api.callsOf("updatePage").length).toBe(1);
 
     const forced = await audit.revert(updated.auditId, { ...ADMIN, force: true });
     expect(forced).toMatchObject({ ok: true, forced: true });
     expect(await store.get(2)).toMatchObject({ request: { auditId: 1, force: true } });
+  });
+
+  test("edits to other properties are no conflict for a property revert", async () => {
+    const row = addRow({
+      Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue,
+      Note: { id: "nt", type: "number", number: 0 } as PagePropertyValue,
+    });
+    const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
+    await api.updatePage({ pageId: row.id, properties: { Note: { number: 5 } } });
+    expect(await audit.revert(updated.auditId, ADMIN)).toMatchObject({ ok: true, forced: false });
+    expect(api.pages.get(row.id)!.properties.Note).toMatchObject({ number: 5 });
+  });
+
+  test("older property rows without the values after the write fall back to the edit time", async () => {
+    const row = addRow({ Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue });
+    const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
+    const saved = (await store.get(updated.auditId))!;
+    const properties = (saved.snapshot as { properties: Array<Record<string, unknown>> }).properties.map(
+      ({ after: _after, ...entry }) => entry,
+    );
+    await overwriteAuditRow(db, updated.auditId, { snapshot: { properties } });
+    api.touch(row.id);
+    expect(await audit.revert(updated.auditId, ADMIN)).toMatchObject({
+      ok: false,
+      reason: { kind: "conflict", conflict: { kind: "edited_after" } },
+    });
+  });
+
+  test("a create_page revert whose trashing fails takes its comment back", async () => {
+    const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "New", request: {} });
+    const comments = api.comments.length;
+    api.failNext("updatePage", new NotionRequestError("Conflict occurred while saving.", 409, "conflict_error"));
+    expect(await audit.revert(created.auditId, ADMIN)).toMatchObject({ ok: false, reason: { kind: "failed" } });
+    expect(api.comments).toHaveLength(comments);
   });
 
   test("our own attribution comment does not count as a conflict", async () => {

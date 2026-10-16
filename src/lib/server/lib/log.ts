@@ -40,6 +40,7 @@ export type ErrorEntry =
   | { event: "oauth_client_prune_failed"; error: string }
   | { event: "audit_sweep_failed"; error: string }
   | { event: "notion_readback_failed"; pageId: string; error: string }
+  | { event: "notion_comment_retract_failed"; pageId: string; commentId: string; error: string }
   | { event: "access_resolution_failed"; source: "mcp" | "dashboard" | "consent"; discordUserId: string; error: string }
   | { event: "membership_check_failed"; error: string }
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }

@@ -70,7 +70,10 @@ export const PropertySnapshotEntrySchema = z.object({
   name: z.string(),
   id: z.string(),
   type: z.string(),
+  /** The value before the write, which revert restores. */
   value: propertyValueSchema,
+  /** The value our write left, to tell later edits apart; absent on older rows or when it could not be read back. */
+  after: propertyValueSchema.optional(),
 });
 export type PropertySnapshotEntry = z.infer<typeof PropertySnapshotEntrySchema>;
 

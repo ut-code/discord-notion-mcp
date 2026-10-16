@@ -89,7 +89,9 @@ export interface NotionApi {
   listComments(blockId: string, query: CursorQuery): Promise<Paged<NotionComment>>;
   createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage>;
   updatePage(params: { pageId: string; properties?: Record<string, unknown>; inTrash?: boolean }): Promise<NotionPage>;
-  createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<void>;
+  createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<{ id: string }>;
+  /** Only comments this integration created can be deleted. */
+  deleteComment(commentId: string): Promise<void>;
 }
 
 function translateError(error: unknown): unknown {
@@ -237,12 +239,17 @@ export class SdkNotionApi implements NotionApi {
     return expectFull(page, isFullPage, "page");
   }
 
-  async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<void> {
-    await this.call(() =>
+  async createComment(params: { pageId: string; richText: RichTextRequest[] }): Promise<{ id: string }> {
+    const comment = await this.call(() =>
       this.client.comments.create({
         parent: { page_id: params.pageId },
         rich_text: sdkRequest<Extract<CreateCommentParameters, { rich_text: unknown }>["rich_text"]>(params.richText),
       }),
     );
+    return { id: comment.id };
+  }
+
+  async deleteComment(commentId: string): Promise<void> {
+    await this.call(() => this.client.comments.delete({ comment_id: commentId }));
   }
 }

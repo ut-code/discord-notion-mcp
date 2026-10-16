@@ -206,6 +206,26 @@ export type PropertyWriteRefusal = { kind: "hosted_files"; files: string[] } | {
 
 export type WritableResult = { ok: true; value: Record<string, unknown> } | { ok: false; refusal: PropertyWriteRefusal };
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/**
+ * Whether two read values of a property hold the same content, judged by what writing them
+ * back would set (display details such as avatars or option colors are ignored). A value
+ * that cannot be written back never counts as the same.
+ */
+export function samePropertyValue(a: PagePropertyValue, b: PagePropertyValue): boolean {
+  const x = toWritablePropertyValue(a);
+  const y = toWritablePropertyValue(b);
+  return x.ok && y.ok && canonicalJson(x.value) === canonicalJson(y.value);
+}
+
 /** Converts a page-format (read) property value into the format pages.update accepts. */
 export function toWritablePropertyValue(value: PagePropertyValue): WritableResult {
   switch (value.type) {

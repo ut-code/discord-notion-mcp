@@ -130,21 +130,101 @@ function inverseUpdates(a: string[], b: string[], raw: Hunk[], after: string): C
   return groups.map((g) => ({ old_str: b.slice(g.bStart, g.bEnd).join("\n"), new_str: a.slice(g.aStart, g.aEnd).join("\n") }));
 }
 
-/** Why no inverse edit exists: nothing left to anchor it on, or no unique one. */
-export type RevertPlanBlocker = "no_anchor" | "ambiguous_inverse";
+/** Lines next to an edit Notion may re-render along with it (a blank line, a list marker). */
+const EDIT_SLACK_LINES = 1;
+
+/** List numbers may be re-counted when an item is added elsewhere, so they are not compared. */
+const comparable = (line: string) => line.replace(/^(\s*)\d+\.(\s)/, "$11.$2").trimEnd();
+
+const lineAt = (text: string, offset: number) => text.slice(0, offset).split("\n").length - 1;
+
+/**
+ * Lines [start, end) of `before` the update may change, or null when they cannot be told
+ * (an old_str that matches several places, or none where Notion still found one).
+ */
+function touchedRanges(before: string, lineCount: number, update: PageMarkdownUpdate): Array<[number, number]> | null {
+  if (update.type === "insert_content") {
+    const at = update.insert_content.position.type === "start" ? 0 : lineCount;
+    return [[at, at]];
+  }
+  const ranges: Array<[number, number]> = [];
+  const written: string[] = [];
+  for (const { old_str, new_str } of update.update_content.content_updates) {
+    const count = countOccurrences(before, old_str);
+    if (count === 1) {
+      const at = before.indexOf(old_str);
+      ranges.push([lineAt(before, at), lineAt(before, at + old_str.length) + 1]);
+    } else if (count > 1 || !written.some((text) => text.includes(old_str))) {
+      return null;
+    }
+    // Otherwise it edits text an earlier update of this call wrote, inside that update's range.
+    written.push(new_str);
+  }
+  return ranges;
+}
+
+function indexOfLines(haystack: readonly string[], needle: readonly string[], from: number, to: number): number {
+  for (let at = from; at + needle.length <= to; at++) {
+    if (needle.every((line, offset) => haystack[at + offset] === line)) return at;
+  }
+  return -1;
+}
+
+/**
+ * Whether `after` differs from `before` only within (or next to) the ranges the update touched:
+ * every untouched stretch of `before` must still appear in `after`, in order. A change anywhere
+ * else was made by someone else between our read and our write.
+ */
+function changedOnlyWhereTouched(a: readonly string[], b: readonly string[], ranges: Array<[number, number]>): boolean {
+  const before = a.map(comparable);
+  const after = b.map(comparable);
+  // Untouched stretches: before the first range, between ranges, after the last one.
+  const stretches: Array<[number, number]> = [];
+  let from = 0;
+  for (const [start, end] of [...ranges].sort((x, y) => x[0] - y[0])) {
+    stretches.push([from, Math.max(from, start - EDIT_SLACK_LINES)]);
+    from = Math.max(from, end + EDIT_SLACK_LINES);
+  }
+  const [head = [0, 0], ...between] = stretches;
+  const first = before.slice(...head);
+  const last = before.slice(Math.min(from, before.length));
+
+  if (first.length + last.length > after.length) return false;
+  if (first.some((line, index) => after[index] !== line)) return false;
+  const tail = after.length - last.length;
+  if (last.some((line, index) => after[tail + index] !== line)) return false;
+  let position = first.length;
+  for (const [start, end] of between) {
+    if (end <= start) continue;
+    const found = indexOfLines(after, before.slice(start, end), position, tail);
+    if (found === -1) return false;
+    position = found + (end - start);
+  }
+  return true;
+}
+
+/** Why no inverse edit exists: nothing left to anchor it on, no unique one, or someone else edited meanwhile. */
+export type RevertPlanBlocker = "no_anchor" | "ambiguous_inverse" | "concurrent_edit";
 
 export type RevertPlan =
   | { kind: "unchanged" }
   | { kind: "revertible"; inverse: PageMarkdownUpdate; hunks: ContentHunk[] }
   | { kind: "unsupported"; blocker: RevertPlanBlocker; hunks: ContentHunk[] };
 
-/** Computes how to turn `after` back into `before` with Notion's markdown endpoint. */
-export function buildRevertPlan(before: string, after: string): RevertPlan {
+/**
+ * Computes how to turn `after` back into `before` with Notion's markdown endpoint. With the
+ * `update` that produced `after`, a change outside what it touched means someone else edited
+ * the page between our read and our write; undoing it would undo theirs, so it is refused.
+ */
+export function buildRevertPlan(before: string, after: string, update?: PageMarkdownUpdate): RevertPlan {
   if (before === after) return { kind: "unchanged" };
   const a = before.split("\n");
   const b = after.split("\n");
   const raw = lineHunks(a, b);
   const hunks = raw.map((h) => ({ before: a.slice(h.aStart, h.aEnd).join("\n"), after: b.slice(h.bStart, h.bEnd).join("\n") }));
+
+  const touched = update ? touchedRanges(before, a.length, update) : null;
+  if (touched && !changedOnlyWhereTouched(a, b, touched)) return { kind: "unsupported", blocker: "concurrent_edit", hunks };
 
   // Nothing left to anchor an update on: put the old content back instead.
   if (after.trim() === "") {

@@ -14,7 +14,7 @@ import {
   WRITABLE_PROPERTY_TYPES,
 } from "../content/properties";
 import { literalRichText } from "../content/rich-text";
-import { postComment, writeCommentText, type Actor, type WriteOperation } from "./attribution";
+import { postComment, retractComment, writeCommentText, type Actor, type WriteOperation } from "./attribution";
 import { propertyWriteRefusalText } from "./outcome-text";
 import type { RevertBlocker } from "./revert-reasons";
 import {
@@ -119,7 +119,7 @@ export class NotionWriteService {
       fallbackLastEdited: string | null;
     },
   ): Promise<WriteOutcome> {
-    const commentError = await postComment(this.api, page.id, writeCommentText(actor, operation, row.id));
+    const { commentError } = await postComment(this.api, page.id, writeCommentText(actor, operation, row.id));
     // The write succeeded: a failed read-back only loses the final URL and edit time, so log it and go on.
     const final = await this.api.retrievePage(page.id).catch((error: unknown) => {
       this.reportError({ event: "notion_readback_failed", pageId: page.id, error: errorMessage(error) });
@@ -285,7 +285,7 @@ export class NotionWriteService {
       warning = { kind: "revert_blocked", blocker: snapshot.revertBlocker };
     } else {
       snapshot.afterSha256 = sha256(after.markdown);
-      const plan = buildRevertPlan(before.markdown, after.markdown);
+      const plan = buildRevertPlan(before.markdown, after.markdown, input.update);
       if (plan.kind === "revertible") {
         snapshot.inverse = plan.inverse;
         snapshot.hunks = plan.hunks;
@@ -351,15 +351,42 @@ export class NotionWriteService {
       return this.fail(row, error);
     }
     const changed = entries.map((entry) => entry.name);
+    const withAfter = await this.valuesAfterWrite(updated, entries);
     const outcome = await this.succeed(actor, row, "update_properties", page, {
       result: toAuditJson(UpdatePropertiesResultSchema, { changed }),
+      ...(withAfter ? { snapshot: toAuditJson(UpdatePropertiesSnapshotSchema, { properties: withAfter }) } : {}),
       warning: null,
       fallbackLastEdited: updated.last_edited_time,
     });
     return { ...outcome, changed };
   }
 
-  /** The comment is posted before archiving because a trashed page may not accept comments. */
+  /**
+   * Adds the values our write left, so a revert can tell later edits of these properties
+   * apart. The write succeeded: when they cannot be read, revert falls back to edit times.
+   */
+  private async valuesAfterWrite(updated: NotionPage, entries: PropertySnapshotEntry[]): Promise<PropertySnapshotEntry[] | null> {
+    try {
+      return await Promise.all(
+        entries.map(async (entry) => {
+          const value = Object.values(updated.properties).find((candidate) => candidate.id === entry.id);
+          if (!value) throw new Error(`property ${entry.name} missing from the update response`);
+          const after = mayBeTruncated(value)
+            ? valueFromPropertyItems(value, await this.api.retrievePropertyItems(updated.id, value.id))
+            : value;
+          return { ...entry, after };
+        }),
+      );
+    } catch (error) {
+      this.reportError({ event: "notion_readback_failed", pageId: updated.id, error: errorMessage(error) });
+      return null;
+    }
+  }
+
+  /**
+   * The comment is posted before archiving because a trashed page may not accept comments;
+   * if archiving then fails, the comment is taken back so the page does not claim it.
+   */
   async archivePage(actor: Actor, input: { pageId: string; request: Record<string, unknown> }): Promise<WriteOutcome> {
     const page = await this.api.retrievePage(input.pageId);
     if (page.in_trash) throw new ToolError("This page is already in the trash.");
@@ -371,12 +398,17 @@ export class NotionWriteService {
       targetUrl: page.url,
       targetTitle: pageTitle(page),
     });
-    const commentError = await postComment(this.api, page.id, writeCommentText(actor, "archive_page", row.id));
+    const { commentId, commentError } = await postComment(this.api, page.id, writeCommentText(actor, "archive_page", row.id));
     let trashed: NotionPage;
     try {
       trashed = await this.api.updatePage({ pageId: page.id, inTrash: true });
     } catch (error) {
-      await this.audit.finishPending(row.id, { status: "failed", error: errorMessage(error), commentError });
+      const retractError = commentId ? await retractComment(this.api, commentId) : null;
+      await this.audit.finishPending(row.id, {
+        status: "failed",
+        error: errorMessage(error),
+        commentError: retractError ? `The attribution comment could not be removed: ${retractError}` : commentError,
+      });
       const mapped = toToolError(error);
       if (mapped instanceof ToolError) throw new ToolError(`${mapped.message} (audit #${row.id})`);
       throw error;

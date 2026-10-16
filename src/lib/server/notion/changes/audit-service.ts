@@ -4,8 +4,8 @@ import { logError, type ErrorSink, type EventSink } from "../../lib/log";
 import { runPeriodically } from "../../lib/periodic";
 import { isNotionMiss, NotionRequestError, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
 import { sha256 } from "../content/content-diff";
-import { toWritablePropertyValue } from "../content/properties";
-import { postComment, revertCommentText } from "./attribution";
+import { mayBeTruncated, samePropertyValue, toWritablePropertyValue, valueFromPropertyItems } from "../content/properties";
+import { postComment, retractComment, revertCommentText } from "./attribution";
 import {
   ArchivePageSnapshotSchema,
   ContentSnapshotSchema,
@@ -116,6 +116,27 @@ async function checkContent(api: NotionApi, snapshot: ContentSnapshot, pageId: s
   return { refusal: null, conflict: { kind: "content_changed" } };
 }
 
+/**
+ * Property writes are compared by value when the values our write left were recorded:
+ * exact where last_edited_time is minute-truncated, and edits to other properties (which
+ * revert does not touch) are no conflict. Undefined for older rows, which use the edit time.
+ */
+async function checkProperties(
+  api: NotionApi,
+  snapshot: UpdatePropertiesSnapshot,
+  current: NotionPage,
+): Promise<RevertConflict | null | undefined> {
+  if (!snapshot.properties.every((entry) => entry.after)) return undefined;
+  const changed: string[] = [];
+  for (const entry of snapshot.properties) {
+    const value = Object.values(current.properties).find((candidate) => candidate.id === entry.id);
+    const now =
+      value && mayBeTruncated(value) ? valueFromPropertyItems(value, await api.retrievePropertyItems(current.id, value.id)) : value;
+    if (!now || !entry.after || !samePropertyValue(entry.after, now)) changed.push(entry.name);
+  }
+  return changed.length > 0 ? { kind: "properties_changed", names: changed } : null;
+}
+
 type Prepared = { reason: RevertReason } | { reason: null; api: NotionApi; record: RevertRecord; pageId: string };
 
 /** Audit log queries and revert, used by the dashboard and the change tools. */
@@ -188,6 +209,9 @@ export class NotionAuditService {
       const check = await checkContent(api, record.snapshot, current.id);
       if (check.refusal !== null) return { ok: false, reason: check.refusal };
       conflict = check.conflict;
+    } else if (record.operation === "update_properties") {
+      const checked = await checkProperties(api, record.snapshot, current);
+      conflict = checked === undefined ? detectConflict(row, current) : checked;
     } else {
       conflict = detectConflict(row, current);
     }
@@ -247,25 +271,31 @@ export class NotionAuditService {
     const pageId = current.id;
     switch (record.operation) {
       case "create_page": {
-        // Comment first: a trashed page may not accept comments.
-        const commentError = current.in_trash ? null : await postComment(api, pageId, comment);
         if (current.in_trash) {
           return {
             result: { inTrash: true },
             note: { kind: "already_in_trash" },
             partial: false,
-            commentError,
+            commentError: null,
             lastEditedTime: current.last_edited_time,
           };
         }
-        const trashed = await api.updatePage({ pageId: record.result.pageId, inTrash: true });
+        // Comment first: a trashed page may not accept comments. It is taken back if trashing fails.
+        const { commentId, commentError } = await postComment(api, pageId, comment);
+        let trashed: NotionPage;
+        try {
+          trashed = await api.updatePage({ pageId: record.result.pageId, inTrash: true });
+        } catch (error) {
+          if (commentId) await this.retractOrReport(api, pageId, commentId);
+          throw error;
+        }
         return { result: { inTrash: true }, note: null, partial: false, commentError, lastEditedTime: trashed.last_edited_time };
       }
       case "append_content":
       case "edit_content": {
         const { snapshot } = record;
         if (!snapshot.inverse) {
-          const commentError = await postComment(api, pageId, comment);
+          const { commentError } = await postComment(api, pageId, comment);
           return {
             result: { restored: false },
             note: { kind: "nothing_to_restore" },
@@ -283,7 +313,7 @@ export class NotionAuditService {
           }
           throw error;
         }
-        const commentError = await postComment(api, pageId, comment);
+        const { commentError } = await postComment(api, pageId, comment);
         const contentSha256 = restored.truncated ? null : sha256(restored.markdown);
         const note: RevertNote | null =
           contentSha256 !== null && contentSha256 !== snapshot.beforeSha256 ? { kind: "content_differs" } : null;
@@ -310,7 +340,7 @@ export class NotionAuditService {
         }
         if (restored.length === 0) throw new RevertFailed({ kind: "nothing_restorable", skipped });
         const updated = await api.updatePage({ pageId, properties });
-        const commentError = await postComment(api, pageId, comment);
+        const { commentError } = await postComment(api, pageId, comment);
         const partial = skipped.length > 0;
         const note: RevertNote | null = partial ? { kind: "properties_partial", restored, skipped } : null;
         return {
@@ -332,12 +362,18 @@ export class NotionAuditService {
           };
         }
         const restoredPage = await api.updatePage({ pageId, inTrash: false });
-        const commentError = await postComment(api, pageId, comment);
+        const { commentError } = await postComment(api, pageId, comment);
         return { result: { inTrash: false }, note: null, partial: false, commentError, lastEditedTime: restoredPage.last_edited_time };
       }
       default:
         throw new Error(`Unknown revert operation: ${record satisfies never}`);
     }
+  }
+
+  /** A failed revert keeps no comment claiming it happened; one that cannot be removed is logged. */
+  private async retractOrReport(api: NotionApi, pageId: string, commentId: string): Promise<void> {
+    const error = await retractComment(api, commentId);
+    if (error) this.reportError({ event: "notion_comment_retract_failed", pageId, commentId, error });
   }
 
   private async lastEdited(api: NotionApi, pageId: string): Promise<string | null> {

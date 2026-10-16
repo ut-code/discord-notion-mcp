@@ -15,6 +15,8 @@ function blockerText(blocker: string): string {
       return m.revert_blocker_ambiguous_inverse();
     case "truncated_after_write" satisfies RevertBlocker:
       return m.revert_blocker_truncated_after_write();
+    case "concurrent_edit" satisfies RevertBlocker:
+      return m.revert_blocker_concurrent_edit();
     default:
       return blocker;
   }

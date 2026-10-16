@@ -12,7 +12,11 @@ export type RevertBlocker = RevertPlanBlocker | "truncated_after_write";
 
 /** Why the page may have changed since the write; reverting anyway needs `force`. */
 export type RevertConflict =
-  { kind: "no_recorded_time" } | { kind: "edited_after"; recorded: string; now: string } | { kind: "content_changed" };
+  | { kind: "no_recorded_time" }
+  | { kind: "edited_after"; recorded: string; now: string }
+  | { kind: "content_changed" }
+  /** Properties our write set that now hold other values. */
+  | { kind: "properties_changed"; names: string[] };
 
 /** A revert that was tried and failed; the attempt is recorded as a failed revert row. */
 export type RevertFailure =

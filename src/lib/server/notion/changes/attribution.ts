@@ -37,10 +37,24 @@ export function revertCommentText(actorDisplayName: string, auditId: number): st
   return m.notion_comment_revert({ actor: actorDisplayName, auditId });
 }
 
-/** Posts a page comment; returns the error message instead of throwing (writes must not fail on comments). */
-export async function postComment(api: NotionApi, pageId: string, text: string): Promise<string | null> {
+/** Posts a page comment; reports an error instead of throwing (writes must not fail on comments). */
+export async function postComment(
+  api: NotionApi,
+  pageId: string,
+  text: string,
+): Promise<{ commentId: string; commentError: null } | { commentId: null; commentError: string }> {
   try {
-    await api.createComment({ pageId, richText: literalRichText(text) });
+    const { id } = await api.createComment({ pageId, richText: literalRichText(text) });
+    return { commentId: id, commentError: null };
+  } catch (error) {
+    return { commentId: null, commentError: errorMessage(error) };
+  }
+}
+
+/** Removes a comment posted for a write that then failed; returns why it could not be removed. */
+export async function retractComment(api: NotionApi, commentId: string): Promise<string | null> {
+  try {
+    await api.deleteComment(commentId);
     return null;
   } catch (error) {
     return errorMessage(error);
