@@ -130,11 +130,12 @@ function inverseUpdates(a: string[], b: string[], raw: Hunk[], after: string): C
   return groups.map((g) => ({ old_str: b.slice(g.bStart, g.bEnd).join("\n"), new_str: a.slice(g.aStart, g.aEnd).join("\n") }));
 }
 
-/** Lines next to an edit Notion may re-render along with it (a blank line, a list marker). */
-const EDIT_SLACK_LINES = 1;
-
-/** List numbers may be re-counted when an item is added elsewhere, so they are not compared. */
-const comparable = (line: string) => line.replace(/^(\s*)\d+\.(\s)/, "$11.$2").trimEnd();
+/**
+ * The lines of a stretch as compared: Notion re-counts list numbers when an item is added
+ * and drops blank lines between blocks, so neither may count as someone else's change.
+ */
+const comparable = (lines: readonly string[]) =>
+  lines.map((line) => line.replace(/^(\s*)\d+\.(\s)/, "$11.$2").trimEnd()).filter((line) => line !== "");
 
 const lineAt = (text: string, offset: number) => text.slice(0, offset).split("\n").length - 1;
 
@@ -171,23 +172,23 @@ function indexOfLines(haystack: readonly string[], needle: readonly string[], fr
 }
 
 /**
- * Whether `after` differs from `before` only within (or next to) the ranges the update touched:
- * every untouched stretch of `before` must still appear in `after`, in order. A change anywhere
- * else was made by someone else between our read and our write.
+ * Whether `after` differs from `before` only within the ranges the update touched: every
+ * untouched stretch of `before` must still appear in `after`, in order. A change anywhere else
+ * was made by someone else between our read and our write. A change within our own lines
+ * cannot be told from how Notion renders what we wrote.
  */
 function changedOnlyWhereTouched(a: readonly string[], b: readonly string[], ranges: Array<[number, number]>): boolean {
-  const before = a.map(comparable);
-  const after = b.map(comparable);
+  const after = comparable(b);
   // Untouched stretches: before the first range, between ranges, after the last one.
   const stretches: Array<[number, number]> = [];
   let from = 0;
   for (const [start, end] of [...ranges].sort((x, y) => x[0] - y[0])) {
-    stretches.push([from, Math.max(from, start - EDIT_SLACK_LINES)]);
-    from = Math.max(from, end + EDIT_SLACK_LINES);
+    stretches.push([from, Math.max(from, start)]);
+    from = Math.max(from, end);
   }
   const [head = [0, 0], ...between] = stretches;
-  const first = before.slice(...head);
-  const last = before.slice(Math.min(from, before.length));
+  const first = comparable(a.slice(...head));
+  const last = comparable(a.slice(from));
 
   if (first.length + last.length > after.length) return false;
   if (first.some((line, index) => after[index] !== line)) return false;
@@ -195,10 +196,11 @@ function changedOnlyWhereTouched(a: readonly string[], b: readonly string[], ran
   if (last.some((line, index) => after[tail + index] !== line)) return false;
   let position = first.length;
   for (const [start, end] of between) {
-    if (end <= start) continue;
-    const found = indexOfLines(after, before.slice(start, end), position, tail);
+    const stretch = comparable(a.slice(start, end));
+    if (stretch.length === 0) continue;
+    const found = indexOfLines(after, stretch, position, tail);
     if (found === -1) return false;
-    position = found + (end - start);
+    position = found + stretch.length;
   }
   return true;
 }

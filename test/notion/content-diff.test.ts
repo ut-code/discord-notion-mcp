@@ -208,12 +208,18 @@ describe("buildRevertPlan: someone else's edit between our read and our write", 
     expect(isConcurrent(buildRevertPlan(doc, applyInverse(atEnd, insert("Added", "start")), insert("Added", "start")))).toBe(true);
   });
 
-  test("Notion re-rendering the line next to the edit, or renumbering a list, is not flagged", () => {
+  test("Notion renumbering a list or dropping blank lines is not flagged", () => {
     const update = replace("1. first", "1. first\n2. inserted");
     const renumbered = applyInverse(doc, update).replace("2. second", "3. second");
     expect(buildRevertPlan(doc, renumbered, update).kind).toBe("revertible");
     const blankDropped = applyInverse(doc, replace("Middle", "Middle changed")).replace("\n\nOutro", "\nOutro");
     expect(isConcurrent(buildRevertPlan(doc, blankDropped, replace("Middle", "Middle changed")))).toBe(false);
+  });
+
+  test("an edit of the very next block is flagged", () => {
+    const update = replace("Middle", "Middle changed");
+    expect(isConcurrent(buildRevertPlan(doc, applyInverse(doc.replace("Outro", "Outro edited"), update), update))).toBe(true);
+    expect(isConcurrent(buildRevertPlan(doc, applyInverse(doc.replace("2. second", "2. second edited"), update), update))).toBe(true);
   });
 
   test("an edit within the lines we changed cannot be told apart", () => {
@@ -228,7 +234,7 @@ describe("buildRevertPlan: someone else's edit between our read and our write", 
     expect(isConcurrent(buildRevertPlan(ambiguous, "z\nx\ny edited", update))).toBe(false);
   });
 
-  test("randomized: never flags our own edit; always flags a change two or more lines away", () => {
+  test("randomized: never flags our own edit; always flags a change to any other line", () => {
     let seed = 7;
     const random = () => {
       seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -259,7 +265,7 @@ describe("buildRevertPlan: someone else's edit between our read and our write", 
 
       expect(isConcurrent(buildRevertPlan(before, applyInverse(before, update), update))).toBe(false);
 
-      const far = lines.flatMap((line, n) => ((n <= start - 2 || n >= end + 1) && line.startsWith("line ") ? [n] : []));
+      const far = lines.flatMap((line, n) => ((n < start || n >= end) && line.startsWith("line ") ? [n] : []));
       if (far.length === 0) continue;
       const theirs = [...lines];
       const target = pick(far);
