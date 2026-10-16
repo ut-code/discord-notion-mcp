@@ -198,7 +198,7 @@ describe("grants", () => {
     });
     expect(page.form.roles.find((role) => role.id === ROLE_MOD)).toMatchObject({
       granted: ["notion:write"],
-      notices: { "notion:read": "Notion 読み書きに含まれるため、付与しても効果がありません。" },
+      notices: { "notion:read": "Notion 編集に含まれるため、付与しても効果がありません。" },
     });
     const admin = await grantsPage(deps, params(`subjectType=user&userId=${ADMIN_MEMBER}`));
     expect(admin.form.candidates.find((candidate) => candidate.id === ADMIN_MEMBER)?.notices["discord:read"]).toBe(
@@ -214,7 +214,7 @@ describe("grants", () => {
     const fields = { permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD };
     expect(await createGrant(deps, form(fields), owner)).toEqual({
       kind: "ok",
-      message: "ロール「Moderator」に「Discord 読み取り」を付与しました。",
+      message: "ロール「Moderator」に「Discord 閲覧」を付与しました。",
     });
     const stored = (await h.server.grants.listGrants()).find((grant) => grant.subjectId === ROLE_MOD);
     expect(stored).toMatchObject({ permission: "discord:read", subjectType: "role", createdBy: OWNER_ID });
@@ -228,19 +228,19 @@ describe("grants", () => {
     const row = (await grantsPage(deps, params())).rows.find((candidate) => candidate.key === `role:${ROLE_MOD}:discord:read`);
     expect(row?.subject).toMatchObject({ name: "@Moderator", color: "#3498db", secondary: "ロール" });
     expect(row?.remove).toMatchObject({
-      label: "@Moderator の Discord 読み取りを削除",
-      menuLabel: "@Moderator の Discord 読み取りの操作",
-      confirm: "@Moderator の Discord 読み取りを削除しますか？",
+      label: "@Moderator の Discord 閲覧を削除",
+      menuLabel: "@Moderator の Discord 閲覧の操作",
+      confirm: "@Moderator の Discord 閲覧を削除しますか？",
     });
 
     expect(await createGrant(deps, form(fields), owner)).toMatchObject({
       kind: "warn",
-      message: "ロール「Moderator」には既に「Discord 読み取り」が付与されています。",
+      message: "ロール「Moderator」には既に「Discord 閲覧」が付与されています。",
     });
 
     expect(await deleteGrant(deps, form(fields), owner)).toEqual({
       kind: "ok",
-      message: "@Moderator から「Discord 読み取り」を削除しました。",
+      message: "@Moderator から「Discord 閲覧」を削除しました。",
     });
     expect((await h.server.grants.listGrants()).some((grant) => grant.subjectId === ROLE_MOD)).toBe(false);
     expect(h.events.at(-1)).toMatchObject({ event: "grant_removed", subjectId: ROLE_MOD });
@@ -253,13 +253,13 @@ describe("grants", () => {
       form({ permission: "notion:read", subjectType: "role", roleId: ROLE_MOD, userId: MEMBER }),
       owner,
     );
-    expect(byRole.message).toBe("ロール「Moderator」に「Notion 読み取り」を付与しました。");
+    expect(byRole.message).toBe("ロール「Moderator」に「Notion 閲覧」を付与しました。");
     const byUser = await createGrant(
       deps,
       form({ permission: "notion:read", subjectType: "user", roleId: ROLE_MOD, userId: READER }),
       owner,
     );
-    expect(byUser.message).toBe("ユーザー「Reader」に「Notion 読み取り」を付与しました。");
+    expect(byUser.message).toBe("ユーザー「Reader」に「Notion 閲覧」を付与しました。");
     expect(await createGrant(deps, form({ permission: "notion:read", subjectType: "user", roleId: ROLE_MOD }), owner)).toEqual({
       kind: "error",
       message: "ユーザーを選んでください。",
@@ -298,7 +298,7 @@ describe("grants", () => {
     );
     expect(subjects).toContainEqual(expect.objectContaining({ name: "Stranger", secondary: "@stranger · 非メンバー" }));
     expect(subjects).toContainEqual(expect.objectContaining({ name: "399999999999999999", secondary: "不明なユーザー", unknown: true }));
-    expect(data.rows.find((row) => row.subject.name === "Mina")?.remove?.label).toBe("Mina の Notion 読み取りを削除");
+    expect(data.rows.find((row) => row.subject.name === "Mina")?.remove?.label).toBe("Mina の Notion 閲覧を削除");
     expect(data.form?.roles.map((role) => role.name)).toEqual(["Staff", "Moderator", "@everyone"]);
   });
 
@@ -345,9 +345,9 @@ describe("grants", () => {
     await h.server.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
     expect((await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []))).toEqual([
       {
-        label: "Notion 読み書きに含まれる",
+        label: "Notion 編集に含まれる",
         tone: "warn",
-        title: "Notion 読み書きに含まれるため、この付与は効果がありません",
+        title: "Notion 編集に含まれるため、この付与は効果がありません",
       },
     ]);
 
@@ -371,12 +371,12 @@ describe("grants", () => {
     const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`));
     expect(preselected.form?.selectedUserId).toBe(MEMBER);
     expect(preselected.form?.candidates[0]?.id).toBe(MEMBER);
-    expect(preselected.form?.submitLabel).toBe("Mina に Notion 読み書きを付与");
+    expect(preselected.form?.submitLabel).toBe("Mina に Notion 編集を付与");
 
     expect((await grantsPage(deps, params(`q=${STRANGER}`))).form?.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
     expect((await grantsPage(deps, params("q=zzz"))).form?.candidates).toEqual([]);
     const plain = await grantsPage(deps, params());
-    expect(plain.form).toMatchObject({ subjectType: "role", roleId: ROLE_ADMIN, submitLabel: "@Staff に Discord 読み取りを付与" });
+    expect(plain.form).toMatchObject({ subjectType: "role", roleId: ROLE_ADMIN, submitLabel: "@Staff に Discord 閲覧を付与" });
     expect(plain.form?.roles.find((role) => role.id === ROLE_MOD)).toEqual({
       id: ROLE_MOD,
       name: "Moderator",
@@ -591,13 +591,13 @@ describe("consent", () => {
     expect(page.guildName).toBe("Test Guild");
     expect(page.switchNext.startsWith("/sign-in?")).toBe(true);
     expect(page.features).toEqual([
-      { permission: "notion:read", title: "Notion 読み取り", description: "共有されたページ・データベースの検索と閲覧" },
+      { permission: "notion:read", title: "Notion 閲覧", description: "共有されたページ・データベースの検索と閲覧" },
     ]);
   });
 
   test("admins see every capability including the admin UI", async () => {
     const page = await consentFor(OWNER_ID);
-    expect(page.features.map((feature) => feature.title)).toEqual(["Discord 読み取り", "Notion 読み取り", "Notion 読み書き", "管理画面"]);
+    expect(page.features.map((feature) => feature.title)).toEqual(["Discord 閲覧", "Notion 閲覧", "Notion 編集", "管理画面"]);
   });
 
   test("a member without permissions gets an empty list", async () => {
@@ -660,8 +660,8 @@ describe("users", () => {
     const mina = await userRow(member.userId);
     expect(mina).toMatchObject({ displayName: "Mina", username: "mina", roles: { text: "Moderator", title: null } });
     expect(mina.permissions).toEqual([
-      { label: "Discord 読み取り", tone: "secondary", title: undefined, individual: false },
-      { label: "Notion 読み取り", tone: "secondary", title: "個人に付与", individual: true },
+      { label: "Discord 閲覧", tone: "secondary", title: undefined, individual: false },
+      { label: "Notion 閲覧", tone: "secondary", title: "個人に付与", individual: true },
     ]);
     expect(mina.lastLogin).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/);
 
@@ -742,7 +742,7 @@ describe("token revocation", () => {
     expect((await listTools(before.access_token)).status).toBe(200);
 
     expect(await revokeTokens(deps, login.userId, owner)).toEqual({ kind: "ok", message: `user-${MEMBER} のトークンを失効しました。` });
-    expect((await userRow(login.userId)).revoked).toMatchObject({ label: "失効済み", tone: "secondary" });
+    expect((await userRow(login.userId)).revoked).toMatch(/^失効 \d{1,2}\/\d{1,2} \d{2}:\d{2}$/);
     expect(h.events.at(-1)).toMatchObject({ event: "tokens_revoked", userId: login.userId, by: OWNER_ID });
 
     const rejected = await listTools(before.access_token);

@@ -7,7 +7,7 @@ import { ADMIN_ONLY, type Viewer } from "./access";
 import { auditListHref } from "./audit";
 import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
-import { formatJst, formatShortJst, PERMISSION_LABELS } from "./format";
+import { formatShortJst, PERMISSION_LABELS } from "./format";
 import { GRANTS_PATH } from "./grants";
 import { pageLinks, pageParam, type ActionResult } from "./shared";
 import { buildUserRow, matchesUserQuery, type UserRowView } from "./views";
@@ -35,7 +35,8 @@ export interface UserTableRow {
   /** Empty when nothing is held (shown as —). */
   permissions: Array<BadgeView & { individual: boolean }>;
   lastLogin: string;
-  revoked: BadgeView | null;
+  /** When the tokens were revoked after the last login, the line saying so. */
+  revoked: string | null;
   /** Row menu links; null without a linked Discord account or when the viewer cannot open the page. */
   grantHref: string | null;
   auditHref: string | null;
@@ -102,9 +103,7 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
     roles: rolesLine(row),
     permissions: permissionBadges(row),
     lastLogin: formatShortJst(row.user.lastLoginAt),
-    revoked: wasRevokedSinceLogin(row.user)
-      ? { label: m.users_revoked(), tone: "secondary", title: m.users_revoked_at({ time: formatJst(row.user.revokedAt) }) }
-      : null,
+    revoked: wasRevokedSinceLogin(row.user) ? m.users_revoked_at({ time: formatShortJst(row.user.revokedAt) }) : null,
     grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subjectType=user&userId=${encodeURIComponent(discordUserId)}` : null,
     // Non-admin writers only have their own history.
     auditHref: !discordUserId

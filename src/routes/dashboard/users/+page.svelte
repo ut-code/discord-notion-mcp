@@ -105,10 +105,10 @@
             {/if}
           </Table.Cell>
           <Table.Cell class="secondary">
-            <span class="cluster">
-              {row.lastLogin}
-              {#if row.revoked}<ToneBadge badge={row.revoked} />{/if}
-            </span>
+            <div class="stack gap-[3px]">
+              <span>{row.lastLogin}</span>
+              {#if row.revoked}<span class="sub">{row.revoked}</span>{/if}
+            </div>
           </Table.Cell>
           <Table.Cell class="actions"><UserMenu {row} {index} canRevoke={data.canRevoke} /></Table.Cell>
         </Table.Row>

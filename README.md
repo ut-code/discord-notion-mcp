@@ -10,7 +10,7 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 | `notion:read`  | `notion_search` `notion_get_page` `notion_query_database` `notion_get_database` `notion_get_comments`                                                                                  |
 | `notion:write` | `notion_create_page` `notion_append_content` `notion_edit_content` `notion_update_properties` `notion_archive_page` `notion_list_recent_changes` `notion_revert_change`                |
 
-- `notion:write`（画面では「Notion 読み書き」）は `notion:read` を含む。
+- `notion:write`（画面では「Notion 編集」）は `notion:read` を含む。
 - Discord は本人が閲覧できるチャンネルのみ。
 - Notion の権限は Notion 連携に共有されたすべてのページ・データベースが対象。
 - Notion の本文は Notion 公式の Markdown API（拡張 Markdown: メンション・色・コールアウト・トグル・カラム）で読み書きする。

@@ -87,8 +87,8 @@ describe("usage statistics", () => {
       { label: "90日", href: "/dashboard?range=90", active: false },
     ]);
     expect(data.daily.series.map((entry) => [entry.key, entry.label])).toEqual([
-      ["discord:read", "Discord 読み取り"],
-      ["notion:read", "Notion 読み取り"],
+      ["discord:read", "Discord 閲覧"],
+      ["notion:read", "Notion 閲覧"],
       ["other", "その他"],
     ]);
     expect(data.daily.rows.map((row) => row.date)).toEqual(["10/06", "10/07", "10/08", "10/09", "10/10", "10/11", "10/12"]);
