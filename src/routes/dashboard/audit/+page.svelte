@@ -13,14 +13,12 @@
   import * as NativeSelect from "$lib/components/ui/native-select";
   import * as Table from "$lib/components/ui/table";
   import { goto } from "$app/navigation";
-  import { useHydrated } from "$lib/hydrated.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
 
-  const hydrated = useHydrated();
   const activeFilters = $derived(Object.values(data.filters).filter(Boolean).length);
   const activeFiltersLabel = $derived(m.audit_filter_active_count({ count: activeFilters }));
 
@@ -58,7 +56,8 @@
       <option value={option.value}>{option.label}</option>
     {/each}
   </NativeSelect.Root>
-  {#if !hydrated.current}<Button type="submit" variant="outline">{m.audit_filter_apply()}</Button>{/if}
+  <!-- With JavaScript the filters apply as they change. -->
+  <noscript><Button type="submit" variant="outline">{m.audit_filter_apply()}</Button></noscript>
   <Button variant="ghost" class="justify-self-start text-muted-foreground" href={`${DASHBOARD_PATH}/audit`}>{m.audit_filter_reset()}</Button
   >
 {/snippet}

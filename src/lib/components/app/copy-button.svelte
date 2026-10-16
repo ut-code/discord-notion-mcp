@@ -7,7 +7,9 @@
 
   let { text, label }: { text: string; label: string } = $props();
 
-  let available = $state(false);
+  // Rendered from the start so nothing shifts once scripts run; hidden without JavaScript
+  // (`js-only`) and where the browser offers no clipboard (http on another host).
+  let available = $state(true);
   let copied = $state(false);
   onMount(() => {
     available = Boolean(navigator.clipboard);
@@ -25,7 +27,7 @@
 </script>
 
 {#if available}
-  <Button variant="outline" size="icon-sm" onclick={copy} aria-label={copied ? m.copy_done() : label} title={label}>
+  <Button class="js-only" variant="outline" size="icon-sm" onclick={copy} aria-label={copied ? m.copy_done() : label} title={label}>
     {#if copied}<CheckIcon />{:else}<CopyIcon />{/if}
   </Button>
 {/if}
