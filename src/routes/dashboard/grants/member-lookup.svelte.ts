@@ -10,7 +10,11 @@ function isCandidate(value: unknown): value is CandidateView {
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.secondLine === "string" &&
-    (value.avatarUrl === null || typeof value.avatarUrl === "string")
+    (value.avatarUrl === null || typeof value.avatarUrl === "string") &&
+    Array.isArray(value.granted) &&
+    value.granted.every((permission) => typeof permission === "string") &&
+    isRecord(value.notices) &&
+    Object.values(value.notices).every((notice) => typeof notice === "string")
   );
 }
 

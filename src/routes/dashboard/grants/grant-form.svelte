@@ -1,6 +1,7 @@
 <script lang="ts">
   import CheckIcon from "@lucide/svelte/icons/check";
   import SearchIcon from "@lucide/svelte/icons/search";
+  import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import { enhance } from "$app/forms";
   import { page } from "$app/state";
   import { actionUrl } from "$lib/action-url";
@@ -14,7 +15,7 @@
   import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
   import type { GrantFormView } from "$lib/server/dashboard/grants";
-  import SubjectPicker, { type GrantSubject } from "./subject-picker.svelte";
+  import SubjectPicker, { memberSubject, roleSubject, type GrantSubject } from "./subject-picker.svelte";
 
   let { form, filter }: { form: GrantFormView; filter: string | null } = $props();
 
@@ -22,9 +23,9 @@
 
   function initialSubject(view: GrantFormView): GrantSubject | null {
     const user = view.subjectType === "user" ? view.candidates.find((candidate) => candidate.id === view.selectedUserId) : undefined;
-    if (user) return { type: "user", id: user.id, label: user.name, avatarUrl: user.avatarUrl };
+    if (user) return memberSubject(user);
     const role = view.roles.find((candidate) => candidate.id === view.preselectedRoleId);
-    return role ? { type: "role", id: role.id, label: role.handle, color: role.color } : null;
+    return role ? roleSubject(role) : null;
   }
 
   // Form state follows the server data (e.g. after a member search) and the user's choices.
@@ -47,6 +48,17 @@
         : (form.candidates.find((candidate) => candidate.id === userId)?.name ?? null),
   );
   const submitLabel = $derived(grantSubmitLabel(permissionOption.label, target));
+  // Shown before granting: an exact repeat cannot be submitted; a permission the subject
+  // gets some other way can, with the reason it adds nothing.
+  const chosen = $derived(
+    hydrated.current
+      ? subject
+      : subjectType === "role"
+        ? form.roles.find((role) => role.id === roleId)
+        : form.candidates.find((candidate) => candidate.id === userId),
+  );
+  const alreadyGranted = $derived(chosen?.granted.includes(permission) ?? false);
+  const notice = $derived(alreadyGranted ? m.grants_notice_granted() : chosen?.notices[permission]);
 </script>
 
 <section class="panel panel-pad col-side gap-[18px]" aria-labelledby="add-grant">
@@ -139,6 +151,11 @@
       </div>
     {/if}
 
-    <Button type="submit" class="w-full" disabled={hydrated.current && !subject}>{submitLabel}</Button>
+    {#if notice}
+      <p class="flex items-start gap-1.5 text-note text-warn-text" role="status">
+        <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />{notice}
+      </p>
+    {/if}
+    <Button type="submit" class="w-full" disabled={(hydrated.current && !subject) || alreadyGranted}>{submitLabel}</Button>
   </form>
 </section>

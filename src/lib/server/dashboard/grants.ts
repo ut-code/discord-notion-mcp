@@ -11,7 +11,8 @@ import type { DashboardDeps } from "./deps";
 import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle } from "./format";
 import { formString, type ActionResult } from "./shared";
 import { grantableRoles, heldRoles, type UserSubject } from "./subjects";
-import { buildGrantRows, type GrantRowView, type Redundancy } from "./views";
+import { buildGrantRows, redundancyOf, type GrantRowView, type Redundancy } from "./views";
+import type { GrantRow } from "../db/schema";
 
 export const GRANTS_PATH = `${DASHBOARD_PATH}/grants`;
 export const MEMBER_QUERY_MAX_LENGTH = 100;
@@ -41,7 +42,18 @@ export interface GrantTableRow {
   remove: { permission: Permission; subjectType: SubjectType; subjectId: string; label: string; menuLabel: string; confirm: string } | null;
 }
 
-export interface CandidateView {
+/** Per permission, why granting it to a subject would add nothing; the form shows it before granting. */
+export type GrantNotices = Partial<Record<Permission, string>>;
+
+/** What the form needs to know about a subject before granting it something. */
+export interface GrantState {
+  /** Permissions granted to exactly this subject; the form does not offer them again. */
+  granted: Permission[];
+  /** Permissions the subject gets some other way; granting them is allowed but adds nothing. */
+  notices: GrantNotices;
+}
+
+export interface CandidateView extends GrantState {
   id: string;
   name: string;
   secondLine: string;
@@ -52,7 +64,7 @@ export interface GrantFormView {
   permissions: Array<{ value: Permission; label: string; hint: string }>;
   permission: Permission;
   subjectType: SubjectType;
-  roles: Array<{ id: string; name: string; handle: string; color: string | null }>;
+  roles: Array<GrantState & { id: string; name: string; handle: string; color: string | null }>;
   roleId: string;
   preselectedRoleId: string | null;
   query: string;
@@ -115,21 +127,27 @@ function userSubject(guild: GuildInfo, user: UserSubject | null, fallbackId: str
   };
 }
 
-function redundancyBadge(redundancy: Redundancy): BadgeView {
+/** A redundancy as a short label and as a reason clause; the list badge and the form notice both build on these. */
+function redundancyText(redundancy: Redundancy): { label: string; because: string } {
   switch (redundancy.kind) {
     case "role": {
       const role = roleHandle(redundancy.role.name);
-      return { label: m.grants_redundant_role({ role }), tone: "warn", title: m.grants_redundant_role_title({ role }) };
+      return { label: m.grants_redundant_role({ role }), because: m.grants_redundant_role_because({ role }) };
     }
     case "admin":
-      return { label: m.grants_redundant_admin(), tone: "warn", title: m.grants_redundant_admin_title() };
+      return { label: m.grants_redundant_admin(), because: m.grants_redundant_admin_because() };
     case "included": {
       const permission = PERMISSION_LABELS[redundancy.by];
-      return { label: m.grants_redundant_included({ permission }), tone: "warn", title: m.grants_redundant_included_title({ permission }) };
+      return { label: m.grants_redundant_included({ permission }), because: m.grants_redundant_included_because({ permission }) };
     }
     default:
       throw new Error(`Unknown redundancy: ${redundancy satisfies never}`);
   }
+}
+
+function redundancyBadge(redundancy: Redundancy): BadgeView {
+  const { label, because } = redundancyText(redundancy);
+  return { label, tone: "warn", title: m.grants_redundant_title({ because }) };
 }
 
 function tableRow(guild: GuildInfo, row: GrantRowView): GrantTableRow {
@@ -186,8 +204,31 @@ async function searchCandidates(deps: DashboardDeps, query: string): Promise<{ c
   }
 }
 
-function candidateView(guild: GuildInfo, user: UserSubject): CandidateView {
-  return { id: user.id, name: user.displayName ?? user.id, secondLine: userSecondLine(guild, user), avatarUrl: user.avatarUrl };
+function grantState(
+  guild: GuildInfo,
+  grants: readonly GrantRow[],
+  subject: { type: SubjectType; id: string; user: UserSubject | null },
+): GrantState {
+  const granted = grants
+    .filter((grant) => grant.subjectType === subject.type && grant.subjectId === subject.id)
+    .map((grant) => grant.permission);
+  const notices: GrantNotices = {};
+  for (const permission of PERMISSIONS) {
+    if (granted.includes(permission)) continue;
+    const redundancy = redundancyOf(guild, grants, { permission, subjectType: subject.type, subjectId: subject.id }, subject.user);
+    if (redundancy) notices[permission] = m.grants_notice_redundant({ because: redundancyText(redundancy).because });
+  }
+  return { granted, notices };
+}
+
+function candidateView(guild: GuildInfo, grants: readonly GrantRow[], user: UserSubject): CandidateView {
+  return {
+    id: user.id,
+    name: user.displayName ?? user.id,
+    secondLine: userSecondLine(guild, user),
+    avatarUrl: user.avatarUrl,
+    ...grantState(guild, grants, { type: "user", id: user.id, user }),
+  };
 }
 
 export type MemberSearchResult = { status: 200; body: { members: CandidateView[] } } | { status: 400 | 403 | 502; body: { error: string } };
@@ -199,9 +240,9 @@ export async function memberSearchResult(deps: DashboardDeps, rawQuery: string |
   if (query.length < 1 || query.length > MEMBER_QUERY_MAX_LENGTH) {
     return { status: 400, body: { error: m.grants_member_query_length({ max: MEMBER_QUERY_MAX_LENGTH }) } };
   }
-  const [guild, search] = await Promise.all([deps.directory.fetchGuild(), searchCandidates(deps, query)]);
+  const [guild, grants, search] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants(), searchCandidates(deps, query)]);
   if (search.error) return { status: 502, body: { error: search.error } };
-  return { status: 200, body: { members: search.candidates.map((user) => candidateView(guild, user)) } };
+  return { status: 200, body: { members: search.candidates.map((user) => candidateView(guild, grants, user)) } };
 }
 
 /** Admins only (the route checks). Query: `filter` (tab), and the grant form state `permission`, `subjectType`, `roleId`, `q`, `userId`. */
@@ -233,11 +274,12 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
       active: filter === value,
     })),
     rows,
-    form: grantForm(guild, params, filter, { query, selectedUserId, users, search }),
+    form: grantForm(guild, params, filter, { grants, query, selectedUserId, users, search }),
   };
 }
 
 interface FormLookups {
+  grants: readonly GrantRow[];
   query: string;
   selectedUserId: string | null;
   users: ReadonlyMap<string, UserSubject>;
@@ -245,7 +287,7 @@ interface FormLookups {
 }
 
 function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission | null, lookups: FormLookups): GrantFormView {
-  const { query, selectedUserId, users, search } = lookups;
+  const { grants, query, selectedUserId, users, search } = lookups;
   const permissionParam = params.get("permission") ?? "";
   const typeParam = params.get("subjectType");
   const subjectType: SubjectType = typeParam === "role" || typeParam === "user" ? typeParam : query || selectedUserId ? "user" : "role";
@@ -259,7 +301,7 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
 
   const permission = isPermission(permissionParam) ? permissionParam : (filter ?? "discord:read");
   const role = roles.find((candidate) => candidate.id === roleParam) ?? roles[0];
-  const candidateViews = candidates.map((user) => candidateView(guild, user));
+  const candidateViews = candidates.map((user) => candidateView(guild, grants, user));
   // Candidates always carry a resolved display name.
   const selectedName = candidateViews.find((candidate) => candidate.id === selectedUserId)?.name ?? null;
   const target = subjectType === "role" ? (role ? roleHandle(role.name) : null) : selectedName;
@@ -273,6 +315,7 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
       name: candidate.name,
       handle: roleHandle(candidate.name),
       color: roleColor(candidate.color) ?? null,
+      ...grantState(guild, grants, { type: "role", id: candidate.id, user: null }),
     })),
     roleId: role?.id ?? "",
     // Only an explicitly requested role preselects the picker; the no-JS select needs `roleId` regardless.

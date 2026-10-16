@@ -185,6 +185,31 @@ describe("dashboard access control", () => {
 });
 
 describe("grants", () => {
+  test("the form knows before granting what is already granted and what would add nothing, and why", async () => {
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER });
+    const page = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}`));
+    expect(page.form.candidates.find((candidate) => candidate.id === MEMBER)).toMatchObject({
+      granted: ["discord:read"],
+      notices: {
+        "notion:read": "@Moderator ロールで既に付与されているため、付与しても効果がありません。",
+        "notion:write": "@Moderator ロールで既に付与されているため、付与しても効果がありません。",
+      },
+    });
+    expect(page.form.roles.find((role) => role.id === ROLE_MOD)).toMatchObject({
+      granted: ["notion:write"],
+      notices: { "notion:read": "Notion 読み書きに含まれるため、付与しても効果がありません。" },
+    });
+    const admin = await grantsPage(deps, params(`subjectType=user&userId=${ADMIN_MEMBER}`));
+    expect(admin.form.candidates.find((candidate) => candidate.id === ADMIN_MEMBER)?.notices["discord:read"]).toBe(
+      "管理者の権限があるため、付与しても効果がありません。",
+    );
+    expect((await memberSearchResult(deps, "mi", owner)).body).toMatchObject({ members: [{ id: MEMBER, granted: ["discord:read"] }] });
+
+    await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    await h.server.grants.removeGrant({ permission: "discord:read", subjectType: "user", subjectId: MEMBER });
+  });
+
   test("adds a role grant, reports duplicates, and deletes it", async () => {
     const fields = { permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD };
     expect(await createGrant(deps, form(fields), owner)).toEqual({
@@ -305,7 +330,7 @@ describe("grants", () => {
     expect(badges).toContainEqual({
       label: "@Moderator で付与済み",
       tone: "warn",
-      title: "この権限は @Moderator ロールで既に付与されているため、この個人付与は効果がありません",
+      title: "@Moderator ロールで既に付与されているため、この付与は効果がありません",
     });
     expect(badges.map((badge) => badge.label)).toContain("管理者で付与済み");
 
@@ -320,9 +345,9 @@ describe("grants", () => {
     await h.server.grants.createGrant({ permission: "notion:write", subjectType: "user", subjectId: MEMBER });
     expect((await grantsPage(deps, params())).rows.flatMap((row) => (row.redundancy ? [row.redundancy] : []))).toEqual([
       {
-        label: "Notion 書き込みに含まれる",
+        label: "Notion 読み書きに含まれる",
         tone: "warn",
-        title: "この権限は Notion 書き込み の権限に含まれるため、この個人付与は効果がありません",
+        title: "Notion 読み書きに含まれるため、この付与は効果がありません",
       },
     ]);
 
@@ -340,13 +365,13 @@ describe("grants", () => {
     expect(search.form).toMatchObject({ permission: "notion:write", subjectType: "user", query: "min" });
     expect(search.form?.candidates.map((candidate) => candidate.id)).toContain(MEMBER);
     expect(search.form?.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
-      "Notion 読み取りに加えて、ページの作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
+      "ページの閲覧に加えて、作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
     );
 
     const preselected = await grantsPage(deps, params(`subjectType=user&userId=${MEMBER}&permission=notion%3Awrite`));
     expect(preselected.form?.selectedUserId).toBe(MEMBER);
     expect(preselected.form?.candidates[0]?.id).toBe(MEMBER);
-    expect(preselected.form?.submitLabel).toBe("Mina に Notion 書き込みを付与");
+    expect(preselected.form?.submitLabel).toBe("Mina に Notion 読み書きを付与");
 
     expect((await grantsPage(deps, params(`q=${STRANGER}`))).form?.candidates.map((candidate) => candidate.id)).toEqual([STRANGER]);
     expect((await grantsPage(deps, params("q=zzz"))).form?.candidates).toEqual([]);
@@ -357,13 +382,15 @@ describe("grants", () => {
       name: "Moderator",
       handle: "@Moderator",
       color: "#3498db",
+      granted: [],
+      notices: {},
     });
   });
 
   test("the inline member search returns candidates for admins and validates the query", async () => {
     expect(await memberSearchResult(deps, "mi", owner)).toEqual({
       status: 200,
-      body: { members: [{ id: MEMBER, name: "Mina", secondLine: "@mina · Moderator", avatarUrl: null }] },
+      body: { members: [{ id: MEMBER, name: "Mina", secondLine: "@mina · Moderator", avatarUrl: null, granted: [], notices: {} }] },
     });
     expect((await memberSearchResult(deps, `@${STRANGER}`, owner)).body).toMatchObject({ members: [{ id: STRANGER, name: "Stranger" }] });
     expect(await memberSearchResult(deps, "zzz", owner)).toEqual({ status: 200, body: { members: [] } });
@@ -570,7 +597,7 @@ describe("consent", () => {
 
   test("admins see every capability including the admin UI", async () => {
     const page = await consentFor(OWNER_ID);
-    expect(page.features.map((feature) => feature.title)).toEqual(["Discord 読み取り", "Notion 読み取り", "Notion 書き込み", "管理画面"]);
+    expect(page.features.map((feature) => feature.title)).toEqual(["Discord 読み取り", "Notion 読み取り", "Notion 読み書き", "管理画面"]);
   });
 
   test("a member without permissions gets an empty list", async () => {

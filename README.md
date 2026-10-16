@@ -10,6 +10,7 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 | `notion:read`  | `notion_search` `notion_get_page` `notion_query_database` `notion_get_database` `notion_get_comments`                                                                                  |
 | `notion:write` | `notion_create_page` `notion_append_content` `notion_edit_content` `notion_update_properties` `notion_archive_page` `notion_list_recent_changes` `notion_revert_change`                |
 
+- `notion:write`（画面では「Notion 読み書き」）は `notion:read` を含む。
 - Discord は本人が閲覧できるチャンネルのみ。
 - Notion の権限は Notion 連携に共有されたすべてのページ・データベースが対象。
 - Notion の本文は Notion 公式の Markdown API（拡張 Markdown: メンション・色・コールアウト・トグル・カラム）で読み書きする。
@@ -57,7 +58,7 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 - サーバーオーナーと Administrator 権限のロールは自動で `admin`（全権限）。
 - それ以外は `https://<domain>/dashboard` でロールまたはユーザーに付与。
 - 「トークンを失効」で即時に接続を切れる。
-- ダッシュボードはサーバーのメンバー全員が閲覧できる（書き込み履歴は `notion:read` が必要）。権限ページと変更操作は管理者のみ。
+- ダッシュボードはサーバーのメンバー全員が閲覧できる（書き込み履歴は `notion:write` が必要で、管理者以外は自分の分だけ）。権限ページと変更操作は管理者のみ。
 - ツール呼び出しは統計用に記録し、90 日で削除する（引数は保存しない）。
 
 ## 接続

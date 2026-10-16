@@ -1,7 +1,21 @@
 <script lang="ts" module>
-  export type GrantSubject =
-    | { type: "role"; id: string; label: string; color: string | null }
-    | { type: "user"; id: string; label: string; avatarUrl: string | null };
+  import type { CandidateView, GrantFormView, GrantState } from "$lib/server/dashboard/grants";
+
+  export type GrantSubject = GrantState &
+    (
+      | { type: "role"; id: string; label: string; color: string | null }
+      | { type: "user"; id: string; label: string; avatarUrl: string | null }
+    );
+
+  export function roleSubject(role: GrantFormView["roles"][number]): GrantSubject {
+    const { id, handle, color, granted, notices } = role;
+    return { type: "role", id, label: handle, color, granted, notices };
+  }
+
+  export function memberSubject(member: CandidateView): GrantSubject {
+    const { id, name, avatarUrl, granted, notices } = member;
+    return { type: "user", id, label: name, avatarUrl, granted, notices };
+  }
 </script>
 
 <script lang="ts">
@@ -15,7 +29,6 @@
   import { Label } from "$lib/components/ui/label";
   import { m } from "$lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "$lib/paths";
-  import type { CandidateView, GrantFormView } from "$lib/server/dashboard/grants";
   import { MemberLookup } from "./member-lookup.svelte";
 
   const ROLE_LIMIT = 6;
@@ -42,16 +55,11 @@
       ? roles
           .filter((role) => fold(role.name).includes(needle))
           .slice(0, ROLE_LIMIT)
-          .map((role) => ({ type: "role", id: role.id, label: role.handle, color: role.color }))
+          .map(roleSubject)
       : [],
   );
   const members = $derived<CandidateView[]>(needle ? lookup.members : []);
-  const memberOptions = $derived(
-    members.map((member) => ({
-      subject: { type: "user", id: member.id, label: member.name, avatarUrl: member.avatarUrl } satisfies GrantSubject,
-      secondLine: member.secondLine,
-    })),
-  );
+  const memberOptions = $derived(members.map((member) => ({ subject: memberSubject(member), secondLine: member.secondLine })));
   const options = $derived<GrantSubject[]>([...roleOptions, ...memberOptions.map((entry) => entry.subject)]);
   const open = $derived(needle !== "" && !dismissed);
   const active = $derived(options.find((option) => keyOf(option) === activeKey) ?? options[0]);

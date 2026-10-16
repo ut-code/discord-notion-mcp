@@ -2,11 +2,12 @@ import type { LoginUser } from "../auth/users";
 import { givesPermission, PERMISSIONS, type Permission } from "../permissions/permissions";
 import { isGuildAdmin, type EffectiveAccess } from "../permissions/resolver";
 import type { GrantRow } from "../db/schema";
+import type { GrantKey } from "../permissions/grants";
 import type { GuildInfo, RoleInfo } from "../discord/types";
 import { displayName } from "../lib/display-name";
 import { administratorRoles, heldRoles, type UserSubject } from "./subjects";
 
-/** Why an individual grant has no effect: a role of the user, admin status, or a broader grant of their own already provides it. */
+/** Why a grant has no effect: a role the user holds, their admin status, or a broader grant to the same subject provides it. */
 export type Redundancy = { kind: "role"; role: RoleInfo } | { kind: "admin" } | { kind: "included"; by: Permission };
 
 export type GrantRowView =
@@ -27,22 +28,24 @@ function subjectName(row: Extract<GrantRowView, { kind: "grant" }>): string {
   return row.role?.name ?? row.user?.displayName ?? row.grant.subjectId;
 }
 
-function redundancyOf(guild: GuildInfo, grants: readonly GrantRow[], grant: GrantRow, user: UserSubject | null): Redundancy | null {
-  const member = user?.member;
-  if (grant.subjectType !== "user" || !member) return null;
-  if (isGuildAdmin(guild, member)) return { kind: "admin" };
-  const roleIds = new Set([guild.id, ...member.roles]);
-  const providing = new Set(
-    grants
-      .filter((other) => other.subjectType === "role" && roleIds.has(other.subjectId))
-      .filter((other) => givesPermission(other.permission, grant.permission))
-      .map((other) => other.subjectId),
-  );
-  const role = guild.roles.filter((candidate) => providing.has(candidate.id)).sort((a, b) => b.position - a.position)[0];
-  if (role) return { kind: "role", role };
+/** For an existing grant or one about to be made; `user` is the subject of a user grant. */
+export function redundancyOf(guild: GuildInfo, grants: readonly GrantRow[], grant: GrantKey, user: UserSubject | null): Redundancy | null {
+  const member = grant.subjectType === "user" ? user?.member : undefined;
+  if (member) {
+    if (isGuildAdmin(guild, member)) return { kind: "admin" };
+    const roleIds = new Set([guild.id, ...member.roles]);
+    const providing = new Set(
+      grants
+        .filter((other) => other.subjectType === "role" && roleIds.has(other.subjectId))
+        .filter((other) => givesPermission(other.permission, grant.permission))
+        .map((other) => other.subjectId),
+    );
+    const role = guild.roles.filter((candidate) => providing.has(candidate.id)).sort((a, b) => b.position - a.position)[0];
+    if (role) return { kind: "role", role };
+  }
   const broader = grants.find(
     (other) =>
-      other.subjectType === "user" &&
+      other.subjectType === grant.subjectType &&
       other.subjectId === grant.subjectId &&
       other.permission !== grant.permission &&
       givesPermission(other.permission, grant.permission),
