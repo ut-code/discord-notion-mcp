@@ -13,7 +13,7 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
     name: "discord_search_messages",
     title: "Search Discord messages",
     description:
-      "Search messages in channels and threads you can read (Discord server search). Combine `query` with filters; newest first by default, page with `offset`. Archived threads and age-restricted (NSFW) channels are only searched when passed as channel_id. Open a result's link with discord_get_message for surrounding context.",
+      "Search messages in channels and threads you can read (Discord server search). Combine `query` with filters; newest first by default, page with `offset`. Archived threads may be left out unless passed as channel_id; age-restricted (NSFW) channels are only searched when passed as channel_id. Open a result's link with discord_get_message for surrounding context.",
     permission: "discord:read",
     inputSchema: z.object({
       query: z.string().min(1).max(1024).optional().describe("Words to search for in message content"),

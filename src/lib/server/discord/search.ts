@@ -67,11 +67,8 @@ export async function buildSearchScope(deps: SearchDeps, viewer: Viewer, channel
   const readable = messageChannels.filter((channel) => canReadMessages(deps.access.permissionsFor(channel, viewer)));
   if (readable.length === messageChannels.length) return { includeNsfw: false };
 
-  const threads = await deps.api.fetchActiveThreads();
-  const visibleThreads: APIThreadChannel[] = [];
-  for (const thread of threads) {
-    if (await deps.access.isThreadVisible(thread, viewer, true)) visibleThreads.push(thread);
-  }
+  // Archived threads are left out: Discord lists them per channel and per page only.
+  const visibleThreads = await deps.access.filterVisibleThreads(await deps.api.fetchActiveThreads(), viewer, true);
   const channelIds = [...readable.map((channel) => channel.id), ...visibleThreads.map((thread) => thread.id)];
   if (channelIds.length > MAX_SEARCH_CHANNELS) return { includeNsfw: false };
   return { channelIds, includeNsfw: false };

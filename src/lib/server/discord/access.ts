@@ -1,5 +1,6 @@
 import { ChannelType, type APIChannel, type APIThreadChannel } from "discord-api-types/v10";
 import { ToolError } from "../lib/errors";
+import { createLimiter } from "../lib/limiter";
 import { isSnowflake } from "../lib/snowflake";
 import { TtlCache, systemClock, type Clock } from "../lib/ttl-cache";
 import type { DiscordApi, GuildChannel } from "./api";
@@ -7,6 +8,8 @@ import { MANAGE_THREADS, canReadMessages, canViewChannel, computeChannelPermissi
 import type { GuildInfo, MemberInfo } from "./types";
 
 export const DISCORD_NOT_ACCESSIBLE_MESSAGE = "Channel not found or not accessible.";
+
+const THREAD_CHECK_CONCURRENCY = 5;
 
 export class NotAccessibleError extends ToolError {
   constructor(message = DISCORD_NOT_ACCESSIBLE_MESSAGE) {
@@ -102,8 +105,10 @@ export class ChannelAccess {
     return this.api.isThreadMember(thread.id, viewer.member.userId);
   }
 
-  async filterVisibleThreads(threads: readonly APIThreadChannel[], viewer: Viewer): Promise<APIThreadChannel[]> {
-    const checks = await Promise.all(threads.map((thread) => this.isThreadVisible(thread, viewer)));
+  /** Private threads each cost a membership request, so a bounded number run at once. */
+  async filterVisibleThreads(threads: readonly APIThreadChannel[], viewer: Viewer, requireRead = false): Promise<APIThreadChannel[]> {
+    const limit = createLimiter(THREAD_CHECK_CONCURRENCY);
+    const checks = await Promise.all(threads.map((thread) => limit(() => this.isThreadVisible(thread, viewer, requireRead))));
     return threads.filter((_, index) => checks[index]);
   }
 
