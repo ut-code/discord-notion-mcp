@@ -4,6 +4,7 @@ import { createLimiter } from "../lib/limiter";
 import { isSnowflake } from "../lib/snowflake";
 import { TtlCache, systemClock, type Clock } from "../lib/ttl-cache";
 import type { DiscordApi, GuildChannel } from "./api";
+import { DISCORD_CACHE_TTL_MS, MAX_CACHED_PER_ID } from "./cache-policy";
 import { MANAGE_THREADS, canReadMessages, canViewChannel, computeChannelPermissions, hasPermission, toOverwrite } from "./permissions";
 import type { GuildInfo, MemberInfo } from "./types";
 
@@ -11,13 +12,6 @@ export const DISCORD_NOT_ACCESSIBLE_MESSAGE = "Channel not found or not accessib
 
 /** Thread checks that may ask Discord (private thread membership) run this many at once. */
 export const THREAD_CHECK_CONCURRENCY = 5;
-/**
- * Lookups the channel list cannot answer, kept for a minute: threads (and unknown ids) by id,
- * and private thread membership per thread and viewer, which listing threads asks once per
- * private thread.
- */
-const LOOKUP_TTL_MS = 60_000;
-const MAX_CACHED_LOOKUPS = 5_000;
 
 export class NotAccessibleError extends ToolError {
   constructor(message = DISCORD_NOT_ACCESSIBLE_MESSAGE) {
@@ -50,8 +44,6 @@ export interface ReadableChannel {
   permissions: bigint;
 }
 
-const CHANNEL_LIST_TTL_MS = 60_000;
-
 /** Guild channel list cached for a short TTL; threads are not part of this list. */
 export class ChannelDirectory {
   private readonly cache: TtlCache<"channels", GuildChannel[]>;
@@ -60,7 +52,7 @@ export class ChannelDirectory {
     private readonly api: DiscordApi,
     options: { ttlMs?: number; clock?: Clock } = {},
   ) {
-    this.cache = new TtlCache(options.ttlMs ?? CHANNEL_LIST_TTL_MS, options.clock ?? systemClock);
+    this.cache = new TtlCache(options.ttlMs ?? DISCORD_CACHE_TTL_MS, options.clock ?? systemClock);
   }
 
   list(): Promise<GuildChannel[]> {
@@ -93,8 +85,10 @@ export class ChannelAccess {
     options: { clock?: Clock } = {},
   ) {
     const clock = options.clock ?? systemClock;
-    this.threadMembers = new TtlCache(LOOKUP_TTL_MS, clock, MAX_CACHED_LOOKUPS);
-    this.unlisted = new TtlCache(LOOKUP_TTL_MS, clock, MAX_CACHED_LOOKUPS);
+    // Lookups the channel list cannot answer: threads (and unknown ids) by id, and private
+    // thread membership per thread and viewer, which listing threads asks once per private thread.
+    this.threadMembers = new TtlCache(DISCORD_CACHE_TTL_MS, clock, MAX_CACHED_PER_ID);
+    this.unlisted = new TtlCache(DISCORD_CACHE_TTL_MS, clock, MAX_CACHED_PER_ID);
   }
 
   /** A channel missing from the channel list (a thread, or an unknown id), fetched by id. */
