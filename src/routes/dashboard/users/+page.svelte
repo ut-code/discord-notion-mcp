@@ -72,7 +72,7 @@
       <Table.Row>
         <Table.Head>{m.common_user()}</Table.Head>
         <Table.Head>{m.common_permission()}</Table.Head>
-        <Table.Head>{m.users_last_login()}</Table.Head>
+        <Table.Head>{m.users_last_used()}</Table.Head>
         <Table.Head class="actions"><span class="sr-only">{m.common_actions()}</span></Table.Head>
       </Table.Row>
     </Table.Header>
@@ -104,11 +104,9 @@
               </span>
             {/if}
           </Table.Cell>
-          <Table.Cell class="secondary">
-            <div class="stack gap-[3px]">
-              <span>{row.lastLogin}</span>
-              {#if row.revoked}<span class="sub">{row.revoked}</span>{/if}
-            </div>
+          <Table.Cell class="secondary last-used">
+            <span>{row.lastUsed}</span>
+            {#if row.revoked}<span class="sub mt-[3px] block">{row.revoked}</span>{/if}
           </Table.Cell>
           <Table.Cell class="actions"><UserMenu {row} {index} canRevoke={data.canRevoke} /></Table.Cell>
         </Table.Row>

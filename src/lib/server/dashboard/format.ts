@@ -61,6 +61,14 @@ function jstParts(date: Date): Record<"year" | "month" | "day" | "hour" | "minut
   return { year: part("year"), month: part("month"), day: part("day"), hour: part("hour"), minute: part("minute"), second: part("second") };
 }
 
+const VISIBLE_ROLES = 2;
+
+/** Role names on one line: the first two, then how many more. */
+export function roleSummary(names: readonly string[]): string {
+  if (names.length <= VISIBLE_ROLES) return names.join(", ");
+  return m.roles_more({ roles: names.slice(0, VISIBLE_ROLES).join(", "), count: names.length - VISIBLE_ROLES });
+}
+
 /** Japan time, e.g. "2026/10/12 23:03:00". */
 export function formatJst(date: Date | null | undefined): string {
   if (!date) return "—";

@@ -143,7 +143,10 @@ export function buildUserRow(
     permissions: access.isAdmin ? [] : held,
     isAdmin: access.isAdmin,
     implicitAdmin,
-    individual: implicitAdmin ? [] : held.filter((permission) => fromUser.has(permission) && !fromRoles.has(permission)),
+    // A grant to the user that a role grant already gives (a role's Notion write gives read) is not individual.
+    individual: implicitAdmin
+      ? []
+      : held.filter((permission) => fromUser.has(permission) && ![...fromRoles].some((fromRole) => givesPermission(fromRole, permission))),
   };
 }
 

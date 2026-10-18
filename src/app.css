@@ -1062,6 +1062,24 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 .data-table td.secondary {
 	color: var(--muted-foreground);
 }
+/* Badges in other columns keep to one line, so those columns size to their content... */
+.data-table td .cluster {
+	flex-wrap: nowrap;
+}
+/* ...and the first column takes the room they leave instead of widening the table. */
+.data-table td.primary {
+	width: 100%;
+	max-width: 0;
+}
+/* Each line of the first cell (name, @username, roles) stays on one line, cut with an ellipsis. */
+.data-table td.primary .stack {
+	min-width: 0;
+}
+.data-table td.primary .stack > * {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .data-table td.wrap {
 	white-space: normal;
 }
@@ -1091,7 +1109,11 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 		align-items: center;
 		gap: 6px 12px;
 		position: relative;
-		padding: 12px 52px 12px 16px;
+		padding: 12px 16px;
+	}
+	/* Only the first line shares its row with the actions button in the corner. */
+	.data-table tr:has(td.actions) td.primary {
+		padding-right: 36px;
 	}
 	.data-table tbody td {
 		display: block;
@@ -1108,6 +1130,15 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 	.data-table td.primary {
 		flex-basis: 100%;
 		order: -1;
+		/* Lets long names shrink to the card instead of widening it under the actions button. */
+		min-width: 0;
+	}
+	.data-table td.primary {
+		width: auto;
+		max-width: none;
+	}
+	.data-table td .cluster {
+		flex-wrap: wrap;
 	}
 	.data-table td.actions {
 		position: absolute;
@@ -1121,6 +1152,16 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 	}
 	.data-table td.num {
 		text-align: left;
+	}
+	/* A cell that would wrap onto its own line in some rows only: always give it one. */
+	.data-table td.own-line {
+		flex-basis: 100%;
+	}
+	/* Users: the last use sits at the bottom right, after the permission badges. */
+	.data-table td.last-used {
+		margin-left: auto;
+		text-align: right;
+		font-size: 12px;
 	}
 	.data-table td[data-label]::before {
 		content: attr(data-label) " ";

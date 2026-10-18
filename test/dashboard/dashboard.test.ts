@@ -705,7 +705,29 @@ describe("users", () => {
       { label: "Discord 閲覧", tone: "secondary", title: undefined, individual: false },
       { label: "Notion 閲覧", tone: "secondary", title: "個人に付与", individual: true },
     ]);
-    expect(mina.lastLogin).toMatch(/^\d{2}\/\d{2} \d{2}:\d{2}$/);
+    await h.server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    expect((await userRow(member.userId)).permissions).toEqual([
+      { label: "Discord 閲覧", tone: "secondary", title: undefined, individual: false },
+      // The individual Notion read adds nothing to the role's write: the badge is not marked individual.
+      { label: "Notion 閲覧・編集", tone: "secondary", title: undefined, individual: false },
+    ]);
+    await h.server.grants.removeGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_MOD });
+    expect(mina.lastUsed).toBe("—");
+    h.server.toolCalls.record({
+      discordUserId: MEMBER,
+      tool: "discord_read_messages",
+      ok: true,
+      durationMs: 5,
+      createdAt: new Date("2026-10-15T03:04:00Z"),
+    });
+    h.server.toolCalls.record({
+      discordUserId: MEMBER,
+      tool: "discord_read_messages",
+      ok: true,
+      durationMs: 5,
+      createdAt: new Date("2026-10-14T00:00:00Z"),
+    });
+    expect((await userRow(member.userId)).lastUsed).toBe("10/15 12:04");
 
     const ownerRow = await userRow(ownerUserId);
     expect(ownerRow.permissions).toEqual([{ label: "管理者", tone: "dark", title: undefined, individual: false }]);
@@ -740,7 +762,6 @@ describe("user search scan cap", () => {
       userId: `login-${index}`,
       name,
       discordUserId: null,
-      createdAt: new Date(0),
       lastLoginAt: null,
       revokedAt: null,
     });
@@ -760,8 +781,9 @@ describe("user search scan cap", () => {
         },
       },
       resolver: { resolve: async () => Promise.reject(new Error("unlinked logins are not resolved")) },
+      usage: { lastUsed: () => new Map() },
       logError: () => {},
-    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "logError">;
+    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError">;
 
     const found = await usersPage(fakeDeps, params("q=needle"), owner);
     expect(queries).toEqual([{ limit: USER_SEARCH_SCAN_LIMIT, offset: 0 }]);

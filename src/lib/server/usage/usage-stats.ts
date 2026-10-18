@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../db/client";
 import { notionAudit, toolCall } from "../db/schema";
 import { jstDaySql } from "../lib/jst-day";
@@ -45,6 +45,18 @@ export class UsageStats {
       .groupBy(toolCall.tool)
       .orderBy(desc(count()), toolCall.tool)
       .all();
+  }
+
+  /** When each user last called a tool; users without a call in the kept log (90 days) are absent. */
+  lastUsed(discordUserIds: readonly string[]): Map<string, Date> {
+    if (discordUserIds.length === 0) return new Map();
+    const rows = this.db
+      .select({ discordUserId: toolCall.discordUserId, at: sql<number>`max(${toolCall.createdAt})` })
+      .from(toolCall)
+      .where(inArray(toolCall.discordUserId, [...discordUserIds]))
+      .groupBy(toolCall.discordUserId)
+      .all();
+    return new Map(rows.map((row) => [row.discordUserId, new Date(row.at)]));
   }
 
   rateLimited(since: Date): number {

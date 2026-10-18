@@ -1,13 +1,14 @@
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import type { LoginUser } from "../auth/users";
+import { givesPermission, type Permission } from "../permissions/permissions";
 import { errorMessage } from "../lib/errors";
 import { createLimiter } from "../lib/limiter";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import { auditListHref } from "./audit";
 import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
-import { formatShortJst, PERMISSION_LABELS } from "./format";
+import { formatShortJst, PERMISSION_LABELS, roleSummary } from "./format";
 import { GRANTS_PATH } from "./grants";
 import { pageLinks, pageParam, type ActionResult } from "./shared";
 import { buildUserRow, matchesUserQuery, type UserRowView } from "./views";
@@ -21,7 +22,6 @@ const USERS_PATH = `${DASHBOARD_PATH}/users`;
  * login costs a cached member lookup.
  */
 export const USER_SEARCH_SCAN_LIMIT = 1000;
-const VISIBLE_ROLES = 2;
 
 export interface UserTableRow {
   /** Better Auth user id (revocation target). */
@@ -34,8 +34,9 @@ export interface UserTableRow {
   roles: { text: string; title: string | null };
   /** Empty when nothing is held (shown as —). */
   permissions: Array<BadgeView & { individual: boolean }>;
-  lastLogin: string;
-  /** When the tokens were revoked after the last login, the line saying so. */
+  /** Last tool call: what tells whether someone still uses the server (browser sign-ins are rare). */
+  lastUsed: string;
+  /** When the tokens were revoked after the last sign-in, the line saying so. */
   revoked: string | null;
   /** Row menu links; null without a linked Discord account or when the viewer cannot open the page. */
   grantHref: string | null;
@@ -69,30 +70,47 @@ function rolesLine(row: UserRowView): UserTableRow["roles"] {
   if (row.implicitAdmin) return plain(m.role_admin());
   const names = row.roles.map((role) => role.name);
   if (names.length === 0) return plain(m.common_no_roles());
-  if (names.length <= VISIBLE_ROLES) return plain(names.join(", "));
-  return {
-    text: m.users_roles_more({ roles: names.slice(0, VISIBLE_ROLES).join(", "), count: names.length - VISIBLE_ROLES }),
-    title: names.join(", "),
-  };
+  const text = roleSummary(names);
+  const all = names.join(", ");
+  return { text, title: text === all ? null : all };
 }
+
+/** How a permission reads when it is shown with the permissions it includes. */
+const WITH_INCLUDED_LABELS: Partial<Record<Permission, () => string>> = { "notion:write": m.users_notion_read_write };
 
 function permissionBadges(row: UserRowView): UserTableRow["permissions"] {
   const individual = new Set(row.individual);
-  const badge = (permission: keyof typeof PERMISSION_LABELS, dark: boolean) => ({
-    label: PERMISSION_LABELS[permission],
-    tone: dark ? ("dark" as const) : ("secondary" as const),
-    title: individual.has(permission) ? m.users_individual_grant() : undefined,
-    individual: individual.has(permission),
+  const badge = (label: string, permissions: Permission[], dark = false) => {
+    const isIndividual = permissions.some((permission) => individual.has(permission));
+    return {
+      label,
+      tone: dark ? ("dark" as const) : ("secondary" as const),
+      title: isIndividual ? m.users_individual_grant() : undefined,
+      individual: isIndividual,
+    };
+  };
+  if (row.isAdmin) return [badge(PERMISSION_LABELS.admin, ["admin"], true)];
+  // A permission that includes others shows as one badge naming them all, not a badge each.
+  const shown = row.permissions.filter(
+    (permission) => !row.permissions.some((other) => other !== permission && givesPermission(other, permission)),
+  );
+  return shown.map((permission) => {
+    const covered = row.permissions.filter((other) => givesPermission(permission, other));
+    const label =
+      covered.length > 1 ? (WITH_INCLUDED_LABELS[permission]?.() ?? PERMISSION_LABELS[permission]) : PERMISSION_LABELS[permission];
+    return badge(label, covered);
   });
-  if (row.isAdmin) return [badge("admin", true)];
-  return row.permissions.map((permission) => badge(permission, false));
 }
 
 function wasRevokedSinceLogin(user: LoginUser): boolean {
   return user.revokedAt !== null && (user.lastLoginAt === null || user.revokedAt >= user.lastLoginAt);
 }
 
-function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canViewAudit" | "discordUserId">): UserTableRow {
+function userTableRow(
+  row: UserRowView,
+  lastUsed: Date | undefined,
+  viewer: Pick<Viewer, "isAdmin" | "canViewAudit" | "discordUserId">,
+): UserTableRow {
   const discordUserId = row.user.discordUserId;
   return {
     userId: row.user.userId,
@@ -102,7 +120,7 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
     title: `Discord ID ${discordUserId ?? "—"}`,
     roles: rolesLine(row),
     permissions: permissionBadges(row),
-    lastLogin: formatShortJst(row.user.lastLoginAt),
+    lastUsed: formatShortJst(lastUsed),
     revoked: wasRevokedSinceLogin(row.user) ? m.users_revoked_at({ time: formatShortJst(row.user.revokedAt) }) : null,
     grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subject=${encodeURIComponent(`user:${discordUserId}`)}` : null,
     // Non-admin writers only have their own history.
@@ -117,7 +135,7 @@ function userTableRow(row: UserRowView, viewer: Pick<Viewer, "isAdmin" | "canVie
 }
 
 export async function usersPage(
-  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "logError">,
+  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError">,
   params: URLSearchParams,
   viewer: Viewer,
 ): Promise<UsersPageData> {
@@ -155,8 +173,9 @@ export async function usersPage(
     rows = await Promise.all(users.map(toRow));
   }
   const { prevHref, nextHref } = pageLinks(page, USERS_PAGE_SIZE, total, rows.length, (target) => usersHref(query, target));
+  const lastUsed = deps.usage.lastUsed(rows.flatMap((row) => (row.user.discordUserId ? [row.user.discordUserId] : [])));
   return {
-    rows: rows.map((row) => userTableRow(row, viewer)),
+    rows: rows.map((row) => userTableRow(row, row.user.discordUserId ? lastUsed.get(row.user.discordUserId) : undefined, viewer)),
     canRevoke: viewer.isAdmin,
     query,
     total,

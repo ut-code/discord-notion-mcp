@@ -68,12 +68,12 @@
                 <Table.Cell class="primary">
                   <div class="cell-user" title={`Discord ID ${row.id}`}>
                     <AppAvatar name={row.name} url={row.avatarUrl} size="sm" />
-                    {row.name}
+                    <span class="truncate">{row.name}</span>
                   </div>
                 </Table.Cell>
                 <Table.Cell class="num" data-label={m.stats_calls()}>{row.calls}</Table.Cell>
                 <Table.Cell class="num" data-label={m.stats_failure_rate()}>{row.failureRate}</Table.Cell>
-                <Table.Cell class="num secondary" data-label={m.stats_last_used()}>{row.lastUsed}</Table.Cell>
+                <Table.Cell class="num secondary own-line" data-label={m.stats_last_used()}>{row.lastUsed}</Table.Cell>
               </Table.Row>
             {:else}
               <Table.Row>

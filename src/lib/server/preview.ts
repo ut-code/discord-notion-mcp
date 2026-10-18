@@ -35,6 +35,26 @@ const ROLE_STAFF = "200000000000000002";
 const ROLE_MEMBER = "200000000000000003";
 const ROLE_BOT = "200000000000000004";
 
+/** Enough roles and members that the grant form's lists scroll, as on a real server. */
+const EXTRA_ROLES = [
+  "企画",
+  "広報",
+  "デザイン",
+  "開発",
+  "運営",
+  "イベント",
+  "翻訳",
+  "サポート",
+  "記録",
+  "新人",
+  "OB・OG",
+  "ゲスト講師",
+  "プロジェクト・アルファ推進ワーキンググループ",
+];
+const extraRoleId = (index: number) => String(210000000000000000n + BigInt(index));
+/** Holds every role, with long names: how crowded rows look. */
+const CROWDED_ID = "300000000000000005";
+
 const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...rest: MemberInfo[]] = [
   { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: null },
   {
@@ -48,10 +68,16 @@ const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...res
   { userId: "300000000000000002", roles: [ROLE_MEMBER], nick: null, username: "suzuki", globalName: "鈴木", avatarUrl: null },
   { userId: "300000000000000003", roles: [ROLE_MEMBER], nick: null, username: "sato", globalName: null, avatarUrl: null },
   { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
+  {
+    userId: CROWDED_ID,
+    roles: [ROLE_STAFF, ROLE_MEMBER, ...EXTRA_ROLES.map((_, index) => extraRoleId(index))],
+    nick: "とても長い表示名を設定しているメンバーさん",
+    username: "a_member_with_a_really_long_username",
+    globalName: null,
+    avatarUrl: null,
+  },
 ];
 
-/** Enough roles and members that the grant form's lists scroll, as on a real server. */
-const EXTRA_ROLES = ["企画", "広報", "デザイン", "開発", "運営", "イベント", "翻訳", "サポート", "記録", "新人", "OB・OG", "ゲスト講師"];
 const EXTRA_MEMBERS = [
   "青木",
   "石井",
@@ -96,6 +122,7 @@ const PREVIEW_USAGE: Array<[string, number, number]> = [
   ["300000000000000002", 8, 0.7],
   ["300000000000000003", 3, 0.4],
   ["300000000000000004", 2, 0.3],
+  [CROWDED_ID, 1, 0.2],
 ];
 
 function seedToolCalls(store: ToolCallStore, now = Date.now()): void {
@@ -159,7 +186,7 @@ export async function startPreview(): Promise<Runtime> {
       { id: ROLE_MEMBER, name: "member", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x2ecc71, position: 2 },
       { id: ROLE_BOT, name: "MCP Bot", permissions: VIEW_CHANNEL, managed: true, position: 1 },
       ...EXTRA_ROLES.map((name, index) => ({
-        id: String(210000000000000000n + BigInt(index)),
+        id: extraRoleId(index),
         name,
         permissions: 0n,
         color: PALETTE[index % PALETTE.length],
@@ -221,6 +248,7 @@ export async function startPreview(): Promise<Runtime> {
   await server.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
   await server.grants.createGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MEMBER, createdBy: OWNER_ID });
   await server.grants.createGrant({ permission: "notion:write", subjectType: "role", subjectId: ROLE_STAFF, createdBy: OWNER_ID });
+  await server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: CROWDED_ID, createdBy: OWNER_ID });
   await server.grants.createGrant({
     permission: "notion:read",
     subjectType: "user",

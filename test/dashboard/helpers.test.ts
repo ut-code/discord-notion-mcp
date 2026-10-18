@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { actionUrl } from "../../src/lib/action-url";
 import { grantSubmitLabel } from "../../src/lib/grant-label";
 import { diffLines } from "../../src/lib/server/dashboard/audit";
-import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue } from "../../src/lib/server/dashboard/format";
+import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue, roleSummary } from "../../src/lib/server/dashboard/format";
 import { safeNextPath } from "../../src/lib/server/dashboard/next-path";
 import { memberAvatarUrl, userAvatarUrl } from "../../src/lib/server/discord/avatar";
 import { initialOf } from "../../src/lib/initial";
@@ -111,6 +111,14 @@ describe("admin formatting", () => {
   test("grant submit label", () => {
     expect(grantSubmitLabel("Notion 書き込み", "Mina")).toBe("Mina に Notion 書き込みを付与");
     expect(grantSubmitLabel("Notion 書き込み", null)).toBe("付与する");
+  });
+});
+
+describe("roleSummary", () => {
+  test("names up to two roles, then counts the rest", () => {
+    expect(roleSummary(["staff"])).toBe("staff");
+    expect(roleSummary(["staff", "member"])).toBe("staff, member");
+    expect(roleSummary(["staff", "member", "企画", "広報"])).toBe("staff, member 他 2");
   });
 });
 

@@ -9,7 +9,7 @@ import { isSnowflake } from "../lib/snowflake";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
-import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle } from "./format";
+import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle, roleSummary } from "./format";
 import { formString, type ActionResult } from "./shared";
 import { grantableRoles, heldRoles, type UserSubject } from "./subjects";
 import { buildGrantRows, redundancyOf, type GrantRowView, type Redundancy } from "./views";
@@ -99,7 +99,14 @@ export interface GrantsPageData {
 function rolesText(guild: GuildInfo, user: UserSubject): string {
   if (!user.member) return m.grants_subject_non_member();
   const names = heldRoles(guild, user.member).map((role) => role.name);
-  return names.length > 0 ? names.join(", ") : m.common_no_roles();
+  return names.length > 0 ? roleSummary(names) : m.common_no_roles();
+}
+
+/** The tooltip of a member: the Discord id, and every role when the second line names only some. */
+function userTitle(guild: GuildInfo, user: UserSubject): string {
+  const names = user.member ? heldRoles(guild, user.member).map((role) => role.name) : [];
+  const all = names.join(", ");
+  return roleSummary(names) === all ? `Discord ID ${user.id}` : `Discord ID ${user.id}\n${all}`;
 }
 
 function userSecondLine(guild: GuildInfo, user: UserSubject): string {
@@ -137,7 +144,7 @@ function userSubject(guild: GuildInfo, user: UserSubject | null, fallbackId: str
     unknown: false,
     color: null,
     avatarUrl: user.avatarUrl,
-    title: `Discord ID ${user.id}`,
+    title: userTitle(guild, user),
   };
 }
 
