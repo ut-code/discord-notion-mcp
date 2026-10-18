@@ -84,6 +84,15 @@ describe("ChannelAccess", () => {
     expect(resolved.parent?.id).toBe(STAFF);
   });
 
+  test("threads, which the channel list leaves out, are looked up once a minute", async () => {
+    await access.resolveReadable(STAFF_THREAD, viewer([ROLE_STAFF]));
+    await access.resolveReadable(STAFF_THREAD, viewer([ROLE_STAFF]));
+    expect(api.calls.channel).toBe(1);
+    now = 60_000;
+    await access.resolveReadable(STAFF_THREAD, viewer([ROLE_STAFF]));
+    expect(api.calls.channel).toBe(2);
+  });
+
   test("channel list is cached", async () => {
     await access.listVisibleChannels(viewer());
     await access.resolveReadable(PUBLIC, viewer());

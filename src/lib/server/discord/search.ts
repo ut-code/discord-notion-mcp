@@ -92,7 +92,7 @@ async function filterReadableResults(
     if (listed) {
       verdict = canReadMessages(deps.access.permissionsFor(listed, viewer));
     } else {
-      const fetched = threadsById.get(channelId) ?? (await deps.api.fetchChannel(channelId));
+      const fetched = threadsById.get(channelId) ?? (await deps.access.fetchUnlisted(channelId));
       verdict = fetched !== null && isThread(fetched) && (await deps.access.isThreadVisible(fetched, viewer, true));
     }
     verdicts.set(channelId, verdict);

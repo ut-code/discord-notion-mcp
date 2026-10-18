@@ -10,9 +10,13 @@ import type { GuildInfo, MemberInfo } from "./types";
 export const DISCORD_NOT_ACCESSIBLE_MESSAGE = "Channel not found or not accessible.";
 
 const THREAD_CHECK_CONCURRENCY = 5;
-/** Private thread membership, per thread and viewer: listing threads asks once per private thread. */
-const THREAD_MEMBER_TTL_MS = 60_000;
-const MAX_CACHED_THREAD_MEMBERS = 5_000;
+/**
+ * Lookups the channel list cannot answer, kept for a minute: threads (and unknown ids) by id,
+ * and private thread membership per thread and viewer, which listing threads asks once per
+ * private thread.
+ */
+const LOOKUP_TTL_MS = 60_000;
+const MAX_CACHED_LOOKUPS = 5_000;
 
 export class NotAccessibleError extends ToolError {
   constructor(message = DISCORD_NOT_ACCESSIBLE_MESSAGE) {
@@ -79,6 +83,7 @@ function channelPermissions(channel: { permission_overwrites?: GuildChannel["per
 /** Answers "can this member see/read this channel or thread?" using bot-fetched data. */
 export class ChannelAccess {
   private readonly threadMembers: TtlCache<string, boolean>;
+  private readonly unlisted: TtlCache<string, APIChannel | null>;
 
   constructor(
     private readonly api: DiscordApi,
@@ -86,7 +91,14 @@ export class ChannelAccess {
     private readonly guildId: string,
     options: { clock?: Clock } = {},
   ) {
-    this.threadMembers = new TtlCache(THREAD_MEMBER_TTL_MS, options.clock ?? systemClock, MAX_CACHED_THREAD_MEMBERS);
+    const clock = options.clock ?? systemClock;
+    this.threadMembers = new TtlCache(LOOKUP_TTL_MS, clock, MAX_CACHED_LOOKUPS);
+    this.unlisted = new TtlCache(LOOKUP_TTL_MS, clock, MAX_CACHED_LOOKUPS);
+  }
+
+  /** A channel missing from the channel list (a thread, or an unknown id), fetched by id. */
+  fetchUnlisted(channelId: string): Promise<APIChannel | null> {
+    return this.unlisted.getOrLoad(channelId, () => this.api.fetchChannel(channelId));
   }
 
   permissionsFor(channel: GuildChannel, viewer: Viewer): bigint {
@@ -139,7 +151,7 @@ export class ChannelAccess {
       return { channel: listed, parent: null, permissions };
     }
 
-    const fetched = await this.api.fetchChannel(channelId);
+    const fetched = await this.fetchUnlisted(channelId);
     if (!fetched || !("guild_id" in fetched) || fetched.guild_id !== this.guildId) throw new NotAccessibleError();
 
     if (isThread(fetched)) {

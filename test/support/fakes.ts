@@ -120,7 +120,7 @@ export class FakeDiscordApi implements DiscordApi {
   users = new Map<string, UserInfo>();
   /** fetchMember throws for these user ids (simulates Discord outages). */
   failingMembers = new Set<string>();
-  calls = { guild: 0, member: 0, channels: 0, threadMember: 0, messages: 0, message: 0, pins: 0 };
+  calls = { guild: 0, member: 0, channels: 0, channel: 0, threadMember: 0, messages: 0, message: 0, pins: 0 };
 
   async fetchGuild(): Promise<GuildInfo> {
     this.calls.guild++;
@@ -139,6 +139,7 @@ export class FakeDiscordApi implements DiscordApi {
   }
 
   async fetchChannel(channelId: string): Promise<APIChannel | null> {
+    this.calls.channel++;
     return (
       (this.channels.find((c) => c.id === channelId) as APIChannel | undefined) ?? this.threads.find((t) => t.id === channelId) ?? null
     );
