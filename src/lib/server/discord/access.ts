@@ -10,6 +10,9 @@ import type { GuildInfo, MemberInfo } from "./types";
 export const DISCORD_NOT_ACCESSIBLE_MESSAGE = "Channel not found or not accessible.";
 
 const THREAD_CHECK_CONCURRENCY = 5;
+/** Private thread membership, per thread and viewer: listing threads asks once per private thread. */
+const THREAD_MEMBER_TTL_MS = 60_000;
+const MAX_CACHED_THREAD_MEMBERS = 5_000;
 
 export class NotAccessibleError extends ToolError {
   constructor(message = DISCORD_NOT_ACCESSIBLE_MESSAGE) {
@@ -75,11 +78,16 @@ function channelPermissions(channel: { permission_overwrites?: GuildChannel["per
 
 /** Answers "can this member see/read this channel or thread?" using bot-fetched data. */
 export class ChannelAccess {
+  private readonly threadMembers: TtlCache<string, boolean>;
+
   constructor(
     private readonly api: DiscordApi,
     private readonly channels: ChannelDirectory,
     private readonly guildId: string,
-  ) {}
+    options: { clock?: Clock } = {},
+  ) {
+    this.threadMembers = new TtlCache(THREAD_MEMBER_TTL_MS, options.clock ?? systemClock, MAX_CACHED_THREAD_MEMBERS);
+  }
 
   permissionsFor(channel: GuildChannel, viewer: Viewer): bigint {
     return channelPermissions(channel, viewer);
@@ -102,7 +110,8 @@ export class ChannelAccess {
     if (!(requireRead ? canReadMessages(permissions) : canViewChannel(permissions))) return false;
     if (thread.type !== ChannelType.PrivateThread) return true;
     if (hasPermission(permissions, MANAGE_THREADS)) return true;
-    return this.api.isThreadMember(thread.id, viewer.member.userId);
+    const userId = viewer.member.userId;
+    return this.threadMembers.getOrLoad(`${thread.id}:${userId}`, () => this.api.isThreadMember(thread.id, userId));
   }
 
   /** Private threads each cost a membership request, so a bounded number run at once. */

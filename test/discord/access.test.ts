@@ -14,6 +14,7 @@ const STAFF_THREAD = "500000000000000003";
 
 let api: FakeDiscordApi;
 let access: ChannelAccess;
+let now = 0;
 
 beforeEach(() => {
   api = new FakeDiscordApi();
@@ -30,7 +31,8 @@ beforeEach(() => {
     ]),
   ];
   api.threads = [thread(PUBLIC_THREAD, PUBLIC), thread(PRIVATE_THREAD, PUBLIC, 12), thread(STAFF_THREAD, STAFF)];
-  access = new ChannelAccess(api, new ChannelDirectory(api), GUILD_ID);
+  now = 0;
+  access = new ChannelAccess(api, new ChannelDirectory(api, { clock: () => now }), GUILD_ID, { clock: () => now });
 });
 
 const viewer = (roles: string[] = []) => ({ guild: api.guild, member: makeMember(USER, roles) });
@@ -46,8 +48,20 @@ describe("ChannelAccess", () => {
     expect(visible.map((t) => t.id)).toEqual([PUBLIC_THREAD]);
 
     api.threadMembers.add(`${PRIVATE_THREAD}:${USER}`);
+    now = 60_000;
     const asMember = await access.filterVisibleThreads(api.threads, viewer());
     expect(asMember.map((t) => t.id)).toEqual([PUBLIC_THREAD, PRIVATE_THREAD]);
+  });
+
+  test("private thread membership is cached for a minute per thread and viewer", async () => {
+    await access.filterVisibleThreads(api.threads, viewer());
+    await access.filterVisibleThreads(api.threads, viewer());
+    expect(api.calls.threadMember).toBe(1);
+    api.threadMembers.add(`${PRIVATE_THREAD}:${USER}`);
+    expect((await access.filterVisibleThreads(api.threads, viewer())).map((t) => t.id)).not.toContain(PRIVATE_THREAD);
+    now = 60_000;
+    expect((await access.filterVisibleThreads(api.threads, viewer())).map((t) => t.id)).toContain(PRIVATE_THREAD);
+    expect(api.calls.threadMember).toBe(2);
   });
 
   test("MANAGE_THREADS sees private threads without membership", async () => {
