@@ -5,8 +5,9 @@ import {
   type APIThreadChannel,
   type RESTGetAPIGuildMessagesSearchQuery,
 } from "discord-api-types/v10";
+import { createLimiter } from "../lib/limiter";
 import type { ChannelAccess, ChannelDirectory, Viewer } from "./access";
-import { isThread } from "./access";
+import { isThread, THREAD_CHECK_CONCURRENCY } from "./access";
 import type { DiscordApi } from "./api";
 import { canReadMessages } from "./permissions";
 
@@ -82,29 +83,22 @@ async function filterReadableResults(
 ): Promise<{ messages: SearchMessage[]; threads: APIThreadChannel[] }> {
   const channelsById = new Map((await deps.channels.list()).map((channel) => [channel.id, channel]));
   const threadsById = new Map((result.threads ?? []).map((thread) => [thread.id, thread]));
-  const verdicts = new Map<string, boolean>();
 
   const canRead = async (channelId: string): Promise<boolean> => {
-    const cached = verdicts.get(channelId);
-    if (cached !== undefined) return cached;
-    let verdict: boolean;
     const listed = channelsById.get(channelId);
-    if (listed) {
-      verdict = canReadMessages(deps.access.permissionsFor(listed, viewer));
-    } else {
-      const fetched = threadsById.get(channelId) ?? (await deps.access.fetchUnlisted(channelId));
-      verdict = fetched !== null && isThread(fetched) && (await deps.access.isThreadVisible(fetched, viewer, true));
-    }
-    verdicts.set(channelId, verdict);
-    return verdict;
+    if (listed) return canReadMessages(deps.access.permissionsFor(listed, viewer));
+    const fetched = threadsById.get(channelId) ?? (await deps.access.fetchUnlisted(channelId));
+    return fetched !== null && isThread(fetched) && (await deps.access.isThreadVisible(fetched, viewer, true));
   };
 
-  const messages: SearchMessage[] = [];
-  for (const message of result.messages.flat()) {
-    if (await canRead(message.channel_id)) messages.push(message);
-  }
-  const shown = new Set(messages.map((message) => message.channel_id));
-  return { messages, threads: [...threadsById.values()].filter((thread) => shown.has(thread.id)) };
+  // Each channel is judged once, the ones that may ask Discord a few at a time.
+  const all = result.messages.flat();
+  const channelIds = [...new Set(all.map((message) => message.channel_id))];
+  const limit = createLimiter(THREAD_CHECK_CONCURRENCY);
+  const verdicts = await Promise.all(channelIds.map((channelId) => limit(() => canRead(channelId))));
+  const readable = new Set(channelIds.filter((_, index) => verdicts[index]));
+  const messages: SearchMessage[] = all.filter((message) => readable.has(message.channel_id));
+  return { messages, threads: [...threadsById.values()].filter((thread) => readable.has(thread.id)) };
 }
 
 /** Runs the search, waiting briefly while Discord builds the guild's search index. */

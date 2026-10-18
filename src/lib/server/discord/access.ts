@@ -9,7 +9,8 @@ import type { GuildInfo, MemberInfo } from "./types";
 
 export const DISCORD_NOT_ACCESSIBLE_MESSAGE = "Channel not found or not accessible.";
 
-const THREAD_CHECK_CONCURRENCY = 5;
+/** Thread checks that may ask Discord (private thread membership) run this many at once. */
+export const THREAD_CHECK_CONCURRENCY = 5;
 /**
  * Lookups the channel list cannot answer, kept for a minute: threads (and unknown ids) by id,
  * and private thread membership per thread and viewer, which listing threads asks once per
