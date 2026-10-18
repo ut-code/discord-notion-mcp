@@ -191,8 +191,13 @@ function toRichTextRequest(item: RichTextItemResponse): RichTextRequest {
       return { type: "mention", mention: { database: { id: mention.database.id } }, annotations };
     case "date":
       return { type: "mention", mention: { date: mention.date }, annotations };
+    case "template_mention":
+      return { type: "mention", mention: { template_mention: mention.template_mention }, annotations };
+    case "custom_emoji":
+      return { type: "mention", mention: { custom_emoji: { id: mention.custom_emoji.id } }, annotations };
     default:
-      // Other mention kinds cannot be written back; keep their visible text (and link).
+      // Link previews and link mentions have no request form (see MentionRichTextItemRequest in
+      // @notionhq/client): keep their visible text and link.
       return {
         type: "text",
         text: { content: item.plain_text, link: item.href ? { url: item.href } : null },

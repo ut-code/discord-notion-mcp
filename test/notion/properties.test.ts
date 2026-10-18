@@ -106,11 +106,26 @@ describe("toWritablePropertyValue", () => {
       type: "mention",
       mention: { type: "link_mention", link_mention: { href: "https://s.test" } },
     };
-    const result = toWritablePropertyValue(v({ type: "rich_text", rich_text: [userMention, linkMention] }));
+    const today = {
+      ...rt("@Today"),
+      type: "mention",
+      mention: { type: "template_mention", template_mention: { type: "template_mention_date", template_mention_date: "today" } },
+    };
+    const emoji = {
+      ...rt(":party:"),
+      type: "mention",
+      mention: { type: "custom_emoji", custom_emoji: { id: "e1", name: "party", url: "https://e.test/1.png" } },
+    };
+    const result = toWritablePropertyValue(v({ type: "rich_text", rich_text: [userMention, linkMention, today, emoji] }));
     expect(result.ok).toBe(true);
     const items = (result as unknown as { value: { rich_text: unknown[] } }).value.rich_text;
     expect(items[0]).toMatchObject({ type: "mention", mention: { user: { id: "u1" } } });
     expect(items[1]).toMatchObject({ type: "text", text: { content: "site", link: { url: "https://s.test" } } });
+    expect(items[2]).toMatchObject({
+      type: "mention",
+      mention: { template_mention: { type: "template_mention_date", template_mention_date: "today" } },
+    });
+    expect(items[3]).toMatchObject({ type: "mention", mention: { custom_emoji: { id: "e1" } } });
   });
 
   test("Notion-hosted files cannot be restored", () => {
