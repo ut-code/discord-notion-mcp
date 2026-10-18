@@ -9,6 +9,11 @@ export interface GuildDirectory {
 }
 
 const DIRECTORY_TTL_MS = 60_000;
+/**
+ * Expired entries leave the cache only when read again, so members looked up once (a page of
+ * logins, a past MCP user) would stay forever; past this many the oldest stored are dropped.
+ */
+const MAX_CACHED_MEMBERS = 5_000;
 
 export class CachedGuildDirectory implements GuildDirectory {
   private readonly guildCache: TtlCache<"guild", GuildInfo>;
@@ -21,7 +26,7 @@ export class CachedGuildDirectory implements GuildDirectory {
     const ttl = options.ttlMs ?? DIRECTORY_TTL_MS;
     const clock = options.clock ?? systemClock;
     this.guildCache = new TtlCache(ttl, clock);
-    this.memberCache = new TtlCache(ttl, clock);
+    this.memberCache = new TtlCache(ttl, clock, MAX_CACHED_MEMBERS);
   }
 
   fetchGuild(): Promise<GuildInfo> {
