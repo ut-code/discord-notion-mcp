@@ -19,7 +19,6 @@ function principalFor(discordUserId: string, isAdmin = false): Principal {
   return {
     userId: `u-${discordUserId}`,
     discordUserId,
-    clientId: "c",
     access: { isMember: true, discordUserId, guild: makeGuild(), member: makeMember(discordUserId), permissions, isAdmin },
   };
 }

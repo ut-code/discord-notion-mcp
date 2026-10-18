@@ -9,7 +9,6 @@ export type MemberAccess = Extract<EffectiveAccess, { isMember: true }>;
 export interface Principal {
   userId: string;
   discordUserId: string;
-  clientId: string;
   access: MemberAccess;
 }
 

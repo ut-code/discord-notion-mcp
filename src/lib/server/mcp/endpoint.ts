@@ -104,11 +104,11 @@ export function createMcpEndpoint(deps: McpEndpointDeps): (request: Request) => 
       }
       if (!access.isMember) return jsonRpcError(403, "You are not a member of the Discord server served by this MCP server.");
 
-      const clientId = stringClaim(claims.azp) ?? stringClaim(claims.client_id) ?? "unknown";
-      const principal: Principal = { userId, discordUserId, clientId, access };
+      const principal: Principal = { userId, discordUserId, access };
       const authInfo: AuthInfo = {
         token: bearerToken(request),
-        clientId,
+        // Required by the SDK and unused by the tools; Better Auth tokens always carry azp.
+        clientId: stringClaim(claims.azp) ?? stringClaim(claims.client_id) ?? "unknown",
         scopes: (stringClaim(claims.scope) ?? "").split(" ").filter(Boolean),
         expiresAt: typeof claims.exp === "number" ? claims.exp : undefined,
         resource: new URL(deps.resource),

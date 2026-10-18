@@ -13,7 +13,6 @@ const USER = "300000000000000001";
 const principal: Principal = {
   userId: "u",
   discordUserId: USER,
-  clientId: "c",
   access: {
     isMember: true,
     discordUserId: USER,

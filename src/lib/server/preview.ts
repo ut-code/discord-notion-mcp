@@ -247,7 +247,6 @@ export async function startPreview(): Promise<Runtime> {
     const principal: Principal = {
       userId,
       discordUserId: who.userId,
-      clientId: "preview",
       access: {
         isMember: true,
         discordUserId: who.userId,

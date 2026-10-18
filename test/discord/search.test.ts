@@ -28,7 +28,6 @@ function principal(roles: string[] = []): Principal {
   return {
     userId: "u",
     discordUserId: USER,
-    clientId: "c",
     access: {
       isMember: true,
       discordUserId: USER,

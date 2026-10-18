@@ -30,7 +30,7 @@ const access = {
   permissions: new Set<Permission>(["discord:read"]),
   isAdmin: false,
 };
-const principal: Principal = { userId: "u1", discordUserId: USER, clientId: "c1", access };
+const principal: Principal = { userId: "u1", discordUserId: USER, access };
 
 const echo = defineTool({
   name: "test_echo",

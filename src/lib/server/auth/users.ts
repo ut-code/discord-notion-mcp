@@ -8,7 +8,6 @@ export interface LoginUser {
   userId: string;
   name: string;
   discordUserId: string | null;
-  createdAt: Date;
   /** Latest session creation or Discord account update (both happen on every login). */
   lastLoginAt: Date | null;
   revokedAt: Date | null;
@@ -49,7 +48,6 @@ export class LoginUserStore {
       .select({
         userId: authUser.id,
         name: authUser.name,
-        createdAt: authUser.createdAt,
         discordUserId: authAccount.accountId,
         accountUpdatedAt: authAccount.updatedAt,
         lastSessionAt: lastSession.at,
@@ -66,7 +64,6 @@ export class LoginUserStore {
       userId: row.userId,
       name: row.name,
       discordUserId: row.discordUserId,
-      createdAt: parseDate(row.createdAt) ?? new Date(0),
       lastLoginAt: latest(parseDate(row.lastSessionAt), parseDate(row.accountUpdatedAt)),
       revokedAt: row.revokedAt,
     }));
