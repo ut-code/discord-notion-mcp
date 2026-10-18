@@ -23,9 +23,11 @@ import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "./types";
 /** A non-thread guild channel as returned by GET /guilds/{id}/channels. */
 export type GuildChannel = APIGuildChannel & { position?: number; topic?: string | null };
 
+/** Discord accepts one of `before`, `after` and `around` per request. */
 export interface MessageQuery {
   before?: string;
   after?: string;
+  around?: string;
   limit: number;
 }
 

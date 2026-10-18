@@ -112,13 +112,15 @@ export class FakeDiscordApi implements DiscordApi {
   threadMembers = new Set<string>();
   messages = new Map<string, APIMessage[]>();
   events: APIGuildScheduledEvent[] = [];
+  /** `fetchMessages({ around })` leaves out the message it centers on. */
+  aroundOmitsTarget = false;
   /** Members listed as bots. */
   bots = new Set<string>();
   /** Users that are not guild members but exist on Discord. */
   users = new Map<string, UserInfo>();
   /** fetchMember throws for these user ids (simulates Discord outages). */
   failingMembers = new Set<string>();
-  calls = { guild: 0, member: 0, channels: 0, threadMember: 0 };
+  calls = { guild: 0, member: 0, channels: 0, threadMember: 0, messages: 0, message: 0, pins: 0 };
 
   async fetchGuild(): Promise<GuildInfo> {
     this.calls.guild++;
@@ -154,7 +156,21 @@ export class FakeDiscordApi implements DiscordApi {
   }
 
   async fetchMessages(channelId: string, query: MessageQuery): Promise<APIMessage[]> {
+    this.calls.messages++;
     const all = [...(this.messages.get(channelId) ?? [])].sort((a, b) => compareSnowflakes(b.id, a.id));
+    if (query.around) {
+      const around = query.around;
+      // Discord does not document whether `around` returns the message itself; tests try both.
+      const target = all.findIndex((m) => m.id === around);
+      if (this.aroundOmitsTarget && target >= 0) all.splice(target, 1);
+      const newer = all
+        .filter((m) => compareSnowflakes(m.id, around) > 0)
+        .reverse()
+        .slice(0, Math.floor(query.limit / 2))
+        .reverse();
+      const rest = all.filter((m) => compareSnowflakes(m.id, around) <= 0).slice(0, query.limit - newer.length);
+      return [...newer, ...rest];
+    }
     if (query.after) {
       const after = query.after;
       return all
@@ -168,11 +184,19 @@ export class FakeDiscordApi implements DiscordApi {
   }
 
   async fetchMessage(channelId: string, messageId: string): Promise<APIMessage | null> {
+    this.calls.message++;
     return this.messages.get(channelId)?.find((m) => m.id === messageId) ?? null;
   }
 
-  async fetchPins(): Promise<PinsPage> {
-    return { messages: [], hasMore: false };
+  /** Pinned messages per channel, most recently pinned first; the page cursor is an index here. */
+  pins = new Map<string, APIMessage[]>();
+
+  async fetchPins(channelId: string, query: { before?: string; limit: number }): Promise<PinsPage> {
+    this.calls.pins++;
+    const all = this.pins.get(channelId) ?? [];
+    const start = query.before ? Number(query.before) : 0;
+    const end = start + query.limit;
+    return { messages: all.slice(start, end), hasMore: end < all.length, nextBefore: end < all.length ? String(end) : undefined };
   }
 
   async isThreadMember(threadId: string, userId: string): Promise<boolean> {

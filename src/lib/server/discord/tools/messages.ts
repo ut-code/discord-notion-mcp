@@ -10,6 +10,10 @@ import { fetchHistory } from "../history";
 import { parseMessageLink } from "../links";
 import { channelLabel, formatContextFor, parseCursor, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
+/** Pins are listed in pages of PIN_PAGE_SIZE, up to MAX_PINS per call. */
+const PIN_PAGE_SIZE = 50;
+const MAX_PINS = 150;
+
 export function createMessageTools(deps: DiscordToolDeps): {
   readMessages: AnyToolDefinition;
   getMessage: AnyToolDefinition;
@@ -79,17 +83,15 @@ export function createMessageTools(deps: DiscordToolDeps): {
       }
 
       const { channel } = await deps.access.resolveReadable(channelId, viewerOf(principal));
-      const target = await deps.api.fetchMessage(channel.id, messageId);
+      // One request for the message and its context; Discord does not document whether
+      // `around` includes the message itself, so it is fetched on its own when missing.
+      const nearby = await deps.api.fetchMessages(channel.id, { around: messageId, limit: args.context * 2 + 1 });
+      const target = nearby.find((message) => message.id === messageId) ?? (await deps.api.fetchMessage(channel.id, messageId));
       if (!target) throw new NotAccessibleError("Message not found or not accessible.");
 
-      const [older, newer] =
-        args.context > 0
-          ? await Promise.all([
-              deps.api.fetchMessages(channel.id, { before: messageId, limit: args.context }),
-              deps.api.fetchMessages(channel.id, { after: messageId, limit: args.context }),
-            ])
-          : [[], []];
-      const messages = [...older, target, ...newer].sort((a, b) => compareSnowflakes(a.id, b.id));
+      const older = nearby.filter((message) => compareSnowflakes(message.id, messageId) < 0).sort((a, b) => compareSnowflakes(a.id, b.id));
+      const newer = nearby.filter((message) => compareSnowflakes(message.id, messageId) > 0).sort((a, b) => compareSnowflakes(a.id, b.id));
+      const messages = [...older.slice(Math.max(0, older.length - args.context)), target, ...newer.slice(0, args.context)];
       const ctx = await formatContextFor(deps, principal, channel);
       return `${channelLabel(channel)} (id ${channel.id}) — message ${messageId} marked with ▶\n\n${formatMessages(messages, ctx, messageId)}`;
     }),
@@ -109,8 +111,8 @@ export function createMessageTools(deps: DiscordToolDeps): {
       const messages: APIMessage[] = [];
       let before: string | undefined;
       let hasMore = false;
-      for (let page = 0; page < 3; page++) {
-        const result = await deps.api.fetchPins(channel.id, { before, limit: 50 });
+      while (messages.length < MAX_PINS) {
+        const result = await deps.api.fetchPins(channel.id, { before, limit: Math.min(PIN_PAGE_SIZE, MAX_PINS - messages.length) });
         messages.push(...result.messages);
         hasMore = result.hasMore;
         if (!result.hasMore || !result.nextBefore) break;
@@ -119,7 +121,7 @@ export function createMessageTools(deps: DiscordToolDeps): {
       if (messages.length === 0) return `${channelLabel(channel)} (id ${channel.id}) has no pinned messages.`;
       const ctx = await formatContextFor(deps, principal, channel);
       const header = `${channelLabel(channel)} (id ${channel.id}) — ${messages.length} pinned message(s), most recently pinned first`;
-      const footer = hasMore ? "\n\n(More pins exist; only the most recent 150 are shown.)" : "";
+      const footer = hasMore ? `\n\n(More pins exist; only the most recent ${messages.length} are shown.)` : "";
       return `${header}\n\n${formatMessages(messages, ctx)}${footer}`;
     }),
   });
