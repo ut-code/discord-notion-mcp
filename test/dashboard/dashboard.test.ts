@@ -173,6 +173,7 @@ describe("dashboard access control", () => {
       avatarUrl: OWNER_AVATAR,
       roleLabel: "オーナー",
       guildName: "Test Guild",
+      guildIconUrl: null,
       isAdmin: true,
       canViewAudit: true,
     });

@@ -10,6 +10,11 @@ function validHash(hash: string | null | undefined): hash is string {
   return typeof hash === "string" && HASH.test(hash);
 }
 
+/** Server icon at twice the largest rendered logo (44px); null when the server has none. */
+export function guildIconUrl(guildId: string, hash: string | null | undefined): string | null {
+  return validHash(hash) ? cdn.icon(guildId, hash, { ...IMAGE, size: 128 }) : null;
+}
+
 /** Global avatar of a user; null when the user has the default avatar. */
 export function userAvatarUrl(userId: string, hash: string | null | undefined): string | null {
   return validHash(hash) ? cdn.avatar(userId, hash, IMAGE) : null;

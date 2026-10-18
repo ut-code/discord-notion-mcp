@@ -17,7 +17,7 @@ import {
   type RESTGetAPIGuildMessagesSearchResult,
 } from "discord-api-types/v10";
 import type { GuildDirectory } from "./directory";
-import { memberAvatarUrl, userAvatarUrl } from "./avatar";
+import { guildIconUrl, memberAvatarUrl, userAvatarUrl } from "./avatar";
 import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "./types";
 
 /** A non-thread guild channel as returned by GET /guilds/{id}/channels. */
@@ -105,6 +105,7 @@ export class RestDiscordApi implements DiscordApi {
     return {
       id: guild.id,
       name: guild.name,
+      iconUrl: guildIconUrl(guild.id, guild.icon),
       ownerId: guild.owner_id,
       roles: guild.roles.map((role) => ({
         id: role.id,

@@ -33,6 +33,7 @@ export function makeGuild(
   return {
     id: GUILD_ID,
     name: "Test Guild",
+    iconUrl: null,
     ownerId: OWNER_ID,
     roles: [
       { id: GUILD_ID, name: "@everyone", permissions: 0n, color: 0, position: 0, managed: false },

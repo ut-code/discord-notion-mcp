@@ -3,7 +3,7 @@
   import LogInIcon from "@lucide/svelte/icons/log-in";
   import AuthLayout from "$lib/components/app/auth-layout.svelte";
   import { Button } from "$lib/components/ui/button";
-  import { initialOf } from "$lib/initial";
+  import ServerLogo from "$lib/components/app/server-logo.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import { jsonStrings } from "$lib/json-strings";
   import type { PageProps } from "./$types";
@@ -42,7 +42,7 @@
 
 <AuthLayout title={`${m.sign_in_title()} — Discord × Notion MCP`}>
   <div class="flex flex-col items-center gap-3.5 text-center">
-    <div class="logo logo-lg" aria-hidden="true">{initialOf(data.guildName ?? "MCP")}</div>
+    <ServerLogo name={data.guildName ?? "MCP"} iconUrl={data.guildIconUrl} large />
     <div class="stack items-center gap-1.5">
       <h1 class="text-[22px]">{data.heading}</h1>
       <p class="text-sm text-muted-foreground">{m.sign_in_lead()}</p>

@@ -12,7 +12,7 @@
   import ThemeToggle from "$lib/components/app/theme-toggle.svelte";
   import { Button } from "$lib/components/ui/button";
   import * as Dialog from "$lib/components/ui/dialog";
-  import { initialOf } from "$lib/initial";
+  import ServerLogo from "$lib/components/app/server-logo.svelte";
   import { m } from "$lib/paraglide/messages.js";
   import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "$lib/paths";
   import { actionResultOf } from "$lib/action-result";
@@ -41,7 +41,7 @@
 <div class="shell">
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo" aria-hidden="true">{initialOf(data.viewer.guildName)}</div>
+      <ServerLogo name={data.viewer.guildName} iconUrl={data.viewer.guildIconUrl} />
       <div class="stack">
         <span class="truncate text-sm font-semibold">{data.viewer.guildName}</span>
         <span class="sub">Discord × Notion MCP</span>

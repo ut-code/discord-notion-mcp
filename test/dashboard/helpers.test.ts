@@ -4,7 +4,7 @@ import { grantSubmitLabel } from "../../src/lib/grant-label";
 import { diffLines } from "../../src/lib/server/dashboard/audit";
 import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue, roleSummary } from "../../src/lib/server/dashboard/format";
 import { safeNextPath } from "../../src/lib/server/dashboard/next-path";
-import { memberAvatarUrl, userAvatarUrl } from "../../src/lib/server/discord/avatar";
+import { guildIconUrl, memberAvatarUrl, userAvatarUrl } from "../../src/lib/server/discord/avatar";
 import { initialOf } from "../../src/lib/initial";
 
 describe("safeNextPath", () => {
@@ -59,7 +59,13 @@ describe("Discord avatars", () => {
     expect(memberAvatarUrl("1", "2", null, null)).toBeNull();
   });
 
+  test("server icons are static PNGs at 128px", () => {
+    expect(guildIconUrl("1", `a_${hash}`)).toBe(`https://cdn.discordapp.com/icons/1/a_${hash}.png?size=128`);
+    expect(guildIconUrl("1", null)).toBeNull();
+  });
+
   test("ignores malformed hashes", () => {
+    expect(guildIconUrl("1", "../../evil")).toBeNull();
     expect(userAvatarUrl("2", "../../evil")).toBeNull();
     expect(userAvatarUrl("2", "")).toBeNull();
   });

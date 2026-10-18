@@ -22,6 +22,8 @@ export interface UserInfo {
 export interface GuildInfo {
   id: string;
   name: string;
+  /** Discord CDN URL; null without an icon. */
+  iconUrl: string | null;
   ownerId: string;
   roles: RoleInfo[];
 }

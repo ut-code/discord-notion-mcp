@@ -194,6 +194,8 @@ export async function startPreview(): Promise<Runtime> {
       })),
     ]),
     name: "サンプルサーバー",
+    // A server icon (Discord's CDN is out of reach here; the page CSP allows data: images).
+    iconUrl: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#5865f2"/><circle cx="32" cy="32" r="16" fill="#fff"/></svg>')}`,
   };
   for (const person of people) discord.members.set(person.userId, person);
   EXTRA_MEMBERS.forEach((name, index) => {

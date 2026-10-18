@@ -35,8 +35,9 @@ async function clientLabel(deps: Pick<DashboardDeps, "logError">, clientId: stri
 
 export interface SignInPageData {
   heading: string;
-  /** Initial shown in the logo tile. */
+  /** Shown as the logo tile: the server icon, else the name's initial. */
   guildName: string | null;
+  guildIconUrl: string | null;
   endpoint: string;
   errorCallbackURL: string;
   /** Signed authorization query when resuming an OAuth flow. */
@@ -50,15 +51,16 @@ export interface SignInPageData {
 export async function signInPage(deps: DashboardDeps, url: URL): Promise<SignInPageData> {
   const oauthQuery = extractSignedOAuthQuery(url.search) ?? null;
   const clientId = oauthQuery ? signedOAuthParam(oauthQuery, "client_id") : null;
-  const [guildName, clientName] = await Promise.all([
-    displayLookup(deps, "guild", async () => (await deps.directory.fetchGuild()).name),
+  const [guild, clientName] = await Promise.all([
+    displayLookup(deps, "guild", () => deps.directory.fetchGuild()),
     oauthQuery && clientId
       ? clientLabel(deps, clientId, () => clientNameBeforeSignIn(deps.auth, clientId, oauthQuery))
       : Promise.resolve(null),
   ]);
   return {
-    heading: guildName ? m.sign_in_heading_guild({ guild: guildName }) : PRODUCT_NAME,
-    guildName,
+    heading: guild ? m.sign_in_heading_guild({ guild: guild.name }) : PRODUCT_NAME,
+    guildName: guild?.name ?? null,
+    guildIconUrl: guild?.iconUrl ?? null,
     endpoint: `${AUTH_BASE_PATH}/sign-in/social`,
     errorCallbackURL: SIGN_IN_ERROR_PATH,
     oauthQuery,
