@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { FormattableMessage } from "../../src/lib/server/discord/format";
-import { formatMessage, formatTimestamp, resolveMentions } from "../../src/lib/server/discord/format";
+import { formatMessage, formatTimestamp, resolveMarkup } from "../../src/lib/server/discord/format";
 import { GUILD_ID } from "../support/fakes";
 
 const CHANNEL = "200000000000000010";
@@ -49,9 +49,17 @@ describe("formatMessage", () => {
       { id: "300000000000000002", username: "carol", global_name: "Carol", discriminator: "0", avatar: null },
       { id: "300000000000000003", username: "dave", global_name: null, discriminator: "0", avatar: null },
     ];
-    expect(resolveMentions(content, mentions, ctx)).toBe(
+    expect(resolveMarkup(content, mentions, ctx)).toBe(
       "hi @Carol and @dave, see #general @Moderators <#1234567890123456789> <@1234567890123456789>",
     );
+  });
+
+  test("rewrites timestamps in UTC and custom emoji by name; leaves malformed markup", () => {
+    expect(resolveMarkup("starts <t:1760000000:R>, ends <t:1760003600>", [], ctx)).toBe(
+      "starts 2025-10-09 08:53 UTC, ends 2025-10-09 09:53 UTC",
+    );
+    expect(resolveMarkup("nice <:yatta:123456789012345678> <a:dance:223456789012345678>", [], ctx)).toBe("nice :yatta: :dance:");
+    expect(resolveMarkup("<t:99999999999999> <t:12:Q> <:x:1>", [], ctx)).toBe("<t:99999999999999> <t:12:Q> <:x:1>");
   });
 
   test("embeds show their title and description, plus their URL when the text does not have it", () => {

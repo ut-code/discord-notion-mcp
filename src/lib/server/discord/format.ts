@@ -31,32 +31,68 @@ function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-export function resolveMentions(
+interface MarkupContext extends Pick<FormatContext, "channelNames" | "roleNames"> {
+  users: ReadonlyMap<string, MentionedUser>;
+}
+
+interface MarkupRule {
+  pattern: RegExp;
+  /** The readable text for a match (its capture groups), or null to leave the markup as it is. */
+  render: (groups: string[], ctx: MarkupContext) => string | null;
+}
+
+/**
+ * Discord markup that carries ids or numbers, as text the AI can read; one rule per kind.
+ * Every pattern is delimited by literal characters, so matching stays linear in the text.
+ */
+const MARKUP_RULES: readonly MarkupRule[] = [
+  // <@id> and <@!id>: users, named from the message's own mention list.
+  {
+    pattern: /<@!?(\d+)>/g,
+    render: ([id], ctx) => {
+      const user = id ? ctx.users.get(id) : undefined;
+      return user ? `@${userDisplayName(user, user.member?.nick)}` : null;
+    },
+  },
+  // <@&id>: roles.
+  { pattern: /<@&(\d+)>/g, render: ([id], ctx) => (id && ctx.roleNames.has(id) ? `@${ctx.roleNames.get(id)}` : null) },
+  // <#id>: channels; only those the reader can see are in the map.
+  { pattern: /<#(\d+)>/g, render: ([id], ctx) => (id && ctx.channelNames.has(id) ? `#${ctx.channelNames.get(id)}` : null) },
+  // <t:seconds> and <t:seconds:style>: Discord shows them in each reader's time zone.
+  {
+    pattern: /<t:(-?\d{1,13})(?::[tTdDfFsSR])?>/g,
+    render: ([seconds]) => {
+      const date = new Date(Number(seconds) * 1000);
+      return Number.isNaN(date.getTime()) ? null : formatTimestamp(date.toISOString());
+    },
+  },
+  // <:name:id> and <a:name:id>: custom emoji, whose id means nothing to a reader.
+  { pattern: /<a?:(\w{2,32}):\d+>/g, render: ([name]) => `:${name}:` },
+];
+
+/** Rewrites Discord markup (mentions, timestamps, custom emoji) as readable text; unknown ids stay. */
+export function resolveMarkup(
   content: string,
   mentions: readonly MentionedUser[],
   ctx: Pick<FormatContext, "channelNames" | "roleNames">,
 ): string {
-  const usersById = new Map(mentions.map((user) => [user.id, user]));
-  return content
-    .replace(/<@!?(\d+)>/g, (match, id: string) => {
-      const user = usersById.get(id);
-      return user ? `@${userDisplayName(user, user.member?.nick)}` : match;
-    })
-    .replace(/<@&(\d+)>/g, (match, id: string) => {
-      const name = ctx.roleNames.get(id);
-      return name ? `@${name}` : match;
-    })
-    .replace(/<#(\d+)>/g, (match, id: string) => {
-      const name = ctx.channelNames.get(id);
-      return name ? `#${name}` : match;
-    });
+  const markupCtx: MarkupContext = { ...ctx, users: new Map(mentions.map((user) => [user.id, user])) };
+  return MARKUP_RULES.reduce(
+    (text, rule) =>
+      text.replace(rule.pattern, (match: string, ...rest: unknown[]) => {
+        // The callback receives the capture groups, then the offset and the whole string.
+        const groups = rest.slice(0, -2).map((group) => (typeof group === "string" ? group : ""));
+        return rule.render(groups, markupCtx) ?? match;
+      }),
+    content,
+  );
 }
 
 export function formatMessage(message: FormattableMessage, ctx: FormatContext, options: { highlight?: boolean } = {}): string {
   const author = message.author;
   const displayName = userDisplayName(author, message.member?.nick);
   const botTag = author.bot ? " [bot]" : "";
-  const content = resolveMentions(message.content ?? "", message.mentions ?? [], ctx);
+  const content = resolveMarkup(message.content ?? "", message.mentions ?? [], ctx);
   const prefix = options.highlight ? "▶ " : "";
   const lines = [
     `${prefix}[${formatTimestamp(message.timestamp)}] ${displayName} (@${author.username})${botTag}: ${content || "(no text content)"}`,
@@ -67,7 +103,7 @@ export function formatMessage(message: FormattableMessage, ctx: FormatContext, o
   }
   for (const snapshot of message.message_snapshots ?? []) {
     const forwarded = snapshot.message.content
-      ? resolveMentions(snapshot.message.content, snapshot.message.mentions ?? [], ctx)
+      ? resolveMarkup(snapshot.message.content, snapshot.message.mentions ?? [], ctx)
       : "(no text content)";
     lines.push(`  ⤷ forwarded: ${forwarded}`);
   }
