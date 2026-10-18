@@ -197,6 +197,34 @@
 		gap: 2px;
 		min-width: 0;
 	}
+	/*
+	 * Scrolls sideways with no visible scrollbar, so long names can be read in full on narrow
+	 * screens. The side with more to see fades out; without scroll-driven animations the right
+	 * edge always does, which short text never reaches since the box fills its row (also as a
+	 * flex item).
+	 */
+	.scroll-x {
+		display: block;
+		flex: 1 1 auto;
+		overflow-x: auto;
+		scrollbar-width: none;
+		white-space: nowrap;
+		--fade-width: 16px;
+		mask-image: linear-gradient(
+			to right,
+			transparent,
+			#000 calc(var(--fade-start) * var(--fade-width)),
+			#000 calc(100% - var(--fade-end) * var(--fade-width)),
+			transparent
+		);
+	}
+	@supports (animation-timeline: scroll()) {
+		.scroll-x {
+			--fade-end: 0;
+			animation: scroll-x-fade linear both;
+			animation-timeline: scroll(self inline);
+		}
+	}
 	.cluster {
 		display: flex;
 		flex-wrap: wrap;
@@ -997,7 +1025,7 @@
 
 /*
  * Unlayered so they win over the shadcn components' utility classes (cell padding,
- * nowrap). Tables become stacked cards on phones: primary cell first, actions top-right.
+ * nowrap). On phones most tables become stacked cards; see the media query below.
  */
 .search [data-slot="input"] {
 	width: 100%;
@@ -1066,10 +1094,15 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 .data-table td .cluster {
 	flex-wrap: nowrap;
 }
-/* ...and the first column takes the room they leave instead of widening the table. */
+/*
+ * ...and the first column takes the room they leave instead of widening the table, cutting
+ * text placed directly in it with an ellipsis.
+ */
 .data-table td.primary {
 	width: 100%;
 	max-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 /* Each line of the first cell (name, @username, roles) stays on one line, cut with an ellipsis. */
 .data-table td.primary .stack {
@@ -1096,79 +1129,112 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 	.table-wrap [data-slot="table-container"] {
 		overflow-x: visible;
 	}
-	.data-table thead {
-		display: none;
-	}
-	.data-table,
-	.data-table tbody {
+	/* Tables become stacked cards: primary cell first, actions in the top right corner. */
+	.data-table:not(.figures-table) {
 		display: block;
+
+		& thead {
+			display: none;
+		}
+		& tbody {
+			display: block;
+		}
+		& tbody tr {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 6px 12px;
+			position: relative;
+			padding: 12px 16px;
+		}
+		& tbody td {
+			display: block;
+			height: auto;
+			padding: 0;
+			border: 0;
+			white-space: normal;
+		}
+		& td.primary {
+			flex-basis: 100%;
+			order: -1;
+			width: auto;
+			/* Lets long names shrink to the card instead of widening it under the actions button. */
+			min-width: 0;
+			max-width: none;
+		}
+		/* Only the first line shares its row with the actions button in the corner. */
+		& tr:has(td.actions) td.primary {
+			padding-right: 36px;
+		}
+		& td .cluster {
+			flex-wrap: wrap;
+		}
+		& td.actions {
+			position: absolute;
+			top: 8px;
+			right: 8px;
+			width: auto;
+		}
+		& td.empty {
+			flex-basis: 100%;
+			padding: 12px 0;
+		}
+		& td.num {
+			text-align: left;
+		}
+		/* Users: the last use sits at the bottom right, after the permission badges. */
+		& td.last-used {
+			margin-left: auto;
+			text-align: right;
+			font-size: 12px;
+		}
 	}
-	.data-table tbody tr {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 6px 12px;
-		position: relative;
-		padding: 12px 16px;
-	}
-	/* Only the first line shares its row with the actions button in the corner. */
-	.data-table tr:has(td.actions) td.primary {
-		padding-right: 36px;
-	}
-	.data-table tbody td {
-		display: block;
-		height: auto;
-		padding: 0;
-		border: 0;
-		white-space: normal;
-	}
-	.data-table.table-roomy td,
-	.data-table.table-tall td,
-	.data-table td.empty {
-		height: auto;
-	}
-	.data-table td.primary {
-		flex-basis: 100%;
-		order: -1;
-		/* Lets long names shrink to the card instead of widening it under the actions button. */
-		min-width: 0;
-	}
-	.data-table td.primary {
-		width: auto;
-		max-width: none;
-	}
-	.data-table td .cluster {
-		flex-wrap: wrap;
-	}
-	.data-table td.actions {
-		position: absolute;
-		top: 8px;
-		right: 8px;
-		width: auto;
-	}
-	.data-table td.empty {
-		flex-basis: 100%;
-		padding: 12px 0;
-	}
-	.data-table td.num {
-		text-align: left;
-	}
-	/* A cell that would wrap onto its own line in some rows only: always give it one. */
-	.data-table td.own-line {
-		flex-basis: 100%;
-	}
-	/* Users: the last use sits at the bottom right, after the permission badges. */
-	.data-table td.last-used {
-		margin-left: auto;
-		text-align: right;
-		font-size: 12px;
-	}
-	.data-table td[data-label]::before {
-		content: attr(data-label) " ";
-		color: var(--muted-foreground);
-		font-size: 12px;
+	/* Tables of short figures (stats) stay tables on phones, only tighter. */
+	.figures-table {
+		& th,
+		& td {
+			height: 44px;
+			padding: 0 6px;
+			font-size: 13px;
+		}
+		& td.secondary {
+			font-size: 12px;
+		}
+		& :is(th, td):first-child {
+			padding-left: 12px;
+		}
+		& :is(th, td):last-child {
+			padding-right: 12px;
+		}
 	}
 	.data-table.audit-table {
 		display: none;
+	}
+}
+
+/* Edge fades of .scroll-x (0 hidden, 1 full width), animated along its scroll position. */
+@property --fade-start {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 0;
+}
+@property --fade-end {
+	syntax: "<number>";
+	inherits: false;
+	initial-value: 1;
+}
+@keyframes scroll-x-fade {
+	0% {
+		--fade-start: 0;
+		--fade-end: 1;
+	}
+	15%,
+	85% {
+		--fade-start: 1;
+		--fade-end: 1;
+	}
+	100% {
+		--fade-start: 1;
+		--fade-end: 0;
 	}
 }

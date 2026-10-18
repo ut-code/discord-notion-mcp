@@ -53,7 +53,7 @@
     <section class="stat-col gap-3" aria-labelledby="users-heading">
       <h2 id="users-heading">{m.users_title()}</h2>
       <div class="table-wrap">
-        <Table.Root class="data-table">
+        <Table.Root class="data-table figures-table">
           <Table.Header>
             <Table.Row>
               <Table.Head>{m.common_user()}</Table.Head>
@@ -68,12 +68,12 @@
                 <Table.Cell class="primary">
                   <div class="cell-user" title={`Discord ID ${row.id}`}>
                     <AppAvatar name={row.name} url={row.avatarUrl} size="sm" />
-                    <span class="truncate">{row.name}</span>
+                    <span class="scroll-x">{row.name}</span>
                   </div>
                 </Table.Cell>
-                <Table.Cell class="num" data-label={m.stats_calls()}>{row.calls}</Table.Cell>
-                <Table.Cell class="num" data-label={m.stats_failure_rate()}>{row.failureRate}</Table.Cell>
-                <Table.Cell class="num secondary own-line" data-label={m.stats_last_used()}>{row.lastUsed}</Table.Cell>
+                <Table.Cell class="num">{row.calls}</Table.Cell>
+                <Table.Cell class="num">{row.failureRate}</Table.Cell>
+                <Table.Cell class="num secondary">{row.lastUsed}</Table.Cell>
               </Table.Row>
             {:else}
               <Table.Row>
@@ -88,7 +88,7 @@
     <section class="stat-col gap-3" aria-labelledby="tools-heading">
       <h2 id="tools-heading">{m.stats_tools()}</h2>
       <div class="table-wrap">
-        <Table.Root class="data-table">
+        <Table.Root class="data-table figures-table">
           <Table.Header>
             <Table.Row>
               <Table.Head>{m.stats_tools()}</Table.Head>
@@ -100,10 +100,10 @@
           <Table.Body>
             {#each data.tools as row (row.tool)}
               <Table.Row>
-                <Table.Cell class="primary"><span class="mono text-foreground">{row.tool}</span></Table.Cell>
-                <Table.Cell class="num" data-label={m.stats_calls()}>{row.calls}</Table.Cell>
-                <Table.Cell class="num" data-label={m.stats_failure_rate()}>{row.failureRate}</Table.Cell>
-                <Table.Cell class="num secondary" data-label={m.stats_avg_duration()}>{row.avgDuration}</Table.Cell>
+                <Table.Cell class="primary"><span class="mono scroll-x text-foreground">{row.tool}</span></Table.Cell>
+                <Table.Cell class="num">{row.calls}</Table.Cell>
+                <Table.Cell class="num">{row.failureRate}</Table.Cell>
+                <Table.Cell class="num secondary">{row.avgDuration}</Table.Cell>
               </Table.Row>
             {:else}
               <Table.Row>
