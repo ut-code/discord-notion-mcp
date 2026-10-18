@@ -44,7 +44,8 @@ function propertyLines(page: NotionPage, options: { skipTitle: boolean; skipEmpt
   const lines: string[] = [];
   for (const [name, value] of Object.entries(page.properties)) {
     if (options.skipTitle && value.type === "title") continue;
-    const text = renderPropertyValue(value).replace(/\s*\n\s*/g, " ");
+    // One line per property. /\s+/ stays linear; /\s*\n\s*/ took seconds on a long run of spaces.
+    const text = renderPropertyValue(value).replace(/\s+/g, " ");
     if (options.skipEmpty && !text) continue;
     lines.push(`${options.indent}- ${name} (${value.type}): ${text}`);
   }

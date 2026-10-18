@@ -69,6 +69,14 @@ describe("Notion tools", () => {
     expect(api.callsOf("retrieveUser").sort()).toEqual(["gone", "u1", "u2"]);
   });
 
+  test("notion_get_page puts each property on one line, quickly even for long runs of spaces", async () => {
+    const page = api.addPage({
+      properties: { title: titleValue("Spec"), Notes: titleValue(`first\n  second${" ".repeat(200_000)}end`, "notes") },
+    });
+    const text = await call("notion_get_page", { page: page.url });
+    expect(text).toContain("- Notes (title): first second end");
+  });
+
   test("notion_get_page reports truncated content and the omitted blocks", async () => {
     const page = api.addPage({ title: "Big", markdown: "Start" });
     api.truncated.set(page.id, ["b1", "b2"]);
