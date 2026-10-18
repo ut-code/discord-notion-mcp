@@ -54,6 +54,16 @@ describe("formatMessage", () => {
     );
   });
 
+  test("embeds show their title and description, plus their URL when the text does not have it", () => {
+    const embed = { title: "Build failed", description: "main #42", url: "https://ci.example/42" };
+    expect(formatMessage(msg({ content: "", embeds: [embed] }), ctx)).toContain("  embed: Build failed — main #42 https://ci.example/42");
+    const preview = { title: "Example", url: "https://example.com/a" };
+    expect(formatMessage(msg({ content: "look https://example.com/a", embeds: [preview] }), ctx)).toContain("  embed: Example\n");
+    expect(formatMessage(msg({ content: "", embeds: [{ url: "https://img.example/x.png" }] }), ctx)).toContain(
+      "  embed: https://img.example/x.png",
+    );
+  });
+
   test("lists attachments", () => {
     const out = formatMessage(
       msg({

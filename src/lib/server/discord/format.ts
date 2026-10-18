@@ -75,8 +75,11 @@ export function formatMessage(message: FormattableMessage, ctx: FormatContext, o
     lines.push(`  attachment: ${attachment.filename} ${attachment.url}`);
   }
   for (const embed of message.embeds ?? []) {
-    const parts = [embed.title, embed.description].filter((part): part is string => Boolean(part));
-    if (parts.length > 0) lines.push(`  embed: ${truncate(parts.join(" — "), MAX_EMBED_TEXT)}`);
+    const text = truncate([embed.title, embed.description].filter(Boolean).join(" — "), MAX_EMBED_TEXT);
+    // A link preview repeats a URL already in the text; a bot's embed may be the only place it appears.
+    const url = embed.url && !message.content?.includes(embed.url) ? embed.url : "";
+    const parts = [text, url].filter(Boolean);
+    if (parts.length > 0) lines.push(`  embed: ${parts.join(" ")}`);
   }
   lines.push(`  link: ${buildMessageLink(ctx.guildId, message.channel_id, message.id)}`);
   return lines.join("\n");
