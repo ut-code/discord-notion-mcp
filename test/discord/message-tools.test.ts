@@ -78,6 +78,17 @@ describe("discord_get_message", () => {
   });
 });
 
+describe("channel mentions", () => {
+  test("name only the channels the reader can see", async () => {
+    const HIDDEN = "400000000000000002";
+    api.channels.push(textChannel(HIDDEN, "secret-plans", [{ id: GUILD_ID, type: 0, deny: VIEW_CHANNEL }]));
+    api.messages.set(CHANNEL, [message(id(0), CHANNEL, `see <#${CHANNEL}> and <#${HIDDEN}>`)]);
+    const text = await call("discord_read_messages", { channel_id: CHANNEL });
+    expect(text).toContain(`see #general and <#${HIDDEN}>`);
+    expect(text).not.toContain("secret-plans");
+  });
+});
+
 describe("discord_list_pins", () => {
   test("lists pins page by page up to 150 and says when more exist", async () => {
     api.pins.set(

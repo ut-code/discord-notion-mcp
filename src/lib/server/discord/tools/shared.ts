@@ -89,7 +89,10 @@ export function channelLabel(channel: ResolvedChannel): string {
 }
 
 export async function formatContextFor(deps: DiscordToolDeps, principal: Principal, extra?: ResolvedChannel): Promise<FormatContext> {
-  const channelNames = await deps.channels.nameMap();
+  // Only channels the viewer can see are named: a mention of another channel stays an id,
+  // so a message in a shared channel does not reveal what a hidden channel is called.
+  const visible = await deps.access.listVisibleChannels(viewerOf(principal));
+  const channelNames = new Map(visible.map(({ channel }) => [channel.id, channel.name ?? channel.id]));
   if (extra && "name" in extra && extra.name) channelNames.set(extra.id, extra.name);
   return {
     guildId: deps.guildId,
