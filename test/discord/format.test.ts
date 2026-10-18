@@ -62,6 +62,36 @@ describe("formatMessage", () => {
     expect(resolveMarkup("<t:99999999999999> <t:12:Q> <:x:1>", [], ctx)).toBe("<t:99999999999999> <t:12:Q> <:x:1>");
   });
 
+  test("slash commands read as typed, with subcommands", () => {
+    expect(resolveMarkup("use </register:816437322781949972> or </role add:123456789012345678>", [], ctx)).toBe(
+      "use /register or /role add",
+    );
+  });
+
+  test("polls show the question, answers with counts when known, and their state", () => {
+    const poll = {
+      question: { text: "Lunch?" },
+      answers: [
+        { answer_id: 1, poll_media: { text: "Ramen" } },
+        { answer_id: 2, poll_media: { text: "Curry" } },
+      ],
+      expiry: null,
+      allow_multiselect: true,
+      layout_type: 1,
+    };
+    expect(formatMessage(msg({ content: "", poll }), ctx)).toContain("  poll: Lunch? — Ramen / Curry [multiple choice]");
+    const results = {
+      is_finalized: true,
+      answer_counts: [
+        { id: 1, count: 3, me_voted: false },
+        { id: 2, count: 5, me_voted: false },
+      ],
+    };
+    expect(formatMessage(msg({ content: "", poll: { ...poll, allow_multiselect: false, results } }), ctx)).toContain(
+      "  poll: Lunch? — Ramen (3) / Curry (5) [ended]",
+    );
+  });
+
   test("embeds show their title and description, plus their URL when the text does not have it", () => {
     const embed = { title: "Build failed", description: "main #42", url: "https://ci.example/42" };
     expect(formatMessage(msg({ content: "", embeds: [embed] }), ctx)).toContain("  embed: Build failed — main #42 https://ci.example/42");

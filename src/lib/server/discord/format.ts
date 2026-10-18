@@ -1,9 +1,9 @@
-import { MessageType, type APIMessage, type APIUser } from "discord-api-types/v10";
+import { MessageType, type APIMessage, type APIPoll, type APIUser } from "discord-api-types/v10";
 import { displayName } from "../lib/display-name";
 import { buildMessageLink } from "./links";
 
 export type FormattableMessage = Pick<APIMessage, "id" | "channel_id" | "content" | "timestamp" | "author" | "type"> &
-  Partial<Pick<APIMessage, "mentions" | "attachments" | "embeds" | "message_reference" | "message_snapshots">> & {
+  Partial<Pick<APIMessage, "mentions" | "attachments" | "embeds" | "message_reference" | "message_snapshots" | "poll">> & {
     member?: { nick?: string | null };
   };
 
@@ -44,6 +44,8 @@ interface MarkupRule {
 /**
  * Discord markup that carries ids or numbers, as text the AI can read; one rule per kind.
  * Every pattern is delimited by literal characters, so matching stays linear in the text.
+ * Formats: https://docs.discord.com/developers/reference#message-formatting
+ * (game profiles and guild navigation are left as they are: rare, and nothing to name them by).
  */
 const MARKUP_RULES: readonly MarkupRule[] = [
   // <@id> and <@!id>: users, named from the message's own mention list.
@@ -66,11 +68,13 @@ const MARKUP_RULES: readonly MarkupRule[] = [
       return Number.isNaN(date.getTime()) ? null : formatTimestamp(date.toISOString());
     },
   },
+  // </name:id>, </name subcommand:id>, </name group subcommand:id>: slash commands, as typed.
+  { pattern: /<\/([^\s:<>/]{1,32}(?: [^\s:<>/]{1,32}){0,2}):\d+>/g, render: ([command]) => `/${command}` },
   // <:name:id> and <a:name:id>: custom emoji, whose id means nothing to a reader.
   { pattern: /<a?:(\w{2,32}):\d+>/g, render: ([name]) => `:${name}:` },
 ];
 
-/** Rewrites Discord markup (mentions, timestamps, custom emoji) as readable text; unknown ids stay. */
+/** Rewrites Discord markup (mentions, slash commands, timestamps, custom emoji) as readable text; unknown ids stay. */
 export function resolveMarkup(
   content: string,
   mentions: readonly MentionedUser[],
@@ -86,6 +90,22 @@ export function resolveMarkup(
       }),
     content,
   );
+}
+
+/**
+ * A poll on one line: question, answers with vote counts when Discord sent them, and whether
+ * voting has ended. https://docs.discord.com/developers/resources/poll
+ */
+function formatPoll(poll: APIPoll): string {
+  const counts = new Map(poll.results?.answer_counts.map((answer) => [answer.id, answer.count]));
+  const answers = poll.answers.map((answer) => {
+    const count = counts.get(answer.answer_id);
+    const text = answer.poll_media.text ?? answer.poll_media.emoji?.name ?? "?";
+    return count === undefined ? text : `${text} (${count})`;
+  });
+  const notes = [poll.allow_multiselect ? "multiple choice" : undefined, poll.results?.is_finalized ? "ended" : undefined].filter(Boolean);
+  const suffix = notes.length > 0 ? ` [${notes.join(", ")}]` : "";
+  return `poll: ${poll.question.text ?? "?"} — ${answers.join(" / ")}${suffix}`;
 }
 
 export function formatMessage(message: FormattableMessage, ctx: FormatContext, options: { highlight?: boolean } = {}): string {
@@ -107,6 +127,7 @@ export function formatMessage(message: FormattableMessage, ctx: FormatContext, o
       : "(no text content)";
     lines.push(`  ⤷ forwarded: ${forwarded}`);
   }
+  if (message.poll) lines.push(`  ${formatPoll(message.poll)}`);
   for (const attachment of message.attachments ?? []) {
     lines.push(`  attachment: ${attachment.filename} ${attachment.url}`);
   }
