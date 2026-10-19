@@ -14,8 +14,11 @@ function normalizeRaw(value: string): string | null {
   return null;
 }
 
+/** Notion's app (app.notion.com, notion.so), published sites (*.notion.site) and their subdomains. */
+const NOTION_DOMAINS = ["notion.com", "notion.so", "notion.site"];
+
 function isNotionHost(hostname: string): boolean {
-  return hostname === "notion.so" || hostname.endsWith(".notion.so") || hostname.endsWith(".notion.site") || hostname === "notion.site";
+  return NOTION_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
 }
 
 export interface ParseIdOptions {
@@ -46,7 +49,8 @@ export function parseNotionId(input: string, options: ParseIdOptions = {}): stri
   }
   const segment = url.pathname.split("/").filter(Boolean).at(-1);
   if (!segment) return null;
-  const id = TRAILING_ID.exec(decodeURIComponent(segment))?.[1];
+  // Not decoded: the id is plain hex, and only the title before it is %-escaped (or broken).
+  const id = TRAILING_ID.exec(segment)?.[1];
   return id ? formatNotionId(id) : null;
 }
 

@@ -21,10 +21,16 @@ describe("parseNotionId", () => {
     expect(parseNotionId(`https://www.notion.so/${COMPACT}?v=${BLOCK}`)).toBe(DASHED);
     expect(parseNotionId(`https://team.notion.site/Public-Page-${COMPACT}`)).toBe(DASHED);
     expect(parseNotionId(`https://www.notion.so/%E8%AD%B0%E4%BA%8B%E9%8C%B2-${COMPACT}`)).toBe(DASHED);
+    // A title with a broken %-escape does not hide the id.
+    expect(parseNotionId(`https://www.notion.so/%E0%A4-${COMPACT}`)).toBe(DASHED);
+    // The app's own address bar.
+    expect(parseNotionId(`https://app.notion.com/p/${COMPACT}`)).toBe(DASHED);
+    expect(parseNotionId(`https://www.notion.com/myteam/Meeting-Notes-${COMPACT}`)).toBe(DASHED);
   });
 
   test("prefers the peeked page (?p=) over the path", () => {
     expect(parseNotionId(`https://www.notion.so/${BLOCK}?v=x&p=${COMPACT}&pm=s`)).toBe(DASHED);
+    expect(parseNotionId(`https://app.notion.com/p/${BLOCK}?v=x&p=${COMPACT}&pm=s`)).toBe(DASHED);
   });
 
   test("uses the #block anchor only when allowed", () => {
@@ -35,6 +41,10 @@ describe("parseNotionId", () => {
 
   test("rejects non-Notion hosts and garbage", () => {
     expect(parseNotionId(`https://example.com/${COMPACT}`)).toBeNull();
+    expect(parseNotionId(`https://evilnotion.com/${COMPACT}`)).toBeNull();
+    expect(parseNotionId(`https://notion.com.evil.example/${COMPACT}`)).toBeNull();
+    expect(parseNotionId(`https://notion.so@evil.example/${COMPACT}`)).toBeNull();
+
     expect(parseNotionId("not an id")).toBeNull();
     expect(parseNotionId("1429989fe8ac4eff")).toBeNull();
     expect(parseNotionId("https://www.notion.so/")).toBeNull();
