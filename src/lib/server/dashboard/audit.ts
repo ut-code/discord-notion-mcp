@@ -1,4 +1,5 @@
 import { isOneOf } from "../../one-of";
+import { formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
 import { dashboardAuditPath, DASHBOARD_PATH } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
@@ -284,7 +285,11 @@ function changeView(row: NotionAuditRow): ChangeView {
           after: (raw === undefined ? "" : renderRequestedPropertyValue(entry.type, raw)) || m.audit_change_empty_value(),
         };
       });
-      return { kind: "properties", meta: entries.length > 0 ? m.audit_change_properties_meta({ count: entries.length }) : null, entries };
+      return {
+        kind: "properties",
+        meta: entries.length > 0 ? m.audit_change_properties_meta({ count: formatNumber(entries.length) }) : null,
+        entries,
+      };
     }
     case "create_page":
       return { kind: "created", title: row.targetTitle, targetUrl: row.targetUrl };

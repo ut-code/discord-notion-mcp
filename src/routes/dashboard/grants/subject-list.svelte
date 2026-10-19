@@ -7,6 +7,7 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { MAX_QUERY_LENGTH, namesMatch, searchNeedle } from "#lib/name-match.js";
   import { m } from "#lib/paraglide/messages.js";
+  import { formatNumber } from "#lib/locale.js";
   import { DASHBOARD_PATH } from "#lib/paths.js";
   import type { GrantFormView, SubjectOption } from "#lib/server/dashboard/grants.js";
   import { MemberLookup } from "./member-lookup.svelte";
@@ -139,7 +140,7 @@
         {#if form.membersError}
           {@render note(form.membersError, "bad")}
         {:else if form.moreMembers > 0}
-          {@render note(m.grants_members_more({ count: form.moreMembers }))}
+          {@render note(m.grants_members_more({ count: formatNumber(form.moreMembers) }))}
         {/if}
       </div>
     </div>

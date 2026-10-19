@@ -1,7 +1,9 @@
 import type { Handle, HandleServerError, ServerInit } from "@sveltejs/kit/hooks";
 import { m } from "#lib/paraglide/messages.js";
+import { getLocale } from "#lib/paraglide/runtime.js";
 import { checkViewer, type ViewerGate } from "#lib/server/dashboard/access.js";
 import { withSecurityHeaders } from "#lib/server/http.js";
+import { withPageLang } from "#lib/server/page-lang.js";
 import { errorMessage } from "#lib/server/lib/errors.js";
 import { ensureStarted } from "#lib/server/runtime.js";
 import { THEME_COOKIE, themeFromCookie, withThemeClass } from "#lib/server/theme.js";
@@ -22,7 +24,9 @@ export const handle: Handle = async ({ event, resolve }) => {
   event.locals.preview = preview;
   const theme = themeFromCookie(event.cookies.get(THEME_COOKIE));
   event.locals.theme = theme;
-  return withSecurityHeaders(await resolve(event, { transformPageChunk: ({ html }) => withThemeClass(html, theme) }));
+  return withSecurityHeaders(
+    await resolve(event, { transformPageChunk: ({ html }) => withPageLang(withThemeClass(html, theme), getLocale()) }),
+  );
 };
 
 export const handleError: HandleServerError = async (caught) => {

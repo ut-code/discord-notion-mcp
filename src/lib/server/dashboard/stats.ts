@@ -1,3 +1,4 @@
+import { formatNumber } from "../../locale";
 import { isOneOf } from "../../one-of";
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
@@ -77,14 +78,14 @@ function rangeHref(range: StatsRange): string {
   return range === DEFAULT_RANGE ? STATS_PATH : `${STATS_PATH}?range=${range}`;
 }
 
-const PERCENT = new Intl.NumberFormat("ja-JP", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const ONE_DECIMAL = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
 
 function formatRate(failures: number, calls: number): string {
-  return calls === 0 ? "—" : PERCENT.format(failures / calls);
+  return calls === 0 ? "—" : formatNumber(failures / calls, { style: "percent", ...ONE_DECIMAL });
 }
 
 function formatDuration(ms: number): string {
-  return ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`;
+  return ms < 1000 ? `${formatNumber(Math.round(ms))} ms` : `${formatNumber(ms / 1000, ONE_DECIMAL)} s`;
 }
 
 function categoryOf(permission: Permission | undefined): CategoryKey {
@@ -128,7 +129,11 @@ export async function statsPage(
 
   return {
     range,
-    ranges: STATS_RANGES.map((value) => ({ label: m.stats_range_days({ days: value }), href: rangeHref(value), active: value === range })),
+    ranges: STATS_RANGES.map((value) => ({
+      label: m.stats_range_days({ days: formatNumber(value) }),
+      href: rangeHref(value),
+      active: value === range,
+    })),
     empty: calls === 0 && notion.writes + notion.reverts + notion.failures === 0,
     summary: { calls, activeUsers: byUser.length, failureRate: formatRate(failures, calls), rateLimited },
     daily: {

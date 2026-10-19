@@ -3,6 +3,7 @@
   import PageHeader from "#lib/components/app/page-header.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
+  import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
   import StackedBars from "./stacked-bars.svelte";
   import type { PageProps } from "./$types";
@@ -10,10 +11,10 @@
   let { data }: PageProps = $props();
 
   const summary = $derived([
-    { label: m.stats_calls(), value: data.summary.calls.toLocaleString("ja-JP") },
-    { label: m.stats_active_users(), value: data.summary.activeUsers.toLocaleString("ja-JP") },
+    { label: m.stats_calls(), value: formatNumber(data.summary.calls) },
+    { label: m.stats_active_users(), value: formatNumber(data.summary.activeUsers) },
     { label: m.stats_failure_rate(), value: data.summary.failureRate },
-    { label: m.stats_rate_limited(), value: data.summary.rateLimited.toLocaleString("ja-JP") },
+    { label: m.stats_rate_limited(), value: formatNumber(data.summary.rateLimited) },
   ]);
   const notionTotals = $derived([
     { label: m.stats_notion_writes(), value: data.notion.writes },
@@ -71,7 +72,7 @@
                     <span class="scroll-x">{row.name}</span>
                   </div>
                 </Table.Cell>
-                <Table.Cell class="num">{row.calls}</Table.Cell>
+                <Table.Cell class="num">{formatNumber(row.calls)}</Table.Cell>
                 <Table.Cell class="num">{row.failureRate}</Table.Cell>
                 <Table.Cell class="num secondary">{row.lastUsed}</Table.Cell>
               </Table.Row>
@@ -101,7 +102,7 @@
             {#each data.tools as row (row.tool)}
               <Table.Row>
                 <Table.Cell class="primary"><span class="mono scroll-x text-foreground">{row.tool}</span></Table.Cell>
-                <Table.Cell class="num">{row.calls}</Table.Cell>
+                <Table.Cell class="num">{formatNumber(row.calls)}</Table.Cell>
                 <Table.Cell class="num">{row.failureRate}</Table.Cell>
                 <Table.Cell class="num secondary">{row.avgDuration}</Table.Cell>
               </Table.Row>
@@ -122,7 +123,7 @@
       {#each notionTotals as total (total.label)}
         <div class="flex items-baseline gap-1.5">
           <dt class="text-muted-foreground">{total.label}</dt>
-          <dd class="font-medium tabular-nums">{total.value.toLocaleString("ja-JP")}</dd>
+          <dd class="font-medium tabular-nums">{formatNumber(total.value)}</dd>
         </div>
       {/each}
     </dl>

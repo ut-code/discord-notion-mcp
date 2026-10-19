@@ -13,6 +13,7 @@
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import { goto } from "$app/navigation";
+  import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
   import { DASHBOARD_PATH } from "#lib/paths.js";
   import type { PageProps } from "./$types";
@@ -20,7 +21,7 @@
   let { data }: PageProps = $props();
 
   const activeFilters = $derived(Object.values(data.filters).filter(Boolean).length);
-  const activeFiltersLabel = $derived(m.audit_filter_active_count({ count: activeFilters }));
+  const activeFiltersLabel = $derived(m.audit_filter_active_count({ count: formatNumber(activeFilters) }));
 
   /** Applies a changed filter right away (the submit button is the no-JavaScript path). */
   function applyFilters(event: Event & { currentTarget: HTMLFormElement }) {

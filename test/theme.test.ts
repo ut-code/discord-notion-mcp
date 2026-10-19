@@ -19,9 +19,9 @@ describe("theme cookie → <html> class", () => {
 
   test("marks <html> in the page template; system adds nothing", async () => {
     const template = await Bun.file(new URL("../src/app.html", import.meta.url)).text();
-    expect(withThemeClass(template, "dark")).toContain('<html lang="ja" class="dark">');
-    expect(withThemeClass(template, "light")).toContain('<html lang="ja" class="light">');
-    expect(withThemeClass(template, "system")).toContain('<html lang="ja">');
+    expect(withThemeClass(template, "dark")).toContain('<html lang="%lang%" class="dark">');
+    expect(withThemeClass(template, "light")).toContain('<html lang="%lang%" class="light">');
+    expect(withThemeClass(template, "system")).toContain('<html lang="%lang%">');
     expect(withThemeClass(template, "system")).not.toContain("%theme%");
   });
 

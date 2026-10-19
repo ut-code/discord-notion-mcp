@@ -1,3 +1,4 @@
+import { compareNames } from "../../locale";
 import { namesMatch, searchNeedle } from "../../name-match";
 import type { DiscordApi } from "../discord/api";
 import { isSnowflake } from "../lib/snowflake";
@@ -15,8 +16,6 @@ export interface Roster {
   /** False when the guild has more members than were listed. */
   complete: boolean;
 }
-
-const byName = new Intl.Collator("ja");
 
 function matches(user: UserSubject, needle: string): boolean {
   return namesMatch([user.displayName, user.username, user.member?.nick, user.member?.globalName], needle);
@@ -68,7 +67,7 @@ export class MemberRoster {
       after = batch.at(-1)?.userId;
       complete = batch.length < PAGE_SIZE;
     }
-    members.sort((a, b) => byName.compare(a.displayName ?? "", b.displayName ?? ""));
+    members.sort((a, b) => compareNames(a.displayName ?? "", b.displayName ?? ""));
     return { members, complete };
   }
 }

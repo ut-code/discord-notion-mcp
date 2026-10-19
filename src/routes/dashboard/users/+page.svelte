@@ -10,6 +10,7 @@
   import { onDestroy } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { useHydrated } from "#lib/hydrated.svelte.js";
+  import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
   import type { PageProps } from "./$types";
   import { DASHBOARD_PATH } from "#lib/paths.js";
@@ -62,7 +63,7 @@
       autocomplete="off"
     />
   </form>
-  <span class="text-note text-muted-foreground">{m.users_total({ count: data.total })}</span>
+  <span class="text-note text-muted-foreground">{m.users_total({ count: formatNumber(data.total) })}</span>
 </div>
 
 <div class="table-wrap">

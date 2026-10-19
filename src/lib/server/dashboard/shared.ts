@@ -1,3 +1,4 @@
+import { formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
 
 export interface Option {
@@ -32,7 +33,7 @@ export function pageLinks(page: number, pageSize: number, total: number, shown: 
   const first = (page - 1) * pageSize + 1;
   const last = first + shown - 1;
   return {
-    range: shown > 0 ? m.pager_range({ total, first, last }) : null,
+    range: shown > 0 ? m.pager_range({ total: formatNumber(total), first: formatNumber(first), last: formatNumber(last) }) : null,
     prevHref: page > 1 ? href(Math.min(page - 1, lastPage)) : null,
     nextHref: shown > 0 && last < total ? href(page + 1) : null,
   };

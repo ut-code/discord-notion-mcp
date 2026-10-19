@@ -3,6 +3,7 @@
   import PageHeader from "#lib/components/app/page-header.svelte";
   import ToneBadge from "#lib/components/app/tone-badge.svelte";
   import * as Table from "#lib/components/ui/table/index.js";
+  import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
   import GrantForm from "./grant-form.svelte";
   import GrantMenu from "./grant-menu.svelte";
@@ -20,7 +21,7 @@
       {#each data.tabs as tab (tab.href)}
         <a class="link-tab" href={tab.href} aria-current={tab.active ? "page" : undefined}>
           {tab.label}
-          {#if tab.count !== null}<span class="mono text-muted-foreground">{tab.count}</span>{/if}
+          {#if tab.count !== null}<span class="mono text-muted-foreground">{formatNumber(tab.count)}</span>{/if}
         </a>
       {/each}
     </nav>

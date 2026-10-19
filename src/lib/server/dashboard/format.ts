@@ -1,6 +1,7 @@
 import type { Permission } from "../permissions/permissions";
 import type { NotionAuditOperation } from "../db/schema";
 import { isRecord } from "../../guards";
+import { formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
@@ -52,7 +53,7 @@ const VISIBLE_ROLES = 2;
 /** Role names on one line: the first two, then how many more. */
 export function roleSummary(names: readonly string[]): string {
   if (names.length <= VISIBLE_ROLES) return names.join(", ");
-  return m.roles_more({ roles: names.slice(0, VISIBLE_ROLES).join(", "), count: names.length - VISIBLE_ROLES });
+  return m.roles_more({ roles: names.slice(0, VISIBLE_ROLES).join(", "), count: formatNumber(names.length - VISIBLE_ROLES) });
 }
 
 /** Japan time, e.g. "2026/10/12 23:03:00". */

@@ -1,3 +1,4 @@
+import { compareNames } from "../../locale";
 import type { LoginUser } from "../auth/users";
 import { givesPermission, PERMISSIONS, type Permission } from "../permissions/permissions";
 import { isGuildAdmin, type EffectiveAccess } from "../permissions/resolver";
@@ -78,7 +79,7 @@ export function buildGrantRows(
       (a, b) =>
         Number(a.grant.subjectType === "user") - Number(b.grant.subjectType === "user") ||
         permissionIndex(a.permission) - permissionIndex(b.permission) ||
-        subjectName(a).localeCompare(subjectName(b), "ja"),
+        compareNames(subjectName(a), subjectName(b)),
     );
   return [
     ...administratorRoles(guild).map((role): GrantRowView => ({ kind: "admin-role", permission: "admin", role })),

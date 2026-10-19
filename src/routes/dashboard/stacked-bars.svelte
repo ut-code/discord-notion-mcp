@@ -1,5 +1,6 @@
 <script lang="ts">
   import { labelIndexes, niceScale } from "#lib/chart-scale.js";
+  import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
   import type { ChartRow, ChartSeries } from "#lib/server/dashboard/stats.js";
 
@@ -64,7 +65,7 @@
   <div class="chart" aria-hidden="true">
     <div class="y-axis" style:width={`${Y_AXIS_WIDTH}px`} style:height={`${PLOT_HEIGHT}px`}>
       {#each scale.ticks as tick (tick)}
-        <span style:top={`${y(tick)}px`}>{tick.toLocaleString("ja-JP")}</span>
+        <span style:top={`${y(tick)}px`}>{formatNumber(tick)}</span>
       {/each}
     </div>
     <div class="plot" bind:clientWidth={plotWidth}>
@@ -104,7 +105,7 @@
             <div>
               <span class="chart-swatch" style:background={entry.color}></span>
               <span class="name">{entry.label}</span>
-              <span class="amount">{count(tip.row, entry.key).toLocaleString("ja-JP")}</span>
+              <span class="amount">{formatNumber(count(tip.row, entry.key))}</span>
             </div>
           {/each}
         </div>
@@ -128,7 +129,7 @@
       {#each rows as row (row.date)}
         <tr>
           <th scope="row">{row.date}</th>
-          {#each series as entry (entry.key)}<td>{count(row, entry.key).toLocaleString("ja-JP")}</td>{/each}
+          {#each series as entry (entry.key)}<td>{formatNumber(count(row, entry.key))}</td>{/each}
         </tr>
       {/each}
     </tbody>
