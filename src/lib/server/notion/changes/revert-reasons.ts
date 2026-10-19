@@ -7,7 +7,7 @@ import type { PropertySkip, RevertNote } from "./audit-records";
  * (outcome-text.ts) and the dashboard in Japanese (dashboard/outcome-text.ts).
  */
 
-/** Stored in ContentSnapshot.revertBlocker; rows written before these codes hold English text. */
+/** Why a content write cannot be reverted automatically; stored in ContentSnapshot.revertBlocker. */
 export type RevertBlocker = RevertPlanBlocker | "truncated_after_write";
 
 /** Why the page may have changed since the write; reverting anyway needs `force`. */
@@ -35,8 +35,7 @@ export type RevertReason =
   | { kind: "notion_disabled" }
   | { kind: "no_target" }
   | { kind: "unrecognized_snapshot" }
-  /** A RevertBlocker code, or English text on older rows. */
-  | { kind: "blocked"; blocker: string }
+  | { kind: "blocked"; blocker: RevertBlocker }
   | { kind: "page_inaccessible" }
   | { kind: "too_large" }
   | { kind: "conflict"; conflict: RevertConflict }

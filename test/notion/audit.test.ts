@@ -655,6 +655,7 @@ describe("NotionAuditService.revert", () => {
       operation: "update_properties",
       targetPageId: row.id,
       targetUrl: row.url,
+      targetTitle: "Row",
       request: {},
       snapshot: {
         properties: [
@@ -740,6 +741,7 @@ describe("NotionAuditService.failInterruptedWrites", () => {
       discordUserId: ACTOR.discordUserId,
       discordDisplayName: ACTOR.displayName,
       operation: "archive_page" as const,
+      targetTitle: "Notes",
       request: {},
       snapshot: { inTrash: false },
     };
@@ -760,6 +762,7 @@ describe("NotionAuditStore", () => {
     discordUserId: ACTOR.discordUserId,
     discordDisplayName: ACTOR.displayName,
     operation: "archive_page" as const,
+    targetTitle: "Notes",
     request: {},
     snapshot: { inTrash: false },
   };

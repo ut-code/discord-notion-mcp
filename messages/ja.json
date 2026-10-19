@@ -194,7 +194,6 @@
   "audit_title": "Notion 書き込み履歴",
   "audit_back_to_list": "書き込み履歴",
   "audit_not_found": "指定された履歴はありません。",
-  "audit_untitled_page": "Notion ページ",
   "audit_time": "日時",
   "audit_operation": "操作",
   "audit_target_page": "対象ページ",

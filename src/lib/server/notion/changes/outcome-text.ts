@@ -20,7 +20,7 @@ export function writeWarningText(warning: WriteWarning): string {
     case "content_failed":
       return `Page created, but adding its content failed: ${warning.error}`;
     case "revert_blocked":
-      return warning.blocker === ("truncated_after_write" satisfies RevertBlocker)
+      return warning.blocker === "truncated_after_write"
         ? `The change was applied, but automatic revert may not be possible: ${revertBlockerText(warning.blocker)}.`
         : `The change was applied, but automatic revert is not possible: ${revertBlockerText(warning.blocker)}.`;
     default:
@@ -28,18 +28,18 @@ export function writeWarningText(warning: WriteWarning): string {
   }
 }
 
-export function revertBlockerText(blocker: string): string {
+export function revertBlockerText(blocker: RevertBlocker): string {
   switch (blocker) {
-    case "no_anchor" satisfies RevertBlocker:
+    case "no_anchor":
       return "the page has no text left to anchor a revert on";
-    case "ambiguous_inverse" satisfies RevertBlocker:
+    case "ambiguous_inverse":
       return "no unambiguous inverse edit could be computed";
-    case "truncated_after_write" satisfies RevertBlocker:
+    case "truncated_after_write":
       return "Notion returned truncated content after the write, so the change could not be captured";
-    case "concurrent_edit" satisfies RevertBlocker:
+    case "concurrent_edit":
       return "someone else edited the page at the same moment, and undoing the change would undo theirs too";
     default:
-      return blocker;
+      throw new Error(`Unknown revert blocker: ${blocker satisfies never}`);
   }
 }
 

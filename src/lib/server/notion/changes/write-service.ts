@@ -55,7 +55,7 @@ interface AuditBase {
   snapshot: Record<string, unknown>;
   targetPageId: string | null;
   targetUrl: string | null;
-  targetTitle: string | null;
+  targetTitle: string;
 }
 
 export const MAX_CONTENT_EDITS = 20;

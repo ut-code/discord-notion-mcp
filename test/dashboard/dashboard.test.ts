@@ -1062,7 +1062,7 @@ describe("audit log", () => {
     });
   });
 
-  test("stored notes are shown in Japanese; older free text as is; unknown kinds generically", () => {
+  test("stored notes are shown in Japanese; unknown kinds generically", () => {
     const note: RevertNote = {
       kind: "properties_partial",
       restored: ["Count"],
@@ -1074,7 +1074,6 @@ describe("audit log", () => {
     expect(auditNoteText({ kind: "revert_blocked", blocker: "no_anchor" })).toBe(
       "書き込みは反映しましたが、自動では取り消せません: ページに文字が残っておらず、元に戻す位置を決められません。",
     );
-    expect(auditNoteText({ kind: "legacy", text: "The page was already in the trash." })).toBe("The page was already in the trash.");
     expect(auditNoteText({ kind: "from_a_newer_version" })).toBe("この注記は、より新しいバージョンで記録されたため表示できません。");
     expect(auditNoteText(null)).toBeNull();
   });

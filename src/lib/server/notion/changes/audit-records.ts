@@ -3,6 +3,7 @@ import { isRecord } from "../../../guards";
 import type { ContentHunk } from "../content/content-diff";
 import type { PagePropertyValue, PropertyWriteRefusal } from "../content/properties";
 import type { PageMarkdownUpdate } from "../client/types";
+import type { RevertBlocker } from "./revert-reasons";
 
 /*
  * Shapes of the JSON `snapshot` / `result` columns of notion_audit, per operation.
@@ -12,8 +13,6 @@ import type { PageMarkdownUpdate } from "../client/types";
 
 export const ContentUpdateSchema = z.object({ old_str: z.string(), new_str: z.string() });
 
-/** The title a create_page call asked for; older rows have no recorded target title. */
-export const CreatePageRequestSchema = z.object({ title: z.string() });
 /** The parts of the `request` column (the tool arguments) shown for failed content writes, which have no hunks. */
 export const AppendContentRequestSchema = z.object({ content: z.string() });
 /** Entries are checked one by one with ContentUpdateSchema so one malformed edit does not hide the rest. */
@@ -33,6 +32,13 @@ const pageMarkdownUpdateSchema = z.discriminatedUnion("type", [
 ]) satisfies z.ZodType<PageMarkdownUpdate>;
 
 const contentHunkSchema = z.object({ before: z.string(), after: z.string() }) satisfies z.ZodType<ContentHunk>;
+
+const revertBlockerSchema = z.enum([
+  "no_anchor",
+  "ambiguous_inverse",
+  "concurrent_edit",
+  "truncated_after_write",
+]) satisfies z.ZodType<RevertBlocker>;
 
 const propertyValueSchema = z.custom<PagePropertyValue>(
   (value) => isRecord(value) && typeof value.type === "string",
@@ -54,8 +60,8 @@ export const ContentSnapshotSchema = z.object({
   afterSha256: z.string().nullable(),
   /** The update that restores the previous content; null when there is nothing to restore or it cannot be computed. */
   inverse: pageMarkdownUpdateSchema.nullable(),
-  /** Set when the change cannot be reverted automatically: a RevertBlocker code (English text on older rows). */
-  revertBlocker: z.string().nullable(),
+  /** Set when the change cannot be reverted automatically. */
+  revertBlocker: revertBlockerSchema.nullable(),
   hunks: z.array(contentHunkSchema),
 });
 export type ContentSnapshot = z.infer<typeof ContentSnapshotSchema>;
@@ -72,7 +78,7 @@ export const PropertySnapshotEntrySchema = z.object({
   type: z.string(),
   /** The value before the write, which revert restores. */
   value: propertyValueSchema,
-  /** The value our write left, to tell later edits apart; absent on older rows or when it could not be read back. */
+  /** The value our write left, to tell later edits apart; absent when it could not be read back. */
   after: propertyValueSchema.optional(),
 });
 export type PropertySnapshotEntry = z.infer<typeof PropertySnapshotEntrySchema>;
@@ -98,8 +104,7 @@ export type PropertySkip = z.infer<typeof PropertySkipSchema>;
 /** A successful write that needs a word of caution. */
 export const WriteWarningSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("content_failed"), error: z.string() }),
-  /** A RevertBlocker code (revert-reasons.ts). */
-  z.object({ kind: z.literal("revert_blocked"), blocker: z.string() }),
+  z.object({ kind: z.literal("revert_blocked"), blocker: revertBlockerSchema }),
 ]);
 export type WriteWarning = z.infer<typeof WriteWarningSchema>;
 
@@ -113,8 +118,8 @@ export const RevertNoteSchema = z.discriminatedUnion("kind", [
 ]);
 export type RevertNote = z.infer<typeof RevertNoteSchema>;
 
-/** The `note` of a row and the `revert_note` of a reverted row; `legacy` holds the free text of older rows. */
-export const AuditNoteSchema = z.union([WriteWarningSchema, RevertNoteSchema, z.object({ kind: z.literal("legacy"), text: z.string() })]);
+/** The `note` of a row and the `revert_note` of a reverted row. */
+export const AuditNoteSchema = z.union([WriteWarningSchema, RevertNoteSchema]);
 export type AuditNote = z.infer<typeof AuditNoteSchema>;
 
 /** Validates a value against its column schema and returns it as stored JSON. */

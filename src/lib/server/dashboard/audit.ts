@@ -6,7 +6,6 @@ import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
 import {
   AppendContentRequestSchema,
-  CreatePageRequestSchema,
   ContentSnapshotSchema,
   ContentUpdateSchema,
   EditContentRequestSchema,
@@ -54,13 +53,6 @@ export function auditListHref(filters: AuditFilters, page = 1): string {
   if (page > 1) params.set("page", String(page));
   const query = params.toString();
   return query ? `${DASHBOARD_PATH}/audit?${query}` : `${DASHBOARD_PATH}/audit`;
-}
-
-/** Title recorded with the write; older rows fall back to the requested title or a generic label. */
-function auditTitle(row: NotionAuditRow): string {
-  if (row.targetTitle) return row.targetTitle;
-  const requested = row.operation === "create_page" ? CreatePageRequestSchema.safeParse(row.request).data?.title : undefined;
-  return requested || m.audit_untitled_page();
 }
 
 const BADGES = {
@@ -111,7 +103,7 @@ export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, s
     user: { id: row.discordUserId, name: row.discordDisplayName, avatarUrl: avatars.get(row.discordUserId) ?? null },
     operation: AUDIT_OPERATION_LABELS[row.operation],
     revertOf: row.revertOfAuditId,
-    title: auditTitle(row),
+    title: row.targetTitle,
     targetUrl: row.targetUrl,
     badge: exceptionBadge(row),
     meta: [action, row.discordDisplayName, createdAt].join(" · "),
@@ -225,7 +217,7 @@ function summarySentence(row: NotionAuditRow): string {
   return SUMMARY[row.status][row.operation]({
     actor: row.discordDisplayName,
     time: formatShortJst(row.createdAt),
-    title: auditTitle(row),
+    title: row.targetTitle,
     source: row.revertOfAuditId ?? "?",
   });
 }
@@ -295,7 +287,7 @@ function changeView(row: NotionAuditRow): ChangeView {
       return { kind: "properties", meta: entries.length > 0 ? m.audit_change_properties_meta({ count: entries.length }) : null, entries };
     }
     case "create_page":
-      return { kind: "created", title: auditTitle(row), targetUrl: row.targetUrl };
+      return { kind: "created", title: row.targetTitle, targetUrl: row.targetUrl };
     case "archive_page":
       return { kind: "archived" };
     case "revert":
@@ -358,7 +350,7 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
       userName: row.discordDisplayName,
       username: row.discordUsername,
       avatarUrl: avatars.get(row.discordUserId) ?? null,
-      title: auditTitle(row),
+      title: row.targetTitle,
       targetUrl: row.targetUrl,
       createdAt: formatJst(row.createdAt),
       comment: row.commentError ? { kind: "error", text: row.commentError } : row.status === "ok" ? { kind: "posted" } : { kind: "none" },

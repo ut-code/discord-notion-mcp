@@ -51,8 +51,8 @@ export const notionAudit = sqliteTable(
     targetPageId: text("target_page_id"),
     targetUrl: text("target_url"),
     /** Page title when the write was made, for display. */
-    targetTitle: text("target_title"),
-    // JSON written by earlier versions too: read it through the schemas in notion/changes/audit-records.ts.
+    targetTitle: text("target_title").notNull(),
+    // Read JSON columns through the schemas in notion/changes/audit-records.ts.
     request: text("request", { mode: "json" }).$type<unknown>().notNull(),
     snapshot: text("snapshot", { mode: "json" }).$type<unknown>(),
     result: text("result", { mode: "json" }).$type<unknown>(),

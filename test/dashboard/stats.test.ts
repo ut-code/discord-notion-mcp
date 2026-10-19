@@ -58,7 +58,7 @@ beforeAll(async () => {
   for (const [discordUserId, tool, ok, durationMs, errorKind, createdAt] of rows) {
     calls.record({ discordUserId, tool, ok, durationMs, errorKind, error: errorKind ? "boom" : undefined, createdAt });
   }
-  const base = { discordUserId: U1, discordDisplayName: "Mina", request: {} };
+  const base = { discordUserId: U1, discordDisplayName: "Mina", targetTitle: "Notes", request: {} };
   await insertAuditRow(database.db, { ...base, operation: "create_page", status: "ok", createdAt: jst(12, 8) });
   await insertAuditRow(database.db, { ...base, operation: "edit_content", status: "failed", createdAt: jst(12, 8, 30) });
   await insertAuditRow(database.db, { ...base, operation: "revert", status: "ok", createdAt: jst(11, 18) });

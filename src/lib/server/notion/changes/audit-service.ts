@@ -119,7 +119,8 @@ async function checkContent(api: NotionApi, snapshot: ContentSnapshot, pageId: s
 /**
  * Property writes are compared by value when the values our write left were recorded:
  * exact where last_edited_time is minute-truncated, and edits to other properties (which
- * revert does not touch) are no conflict. Undefined for older rows, which use the edit time.
+ * revert does not touch) are no conflict. Undefined when a value could not be read back after
+ * the write; the edit time decides then.
  */
 async function checkProperties(
   api: NotionApi,

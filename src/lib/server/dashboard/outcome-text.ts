@@ -7,18 +7,18 @@ import { formatJst } from "./format";
 
 /* Dashboard wording of write notes and revert outcomes; the MCP tools word the same data in English. */
 
-function blockerText(blocker: string): string {
+function blockerText(blocker: RevertBlocker): string {
   switch (blocker) {
-    case "no_anchor" satisfies RevertBlocker:
+    case "no_anchor":
       return m.revert_blocker_no_anchor();
-    case "ambiguous_inverse" satisfies RevertBlocker:
+    case "ambiguous_inverse":
       return m.revert_blocker_ambiguous_inverse();
-    case "truncated_after_write" satisfies RevertBlocker:
+    case "truncated_after_write":
       return m.revert_blocker_truncated_after_write();
-    case "concurrent_edit" satisfies RevertBlocker:
+    case "concurrent_edit":
       return m.revert_blocker_concurrent_edit();
     default:
-      return blocker;
+      throw new Error(`Unknown revert blocker: ${blocker satisfies never}`);
   }
 }
 
@@ -66,7 +66,7 @@ function writeWarningText(warning: WriteWarning): string {
     case "content_failed":
       return m.write_warning_content_failed({ error: warning.error });
     case "revert_blocked":
-      return warning.blocker === ("truncated_after_write" satisfies RevertBlocker)
+      return warning.blocker === "truncated_after_write"
         ? m.write_warning_revert_maybe_blocked({ reason: blockerText(warning.blocker) })
         : m.write_warning_revert_blocked({ reason: blockerText(warning.blocker) });
     default:
@@ -82,8 +82,6 @@ export function auditNoteText(stored: unknown): string | null {
   if (!parsed.success) return m.audit_note_unreadable();
   const note = parsed.data;
   switch (note.kind) {
-    case "legacy":
-      return note.text;
     case "content_failed":
     case "revert_blocked":
       return writeWarningText(note);
