@@ -91,7 +91,7 @@ export interface GrantFormView {
 
 export interface GrantsPageData {
   filter: Permission | null;
-  tabs: Array<{ label: string; count: number | null; href: string; active: boolean }>;
+  tabs: Array<{ label: string; count: number; href: string; active: boolean }>;
   rows: GrantTableRow[];
   form: GrantFormView;
 }
@@ -324,7 +324,7 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
     filter,
     tabs: [null, ...PERMISSIONS].map((value) => ({
       label: value ? PERMISSION_LABELS[value] : m.grants_tab_all(),
-      count: value ? null : allRows.length,
+      count: value ? allRows.filter((row) => row.permission === value).length : allRows.length,
       href: value ? `${GRANTS_PATH}?filter=${encodeURIComponent(value)}` : GRANTS_PATH,
       active: filter === value,
     })),

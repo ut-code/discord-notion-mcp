@@ -650,6 +650,24 @@
 	.link-tab:hover {
 		color: var(--foreground);
 	}
+	/* Phones: tighter tabs so the grant filters (labels with counts) stay on two rows at 360px. */
+	@media (max-width: 520px) {
+		.link-tabs .link-tab {
+			gap: 4px;
+			padding: 0 8px;
+		}
+	}
+	/* Count beside a tab label: a light pill that stays quiet on the active tab too. */
+	.tab-count {
+		min-width: 18px;
+		padding: 2px 5px;
+		border-radius: 999px;
+		background: color-mix(in oklch, var(--muted-foreground) 14%, transparent);
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
+		text-align: center;
+		color: var(--muted-foreground);
+	}
 	.link-tab[aria-current="page"],
 	.segmented input:checked + .link-tab {
 		background: var(--background);

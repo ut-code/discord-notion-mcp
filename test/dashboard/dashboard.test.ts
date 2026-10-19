@@ -317,6 +317,9 @@ describe("grants", () => {
     expect(readers.rows.some((row) => row.key.startsWith("owner:"))).toBe(false);
     expect(readers.rows.some((row) => row.subject.secondary === "@mina · Moderator")).toBe(true);
     expect(readers.form?.permission).toBe("notion:read");
+    // Each tab counts the rows it shows, so the counts match the filtered lists.
+    expect(all.tabs.find((tab) => tab.label === "管理者")?.count).toBe(admins.rows.length);
+    expect(all.tabs.find((tab) => tab.label === "Notion 閲覧")?.count).toBe(readers.rows.length);
   });
 
   test("individual grants already provided by a role or by admin status are flagged", async () => {

@@ -21,7 +21,7 @@
       {#each data.tabs as tab (tab.href)}
         <a class="link-tab" href={tab.href} aria-current={tab.active ? "page" : undefined}>
           {tab.label}
-          {#if tab.count !== null}<span class="mono text-muted-foreground">{formatNumber(tab.count)}</span>{/if}
+          <span class="tab-count">{formatNumber(tab.count)}</span>
         </a>
       {/each}
     </nav>
