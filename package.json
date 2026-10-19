@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
+  "packageManager": "bun@1.4.2",
+  "engines": {
+    "bun": ">=1.4.2"
+  },
   "scripts": {
     "prepare": "bun scripts/compile-messages.ts && (bun --bun svelte-kit sync || echo ''; lefthook install || echo '')",
     "dev": "bun --bun vite dev",
