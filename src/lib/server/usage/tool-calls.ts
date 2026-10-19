@@ -6,8 +6,11 @@ import type { ErrorSink, EventSink } from "../lib/log";
 import { runPeriodically } from "../lib/periodic";
 
 const ERROR_MAX_LENGTH = 500;
-export const TOOL_CALL_RETENTION_MS = 90 * 24 * 60 * 60_000;
-const RETENTION_INTERVAL_MS = 24 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
+/** Days of tool calls kept; the longest statistics range (dashboard/stats.ts) shows all of them. */
+export const TOOL_CALL_RETENTION_DAYS = 90;
+export const TOOL_CALL_RETENTION_MS = TOOL_CALL_RETENTION_DAYS * DAY_MS;
+const RETENTION_INTERVAL_MS = DAY_MS;
 
 export interface ToolCallRecord {
   discordUserId: string;
@@ -53,7 +56,7 @@ export interface RetentionOptions {
   logError: ErrorSink;
 }
 
-/** Deletes tool calls older than 90 days now and then every 24 hours; returns a stop function. */
+/** Deletes tool calls older than the retention now and then every 24 hours; returns a stop function. */
 export function startToolCallRetention({
   store,
   now = Date.now,

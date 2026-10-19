@@ -3,6 +3,7 @@ import { isOneOf } from "../../one-of";
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
 import type { Permission } from "../permissions/permissions";
+import { TOOL_CALL_RETENTION_DAYS } from "../usage/tool-calls";
 import { jstDay, jstDayStart } from "../lib/jst-day";
 import type { Viewer } from "./access";
 import { auditListHref } from "./audit";
@@ -10,7 +11,8 @@ import type { DashboardDeps } from "./deps";
 import { formatMonthDayJst, formatShortJst, PERMISSION_LABELS } from "./format";
 
 const STATS_PATH = DASHBOARD_PATH;
-const STATS_RANGES = [7, 30, 90] as const;
+/** The longest range is all that is kept, so no range reaches past the deleted rows. */
+const STATS_RANGES = [7, 30, TOOL_CALL_RETENTION_DAYS] as const;
 export type StatsRange = (typeof STATS_RANGES)[number];
 const DEFAULT_RANGE: StatsRange = 30;
 
@@ -92,7 +94,7 @@ function categoryOf(permission: Permission | undefined): CategoryKey {
   return permission === "discord:read" || permission === "notion:read" || permission === "notion:write" ? permission : "other";
 }
 
-/** Query: `range` (7, 30 or 90 days, ending today in Japan time). */
+/** Query: `range` (one of STATS_RANGES in days, ending today in Japan time). */
 export async function statsPage(
   deps: Pick<DashboardDeps, "usage" | "subjects" | "toolPermissions">,
   params: URLSearchParams,

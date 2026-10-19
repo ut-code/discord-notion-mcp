@@ -47,7 +47,7 @@ export class UsageStats {
       .all();
   }
 
-  /** When each user last called a tool; users without a call in the kept log (90 days) are absent. */
+  /** When each user last called a tool; users without a call in the kept log (TOOL_CALL_RETENTION_DAYS) are absent. */
   lastUsed(discordUserIds: readonly string[]): Map<string, Date> {
     if (discordUserIds.length === 0) return new Map();
     const rows = this.db
