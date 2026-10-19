@@ -2,7 +2,7 @@ import { isOneOf } from "./one-of";
 import { m } from "./paraglide/messages.js";
 
 /** Color theme stored in the `theme` cookie; "system" follows `prefers-color-scheme`. */
-export const THEMES = ["system", "light", "dark"] as const;
+const THEMES = ["system", "light", "dark"] as const;
 export type Theme = (typeof THEMES)[number];
 
 export const THEME_LABELS: Record<Theme, string> = { system: m.theme_system(), light: m.theme_light(), dark: m.theme_dark() };

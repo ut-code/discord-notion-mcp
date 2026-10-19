@@ -2,7 +2,7 @@ import { ToolError } from "../../lib/errors";
 import { isNotionMiss, NotionRequestError, type NotionApi, type NotionDatabase, type NotionDataSource, type NotionPage } from "./api";
 import { plainText } from "../content/rich-text";
 
-export const NOTION_NOT_ACCESSIBLE_MESSAGE =
+const NOTION_NOT_ACCESSIBLE_MESSAGE =
   "Not found, or not shared with the Notion integration (an admin must connect the integration to the page or a parent page).";
 
 class NotionNotAccessibleError extends ToolError {

@@ -18,7 +18,7 @@ export const MAX_SEARCH_OFFSET = 9975;
 const MAX_INDEX_ATTEMPTS = 3;
 const MAX_INDEX_WAIT_SECONDS = 5;
 
-export type SearchMessage = Omit<APIMessage, "reactions">;
+type SearchMessage = Omit<APIMessage, "reactions">;
 
 export interface SearchScope {
   /** Channel filter sent to Discord; undefined searches the whole guild. */

@@ -38,7 +38,7 @@ export interface ChartRow {
   counts: Record<string, number>;
 }
 
-export interface StatsUserRow {
+interface StatsUserRow {
   id: string;
   name: string;
   avatarUrl: string | null;
@@ -47,7 +47,7 @@ export interface StatsUserRow {
   lastUsed: string;
 }
 
-export interface StatsToolRow {
+interface StatsToolRow {
   tool: string;
   calls: number;
   failureRate: string;

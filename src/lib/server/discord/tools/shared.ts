@@ -38,7 +38,7 @@ export const LISTED_CHANNEL_TYPES = new Map<ChannelType, string>([
   [ChannelType.GuildStageVoice, "stage"],
 ]);
 
-export const THREAD_LABELS = new Map<ChannelType, string>([
+const THREAD_LABELS = new Map<ChannelType, string>([
   [ChannelType.AnnouncementThread, "announcement thread"],
   [ChannelType.PublicThread, "public thread"],
   [ChannelType.PrivateThread, "private thread"],

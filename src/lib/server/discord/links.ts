@@ -1,6 +1,6 @@
 import { isSnowflake } from "../lib/snowflake";
 
-export interface MessageRef {
+interface MessageRef {
   guildId: string;
   channelId: string;
   messageId: string;

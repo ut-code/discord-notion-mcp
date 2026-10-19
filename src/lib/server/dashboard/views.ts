@@ -87,7 +87,7 @@ export function buildGrantRows(
   ];
 }
 
-export type MembershipState = "member" | "not_member" | "unlinked" | "unknown";
+type MembershipState = "member" | "not_member" | "unlinked" | "unknown";
 
 export interface UserRowView {
   user: LoginUser;

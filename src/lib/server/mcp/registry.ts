@@ -3,7 +3,7 @@ import type { z } from "zod";
 import type { Permission } from "../permissions/permissions";
 import type { EffectiveAccess } from "../permissions/resolver";
 
-export type MemberAccess = Extract<EffectiveAccess, { isMember: true }>;
+type MemberAccess = Extract<EffectiveAccess, { isMember: true }>;
 
 /** The authenticated caller of an MCP request. */
 export interface Principal {
@@ -12,7 +12,7 @@ export interface Principal {
   access: MemberAccess;
 }
 
-export interface ToolContext {
+interface ToolContext {
   principal: Principal;
 }
 

@@ -90,7 +90,7 @@ export interface AuditRowView {
   meta: string;
 }
 
-export function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> = new Map()): AuditRowView {
+function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> = new Map()): AuditRowView {
   const createdAt = formatShortJst(row.createdAt);
   const action =
     row.operation === "revert" && row.revertOfAuditId !== null
@@ -253,7 +253,7 @@ export function diffLines(hunks: readonly ContentHunk[]): DiffLine[] {
   ]);
 }
 
-export type ChangeView =
+type ChangeView =
   | { kind: "diff"; meta: string | null; lines: DiffLine[] }
   | { kind: "properties"; meta: string | null; entries: Array<{ name: string; before: string; after: string }> }
   | { kind: "created"; title: string; targetUrl: string | null }

@@ -1,4 +1,4 @@
-export interface AnnotationsRequest {
+interface AnnotationsRequest {
   bold?: boolean;
   italic?: boolean;
   strikethrough?: boolean;

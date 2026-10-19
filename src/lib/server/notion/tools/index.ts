@@ -5,7 +5,7 @@ import type { NotionToolDeps } from "./shared";
 import { createWriteTools } from "./write";
 
 export type { NotionToolDeps };
-export { createNotionChangeTools, type NotionChangeToolDeps } from "./changes";
+export { createNotionChangeTools } from "./changes";
 
 export function createNotionTools(deps: NotionToolDeps): AnyToolDefinition[] {
   const { search, getPage, queryDatabase, getDatabase, getComments } = createReadTools(deps);

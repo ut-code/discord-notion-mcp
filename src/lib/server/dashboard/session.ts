@@ -83,7 +83,7 @@ export function signInErrorMessage(code: string | null): string {
 
 export const NOT_MEMBER = { title: m.access_denied_title(), message: m.access_not_member() };
 
-export interface ConsentFeature {
+interface ConsentFeature {
   permission: Permission;
   title: string;
   description: string;

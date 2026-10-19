@@ -20,7 +20,7 @@ export function actorOf(principal: Principal): Actor {
   return { discordUserId: principal.discordUserId, displayName: displayName(member), username: member.username };
 }
 
-export const OPERATION_LABELS: Record<WriteOperation, string> = {
+const OPERATION_LABELS: Record<WriteOperation, string> = {
   create_page: m.operation_create_page(),
   append_content: m.operation_append_content(),
   edit_content: m.operation_edit_content(),

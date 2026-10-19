@@ -8,9 +8,9 @@ import { extractSignedOAuthQuery } from "../../src/lib/server/dashboard/oauth-qu
 import { FakeDiscordApi, GUILD_ID } from "./fakes";
 import { FakeNotionApi } from "./notion-fakes";
 
-export const SECRET = "e2e-secret-e2e-secret-e2e-secret-e2e";
+const SECRET = "e2e-secret-e2e-secret-e2e-secret-e2e";
 export const REDIRECT_URI = "http://localhost:33418/callback";
-export const CODE_VERIFIER = "e2e-code-verifier-e2e-code-verifier-e2e-code-verifier";
+const CODE_VERIFIER = "e2e-code-verifier-e2e-code-verifier-e2e-code-verifier";
 
 /**
  * An app server listening on a random local port, backed by fakes and an in-memory

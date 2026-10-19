@@ -48,7 +48,6 @@ const propertyValueSchema = z.custom<PagePropertyValue>(
 export const CreatePageSnapshotSchema = z.object({
   parent: z.object({ type: z.enum(["page_id", "data_source_id"]), id: z.string() }),
 });
-export type CreatePageSnapshot = z.infer<typeof CreatePageSnapshotSchema>;
 
 export const CreatePageResultSchema = z.object({ pageId: z.string(), url: z.string() });
 export type CreatePageResult = z.infer<typeof CreatePageResultSchema>;
@@ -72,7 +71,7 @@ export const ContentBeforeSnapshotSchema = ContentSnapshotSchema.pick({ beforeSh
 export const ContentWriteResultSchema = z.object({ changedHunks: z.number().int().nonnegative() });
 export type ContentWriteResult = z.infer<typeof ContentWriteResultSchema>;
 
-export const PropertySnapshotEntrySchema = z.object({
+const PropertySnapshotEntrySchema = z.object({
   name: z.string(),
   id: z.string(),
   type: z.string(),
@@ -89,7 +88,6 @@ export type UpdatePropertiesSnapshot = z.infer<typeof UpdatePropertiesSnapshotSc
 export const UpdatePropertiesResultSchema = z.object({ changed: z.array(z.string()) });
 
 export const ArchivePageSnapshotSchema = z.object({ inTrash: z.boolean() });
-export type ArchivePageSnapshot = z.infer<typeof ArchivePageSnapshotSchema>;
 
 export const ArchivePageResultSchema = z.object({ inTrash: z.boolean() });
 
@@ -102,14 +100,14 @@ const PropertySkipSchema = z.object({ name: z.string(), refusal: PropertyWriteRe
 export type PropertySkip = z.infer<typeof PropertySkipSchema>;
 
 /** A successful write that needs a word of caution. */
-export const WriteWarningSchema = z.discriminatedUnion("kind", [
+const WriteWarningSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("content_failed"), error: z.string() }),
   z.object({ kind: z.literal("revert_blocked"), blocker: revertBlockerSchema }),
 ]);
 export type WriteWarning = z.infer<typeof WriteWarningSchema>;
 
 /** What a successful revert wants the reader to know. */
-export const RevertNoteSchema = z.discriminatedUnion("kind", [
+const RevertNoteSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("already_in_trash") }),
   z.object({ kind: z.literal("nothing_to_restore") }),
   z.object({ kind: z.literal("content_differs") }),
@@ -120,7 +118,6 @@ export type RevertNote = z.infer<typeof RevertNoteSchema>;
 
 /** The `note` of a row and the `revert_note` of a reverted row. */
 export const AuditNoteSchema = z.union([WriteWarningSchema, RevertNoteSchema]);
-export type AuditNote = z.infer<typeof AuditNoteSchema>;
 
 /** Validates a value against its column schema and returns it as stored JSON. */
 export function toAuditJson<S extends z.ZodType<Record<string, unknown>>>(schema: S, value: z.input<S>): Record<string, unknown> {

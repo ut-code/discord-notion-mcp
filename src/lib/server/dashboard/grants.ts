@@ -46,10 +46,10 @@ export interface GrantTableRow {
 }
 
 /** Per permission, why granting it to a subject would add nothing; the form shows it before granting. */
-export type GrantNotices = Partial<Record<Permission, string>>;
+type GrantNotices = Partial<Record<Permission, string>>;
 
 /** What the form needs to know about a subject before granting it something. */
-export interface GrantState {
+interface GrantState {
   /** Permissions granted to exactly this subject; the form does not offer them again. */
   granted: Permission[];
   /** Permissions the subject gets some other way; granting them is allowed but adds nothing. */

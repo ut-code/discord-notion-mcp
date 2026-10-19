@@ -96,5 +96,6 @@ bun test
 bun run typecheck
 bun run lint       # 型情報を使う。エディタの ESLint 拡張にも SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 を渡す
 bun run format
+bun run knip       # 使われていないファイル・export・依存
 bun run build && bun run start
 ```

@@ -2,7 +2,7 @@ import { DiscordSnowflake, Snowflake } from "@sapphire/snowflake";
 import { z } from "zod";
 
 /** Discord ids (snowflakes) as decimal strings. */
-export const SNOWFLAKE_PATTERN = /^\d{15,22}$/;
+const SNOWFLAKE_PATTERN = /^\d{15,22}$/;
 
 export function isSnowflake(value: string): boolean {
   return SNOWFLAKE_PATTERN.test(value);

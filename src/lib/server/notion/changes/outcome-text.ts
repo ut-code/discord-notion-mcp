@@ -28,7 +28,7 @@ export function writeWarningText(warning: WriteWarning): string {
   }
 }
 
-export function revertBlockerText(blocker: RevertBlocker): string {
+function revertBlockerText(blocker: RevertBlocker): string {
   switch (blocker) {
     case "no_anchor":
       return "the page has no text left to anchor a revert on";
@@ -47,7 +47,7 @@ function skippedText(skipped: readonly PropertySkip[]): string {
   return skipped.map((skip) => `"${skip.name}" (${propertyWriteRefusalText(skip.refusal)})`).join("; ");
 }
 
-export function revertNoteText(note: RevertNote): string {
+function revertNoteText(note: RevertNote): string {
   switch (note.kind) {
     case "already_in_trash":
       return "The page was already in the trash.";

@@ -24,7 +24,7 @@ import type { RevertConflict, RevertFailure, RevertReason, RevertResult } from "
 const MAX_AUDIT_PAGE_SIZE = 200;
 
 /** Rows still pending after this long belong to a write the server never finished. */
-export const STALE_PENDING_MS = 10 * 60_000;
+const STALE_PENDING_MS = 10 * 60_000;
 
 export interface RevertOptions {
   actorDiscordUserId: string;

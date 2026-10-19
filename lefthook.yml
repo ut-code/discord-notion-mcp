@@ -12,3 +12,5 @@ pre-commit:
       run: bun run typecheck
     - name: test
       run: bun test
+    - name: knip
+      run: bun run knip

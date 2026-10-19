@@ -16,7 +16,7 @@ import { createNotionTools } from "./notion/tools";
 import type { Runtime } from "./runtime";
 import type { ToolCallStore } from "./usage/tool-calls";
 
-export interface PreviewUser {
+interface PreviewUser {
   id: string;
   name: string;
   username: string;

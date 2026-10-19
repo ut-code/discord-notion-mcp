@@ -41,7 +41,7 @@ function notFound(what: string): NotionRequestError {
 type Call = { method: string; args: any };
 
 let counter = 0;
-export function fakeId(): string {
+function fakeId(): string {
   counter++;
   return `00000000-0000-4000-8000-${counter.toString(16).padStart(12, "0")}`;
 }
