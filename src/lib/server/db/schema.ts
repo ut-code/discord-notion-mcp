@@ -30,9 +30,9 @@ export const NOTION_AUDIT_OPERATIONS = [
 export type NotionAuditOperation = (typeof NOTION_AUDIT_OPERATIONS)[number];
 
 /**
- * Every write is recorded as `pending` before it touches Notion. `interrupted`: the process
- * died while it was pending, so whether Notion applied it is unknown; a late outcome may still
- * replace it.
+ * Every write is recorded as `pending` before it touches Notion. `interrupted`: whether Notion
+ * applied it is unknown, because the process died while it was pending (a late outcome may
+ * still replace it) or Notion did not confirm it (5xx, timeout).
  */
 export const NOTION_AUDIT_STATUSES = ["pending", "ok", "failed", "interrupted"] as const;
 export type NotionAuditStatus = (typeof NOTION_AUDIT_STATUSES)[number];
@@ -57,7 +57,7 @@ export const notionAudit = sqliteTable(
     snapshot: text("snapshot", { mode: "json" }).$type<unknown>(),
     result: text("result", { mode: "json" }).$type<unknown>(),
     status: text("status", { enum: NOTION_AUDIT_STATUSES }).notNull(),
-    /** Why a `failed` write failed. */
+    /** Why a `failed` write failed, or why an `interrupted` one's outcome is unknown. */
     error: text("error"),
     /** A warning on a successful write or the note of a revert (AuditNoteSchema). */
     note: text("note", { mode: "json" }).$type<unknown>(),

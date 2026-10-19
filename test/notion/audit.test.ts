@@ -377,6 +377,16 @@ describe("NotionWriteService", () => {
     expect(await store.get(1)).toMatchObject({ status: "failed", commentError: null });
   });
 
+  test("an archive Notion did not confirm keeps its comment and is recorded as interrupted", async () => {
+    const page = api.addPage({ title: "Old" });
+    api.failNext("updatePage", new NotionRequestError("Request to Notion API has timed out", 0, "notionhq_client_request_timeout"));
+    await expect(writes.archivePage(ACTOR, { pageId: page.id, request: {} })).rejects.toThrow(
+      "Notion did not confirm the change (timed out), so it may or may not have been applied (audit #1). Check whether the page is in the trash",
+    );
+    expect(api.comments).toHaveLength(1);
+    expect(await store.get(1)).toMatchObject({ status: "interrupted", error: "Request to Notion API has timed out" });
+  });
+
   test("a failed archive whose comment cannot be removed says so", async () => {
     const page = api.addPage({ title: "Old" });
     api.failNext("updatePage", new NotionRequestError("Conflict occurred while saving.", 409, "conflict_error"));
@@ -419,6 +429,23 @@ describe("NotionWriteService", () => {
     expect(error.message).toBe("Notion rejected the request: body failed validation (audit #1)");
     expect(await store.get(1)).toMatchObject({ status: "failed", error: "body failed validation", operation: "update_properties" });
     expect(api.comments).toEqual([]);
+  });
+
+  test("a write Notion did not confirm is interrupted, and the caller is told to check before retrying", async () => {
+    api.markdown.set(parent.id, "Intro");
+    api.failNext("updatePageMarkdown", new NotionRequestError("Service Unavailable", 503, "service_unavailable"));
+    const error = await writes.appendContent(ACTOR, { pageId: parent.id, content: "hello", request: {} }).catch((e) => e);
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error.message).toBe(
+      "Notion did not confirm the change (HTTP 503), so it may or may not have been applied (audit #1). Read the page with notion_get_page before retrying, or a retry may apply it twice.",
+    );
+    expect(await store.get(1)).toMatchObject({ status: "interrupted", error: "Service Unavailable" });
+    expect(audit.revertability((await store.get(1))!)).toEqual({ kind: "not_ok", status: "interrupted" });
+
+    api.failNext("createPage", new NotionRequestError("Bad Gateway", 502, "bad_gateway"));
+    const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "Minutes", request: {} }).catch((e) => e);
+    expect(created.message).toContain('Look for a page titled "Minutes" under the parent with notion_search');
+    expect(created.logMessage).not.toContain("Minutes");
   });
 
   test("a content write whose page cannot be read back stores no last_edited_time (not the server clock)", async () => {

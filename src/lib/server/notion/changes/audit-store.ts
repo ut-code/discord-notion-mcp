@@ -39,7 +39,9 @@ export type PendingOutcome =
       NewNotionAuditRow,
       "result" | "snapshot" | "note" | "commentError" | "resultLastEditedTime" | "targetPageId" | "targetUrl"
     >)
-  | ({ status: "failed"; error: string } & Pick<NewNotionAuditRow, "commentError">);
+  | ({ status: "failed"; error: string } & Pick<NewNotionAuditRow, "commentError">)
+  /** Notion did not confirm the write (5xx, timeout), so whether it applied is unknown. */
+  | ({ status: "interrupted"; error: string } & Pick<NewNotionAuditRow, "commentError">);
 
 /** What the original row records about its revert. */
 export type RevertMark = Pick<NewNotionAuditRow, "revertedBy" | "revertNote">;

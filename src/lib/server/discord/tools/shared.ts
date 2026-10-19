@@ -1,5 +1,5 @@
 // Shared types, constants and helpers used by the Discord tool modules.
-import { DiscordAPIError } from "@discordjs/rest";
+import { DiscordAPIError, HTTPError } from "@discordjs/rest";
 import { ChannelType, GuildScheduledEventStatus, MessageSearchHasType, type APIThreadChannel } from "discord-api-types/v10";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
@@ -57,7 +57,11 @@ export function viewerOf(principal: Principal): Viewer {
   return { guild: principal.access.guild, member: principal.access.member };
 }
 
-/** Maps Discord "not found / forbidden" API errors to the uniform not-accessible tool error. */
+/**
+ * Maps Discord API errors to tool errors: "not found / forbidden" to the uniform not-accessible
+ * one, and outages (5xx or a timeout, after @discordjs/rest's own retries) to "retry later",
+ * which is safe because every Discord tool only reads.
+ */
 export function withDiscordErrors<A>(handler: (args: A, principal: Principal) => Promise<ToolResult>) {
   return async (args: A, ctx: { principal: Principal }): Promise<ToolResult> => {
     try {
@@ -71,6 +75,9 @@ export function withDiscordErrors<A>(handler: (args: A, principal: Principal) =>
           logMessage: `Discord rejected the request (400 ${String(error.code)})`,
         });
       }
+      const outage =
+        error instanceof HTTPError ? `HTTP ${error.status}` : error instanceof Error && error.name === "AbortError" ? "timed out" : null;
+      if (outage) throw new ToolError(`Discord is not responding (${outage}); please retry in a moment.`);
       throw error;
     }
   };

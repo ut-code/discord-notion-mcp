@@ -1,3 +1,4 @@
+import { HTTPError } from "@discordjs/rest";
 import { beforeEach, describe, expect, test } from "bun:test";
 import { ChannelAccess, ChannelDirectory } from "../../src/lib/server/discord/access";
 import { READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
@@ -71,6 +72,13 @@ describe("discord_get_message", () => {
     expect(text).toContain("message 9");
     expect(text).toContain("message 11");
     expect(api.calls).toMatchObject({ messages: 1, message: 1 });
+  });
+
+  test("a Discord outage becomes a retry-later tool error", async () => {
+    api.fetchMessages = () => Promise.reject(new HTTPError(503, "Service Unavailable", "GET", "https://discord.com/api", {}));
+    await expect(call("discord_get_message", { channel_id: CHANNEL, message_id: id(3) })).rejects.toThrow(
+      "Discord is not responding (HTTP 503); please retry in a moment.",
+    );
   });
 
   test("an unknown message is not accessible", async () => {

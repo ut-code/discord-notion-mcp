@@ -1,5 +1,6 @@
 import {
   Client,
+  ClientErrorCode,
   isFullComment,
   isFullDatabase,
   isFullDataSource,
@@ -68,6 +69,33 @@ export class NotionRequestError extends Error {
 /** Not found, not shared with the integration, or the wrong object type for the endpoint. */
 export function isNotionMiss(error: unknown): boolean {
   return error instanceof NotionRequestError && (error.status === 404 || error.status === 400 || error.status === 403);
+}
+
+// NotionRequestError keeps the SDK's codes as plain strings.
+const REQUEST_TIMEOUT: string = ClientErrorCode.RequestTimeout;
+const INVALID_PATH_PARAMETER: string = ClientErrorCode.InvalidPathParameter;
+
+/** Notion failed on its side or did not answer in time: the same request may succeed later. */
+export function isNotionUnavailable(error: unknown): boolean {
+  return error instanceof NotionRequestError && (error.status >= 500 || error.code === REQUEST_TIMEOUT);
+}
+
+/** What went wrong talking to Notion, without its message (which may quote page text). */
+export function notionFailure(error: unknown): string {
+  if (!(error instanceof NotionRequestError)) return "no response";
+  if (error.status === 0) return error.code === REQUEST_TIMEOUT ? "timed out" : error.code;
+  return `HTTP ${error.status}`;
+}
+
+/**
+ * Whether a write that threw `error` may still have been applied. Only a refusal (4xx) or a
+ * request the SDK never sent is known not to have been; a 5xx, a timeout, a lost connection
+ * or an unreadable response leave it open.
+ */
+export function writeMayHaveApplied(error: unknown): boolean {
+  if (!(error instanceof NotionRequestError)) return true;
+  if (error.status === 0) return error.code !== INVALID_PATH_PARAMETER;
+  return error.status >= 500;
 }
 
 /** Every Notion HTTP operation the tools, write service and revert need. */

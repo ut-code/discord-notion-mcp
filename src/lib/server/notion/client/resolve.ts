@@ -1,5 +1,14 @@
 import { ToolError } from "../../lib/errors";
-import { isNotionMiss, NotionRequestError, type NotionApi, type NotionDatabase, type NotionDataSource, type NotionPage } from "./api";
+import {
+  isNotionMiss,
+  isNotionUnavailable,
+  notionFailure,
+  NotionRequestError,
+  type NotionApi,
+  type NotionDatabase,
+  type NotionDataSource,
+  type NotionPage,
+} from "./api";
 import { plainText } from "../content/rich-text";
 
 const NOTION_NOT_ACCESSIBLE_MESSAGE =
@@ -22,6 +31,7 @@ export function toToolError(error: unknown): unknown {
     });
   }
   if (error.status === 429) return new ToolError("Notion rate limit reached; please retry in a moment.");
+  if (isNotionUnavailable(error)) return new ToolError(`Notion is not responding (${notionFailure(error)}); please retry in a moment.`);
   return error;
 }
 

@@ -354,7 +354,7 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
       targetUrl: row.targetUrl,
       createdAt: formatJst(row.createdAt),
       comment: row.commentError ? { kind: "error", text: row.commentError } : row.status === "ok" ? { kind: "posted" } : { kind: "none" },
-      error: row.status === "failed" ? row.error : null,
+      error: row.status === "failed" || row.status === "interrupted" ? row.error : null,
       note: auditNoteText(row.note),
     },
     revert: viewer.isAdmin ? revertView(deps, row) : null,

@@ -7,6 +7,7 @@ import type { PagePropertyValue } from "../../src/lib/server/notion/content/prop
 import { createNotionTools } from "../../src/lib/server/notion/tools";
 import { makeGuild, makeMember } from "../support/fakes";
 import type { NotionComment } from "../../src/lib/server/notion/client/api";
+import { NotionRequestError } from "../../src/lib/server/notion/client/api";
 import { FakeNotionApi, titleValue } from "../support/notion-fakes";
 
 const USER = "300000000000000001";
@@ -194,6 +195,14 @@ describe("Notion tools", () => {
   test("Notion 404s become a not-accessible tool error", async () => {
     await expect(call("notion_get_page", { page: "1429989fe8ac4effbc8f57f56486db54" })).rejects.toThrow(
       "not shared with the Notion integration",
+    );
+  });
+
+  test("a Notion outage becomes a retry-later tool error", async () => {
+    const page = api.addPage({ title: "Doc" });
+    api.failNext("retrievePage", new NotionRequestError("Service Unavailable", 503, "service_unavailable"));
+    await expect(call("notion_get_page", { page: page.id })).rejects.toThrow(
+      "Notion is not responding (HTTP 503); please retry in a moment.",
     );
   });
 

@@ -1,6 +1,6 @@
 import { errorMessage, ToolError } from "../../lib/errors";
 import { logError, type ErrorSink } from "../../lib/log";
-import type { NotionApi, NotionPage, PageMarkdown } from "../client/api";
+import { notionFailure, writeMayHaveApplied, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
 import { resolveParent, toToolError } from "../client/resolve";
 import type { ContentUpdate, PageMarkdownUpdate, PageParent } from "../client/types";
 import { buildRevertPlan, sha256 } from "../content/content-diff";
@@ -71,6 +71,17 @@ function namingAuditRow(error: unknown, auditId: number, hint?: string): unknown
   return new ToolError(`${mapped.message}${suffix}`, { logMessage: `${mapped.logMessage}${suffix}` });
 }
 
+const CHECK_PAGE = "Read the page with notion_get_page";
+
+/**
+ * The tool error for a write Notion did not confirm. Retrying blindly could apply it twice,
+ * so the caller is told to check first. `check` may quote page text and stays out of logs.
+ */
+function unconfirmedWrite(error: unknown, auditId: number, check: string): ToolError {
+  const message = `Notion did not confirm the change (${notionFailure(error)}), so it may or may not have been applied (audit #${auditId}).`;
+  return new ToolError(`${message} ${check} before retrying, or a retry may apply it twice.`, { logMessage: message });
+}
+
 /** Validates content written to a page and normalizes labeled user mentions. */
 function prepareContent(content: string, field: string): string {
   assertNoChildObjects(content, field);
@@ -102,8 +113,15 @@ export class NotionWriteService {
     return this.audit.insert({ ...this.actorColumns(actor), ...base, status: "pending" });
   }
 
-  /** Ends a write Notion refused and rethrows it naming the audit row. */
-  private async fail(row: NotionAuditRow, error: unknown, hint?: string): Promise<never> {
+  /**
+   * Ends a write that threw and rethrows naming the audit row: failed when Notion refused it,
+   * interrupted when it may have been applied. `check` tells the caller how to find out.
+   */
+  private async fail(row: NotionAuditRow, error: unknown, check: string, hint?: string): Promise<never> {
+    if (writeMayHaveApplied(error)) {
+      await this.audit.finishPending(row.id, { status: "interrupted", error: errorMessage(error) });
+      throw unconfirmedWrite(error, row.id, check);
+    }
     await this.audit.finishPending(row.id, { status: "failed", error: errorMessage(error) });
     throw namingAuditRow(error, row.id, hint);
   }
@@ -193,7 +211,7 @@ export class NotionWriteService {
     try {
       page = await this.api.createPage({ parent: parentRef, properties });
     } catch (error) {
-      return this.fail(row, error);
+      return this.fail(row, error, `Look for a page titled ${JSON.stringify(input.title)} under the parent with notion_search`);
     }
 
     let warning: WriteWarning | null = null;
@@ -281,7 +299,7 @@ export class NotionWriteService {
     try {
       after = await this.api.updatePageMarkdown(page.id, input.update);
     } catch (error) {
-      return this.fail(row, error, failureHint);
+      return this.fail(row, error, CHECK_PAGE, failureHint);
     }
 
     const snapshot: ContentSnapshot = { beforeSha256, afterSha256: null, inverse: null, revertBlocker: null, hunks: [] };
@@ -354,7 +372,7 @@ export class NotionWriteService {
     try {
       updated = await this.api.updatePage({ pageId: page.id, properties: input.properties });
     } catch (error) {
-      return this.fail(row, error);
+      return this.fail(row, error, CHECK_PAGE);
     }
     const changed = entries.map((entry) => entry.name);
     const withAfter = await this.valuesAfterWrite(updated, entries);
@@ -391,7 +409,7 @@ export class NotionWriteService {
 
   /**
    * The comment is posted before archiving because a trashed page may not accept comments;
-   * if archiving then fails, the comment is taken back so the page does not claim it.
+   * if Notion refuses the archive, the comment is taken back so the page does not claim it.
    */
   async archivePage(actor: Actor, input: { pageId: string; request: Record<string, unknown> }): Promise<WriteOutcome> {
     const page = await this.api.retrievePage(input.pageId);
@@ -409,6 +427,11 @@ export class NotionWriteService {
     try {
       trashed = await this.api.updatePage({ pageId: page.id, inTrash: true });
     } catch (error) {
+      if (writeMayHaveApplied(error)) {
+        // The page may be in the trash now, so its attribution comment stays.
+        await this.audit.finishPending(row.id, { status: "interrupted", error: errorMessage(error), commentError });
+        throw unconfirmedWrite(error, row.id, "Check whether the page is in the trash with notion_get_page");
+      }
       const retractError = commentId ? await retractComment(this.api, commentId) : null;
       await this.audit.finishPending(row.id, {
         status: "failed",
