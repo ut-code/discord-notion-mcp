@@ -18,6 +18,10 @@ const config = {
       directives: {
         "default-src": ["self"],
         "script-src": ["self"],
+        // Only the handler Svelte puts on server-rendered <img> with spread props (bits-ui avatars)
+        // to replay a load/error that fires before hydration: sha256 of "this.__e=event".
+        // https://github.com/sveltejs/svelte/issues/14014
+        "script-src-attr": ["unsafe-hashes", "sha256-7dQwUgLau1NFCCGjfn9FsYptB6ZtWxJin6VohGIu20I="],
         "style-src": ["self", "unsafe-inline", "https://fonts.googleapis.com"],
         "font-src": ["https://fonts.gstatic.com"],
         "img-src": ["self", "data:", "https://cdn.discordapp.com"],
