@@ -3,5 +3,5 @@ import { NOT_MEMBER } from "#lib/server/dashboard/session.js";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = () => {
-  error(403, NOT_MEMBER);
+  error(403, NOT_MEMBER.message, { title: NOT_MEMBER.title });
 };

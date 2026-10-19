@@ -4,5 +4,5 @@ import { signInErrorMessage } from "#lib/server/dashboard/session.js";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = ({ url }) => {
-  error(400, { title: m.sign_in_failed_title(), message: signInErrorMessage(url.searchParams.get("error")) });
+  error(400, signInErrorMessage(url.searchParams.get("error")), { title: m.sign_in_failed_title() });
 };

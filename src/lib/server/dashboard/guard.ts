@@ -13,15 +13,15 @@ interface GuardEvent {
 export async function requireViewer({ locals, url, request }: GuardEvent): Promise<Viewer> {
   const gate = await locals.viewerGate();
   if (gate.kind === "signed-out") redirect(302, signInRedirect(url, request.method));
-  if (gate.kind === "denied") error(gate.status, { title: gate.title, message: gate.message, signedIn: true });
+  if (gate.kind === "denied") error(gate.status, gate.message, { title: gate.title, signedIn: true });
   return gate.viewer;
 }
 
 /** Dashboard JSON endpoints: like requireViewer, but 401 instead of a sign-in redirect. */
 export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): Promise<Viewer> {
   const gate = await locals.viewerGate();
-  if (gate.kind === "signed-out") error(401, { message: m.access_sign_in_required() });
-  if (gate.kind === "denied") error(gate.status, { title: gate.title, message: gate.message });
+  if (gate.kind === "signed-out") error(401, m.access_sign_in_required());
+  if (gate.kind === "denied") error(gate.status, gate.message, { title: gate.title });
   return gate.viewer;
 }
 
@@ -29,7 +29,7 @@ export async function requireApiViewer({ locals }: Pick<GuardEvent, "locals">): 
 export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
   const viewer = await requireViewer(event);
   if (!viewer.canViewAudit) {
-    error(403, { title: m.access_denied_title(), message: m.access_audit_requires_notion_write(), signedIn: true });
+    error(403, m.access_audit_requires_notion_write(), { title: m.access_denied_title(), signedIn: true });
   }
   return viewer;
 }
@@ -38,14 +38,14 @@ export async function requireAuditViewer(event: GuardEvent): Promise<Viewer> {
 export async function requireAdminViewer(event: GuardEvent): Promise<Viewer> {
   const viewer = await requireViewer(event);
   if (!viewer.isAdmin) {
-    error(403, { title: m.access_denied_title(), message: m.access_admin_only_page(), signedIn: true });
+    error(403, m.access_admin_only_page(), { title: m.access_denied_title(), signedIn: true });
   }
   return viewer;
 }
 
 /** Renders the 404 page when the requested entity does not exist (null). */
 export function orNotFound<T>(value: T | null, page: { title: string; message: string }): T {
-  if (value === null) error(404, { ...page, signedIn: true });
+  if (value === null) error(404, page.message, { title: page.title, signedIn: true });
   return value;
 }
 
