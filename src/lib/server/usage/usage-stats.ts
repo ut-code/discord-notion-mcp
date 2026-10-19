@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, inArray, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../db/client";
 import { notionAudit, toolCall } from "../db/schema";
 import { jstDaySql } from "../lib/jst-day";
@@ -6,6 +6,11 @@ import { jstDaySql } from "../lib/jst-day";
 /** How many rows of the group meet the condition. */
 const countWhere = (condition: SQL) => sql<number>`coalesce(sum(case when ${condition} then 1 else 0 end), 0)`;
 const failures = countWhere(sql`${toolCall.ok} = 0`);
+/**
+ * Calls that ran. Rate-limited ones were refused before reaching the tool: they are counted
+ * apart (rateLimited) and left out of calls, failures, durations and last use.
+ */
+const ran = or(isNull(toolCall.errorKind), ne(toolCall.errorKind, "rate_limited"));
 
 /** Aggregates over the tool call log and the Notion audit log since a point in time; days are JST day numbers. */
 export class UsageStats {
@@ -16,7 +21,7 @@ export class UsageStats {
     return this.db
       .select({ day, tool: toolCall.tool, calls: count() })
       .from(toolCall)
-      .where(gte(toolCall.createdAt, since))
+      .where(and(gte(toolCall.createdAt, since), ran))
       .groupBy(day, toolCall.tool)
       .all();
   }
@@ -30,7 +35,7 @@ export class UsageStats {
         lastUsed: sql<number>`max(${toolCall.createdAt})`,
       })
       .from(toolCall)
-      .where(gte(toolCall.createdAt, since))
+      .where(and(gte(toolCall.createdAt, since), ran))
       .groupBy(toolCall.discordUserId)
       .orderBy(desc(count()), toolCall.discordUserId)
       .all();
@@ -41,7 +46,7 @@ export class UsageStats {
     return this.db
       .select({ tool: toolCall.tool, calls: count(), failures, avgDurationMs: sql<number>`avg(${toolCall.durationMs})` })
       .from(toolCall)
-      .where(gte(toolCall.createdAt, since))
+      .where(and(gte(toolCall.createdAt, since), ran))
       .groupBy(toolCall.tool)
       .orderBy(desc(count()), toolCall.tool)
       .all();
@@ -53,7 +58,7 @@ export class UsageStats {
     const rows = this.db
       .select({ discordUserId: toolCall.discordUserId, at: sql<number>`max(${toolCall.createdAt})` })
       .from(toolCall)
-      .where(inArray(toolCall.discordUserId, [...discordUserIds]))
+      .where(and(inArray(toolCall.discordUserId, [...discordUserIds]), ran))
       .groupBy(toolCall.discordUserId)
       .all();
     return new Map(rows.map((row) => [row.discordUserId, new Date(row.at)]));

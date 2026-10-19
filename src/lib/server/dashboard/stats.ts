@@ -136,7 +136,8 @@ export async function statsPage(
       href: rangeHref(value),
       active: value === range,
     })),
-    empty: calls === 0 && notion.writes + notion.reverts + notion.failures === 0,
+    // Rate-limited calls are not calls, but a range of nothing else is still worth showing.
+    empty: calls === 0 && rateLimited === 0 && notion.writes + notion.reverts + notion.failures === 0,
     summary: { calls, activeUsers: byUser.length, failureRate: formatRate(failures, calls), rateLimited },
     daily: {
       series,

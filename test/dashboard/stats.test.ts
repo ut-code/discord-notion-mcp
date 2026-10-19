@@ -93,7 +93,8 @@ describe("usage statistics", () => {
       ["other", "その他"],
     ]);
     expect(data.daily.rows.map((row) => row.date)).toEqual(["10/06", "10/07", "10/08", "10/09", "10/10", "10/11", "10/12"]);
-    expect(data.daily.rows.at(-1)).toEqual({ date: "10/12", counts: { "discord:read": 2, "notion:read": 2, other: 0 } });
+    // The rate-limited call on 10/12 never ran: it is counted apart, not as a call.
+    expect(data.daily.rows.at(-1)).toEqual({ date: "10/12", counts: { "discord:read": 1, "notion:read": 2, other: 0 } });
     expect(data.daily.rows.at(-2)).toEqual({ date: "10/11", counts: { "discord:read": 0, "notion:read": 1, other: 0 } });
     expect(data.daily.rows.at(-3)).toEqual({ date: "10/10", counts: { "discord:read": 0, "notion:read": 0, other: 3 } });
   });
@@ -101,20 +102,21 @@ describe("usage statistics", () => {
   test("summary, per-user and per-tool tables cover the range only", async () => {
     const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
     expect(data.empty).toBe(false);
-    expect(data.summary).toEqual({ calls: 8, activeUsers: 2, failureRate: "25.0%", rateLimited: 1 });
+    // Rate-limited calls are left out of calls, failure rates and durations (they never ran).
+    expect(data.summary).toEqual({ calls: 7, activeUsers: 2, failureRate: "14.3%", rateLimited: 1 });
     expect(data.users).toEqual([
-      { id: U1, name: "Mina", avatarUrl: null, calls: 4, failureRate: "50.0%", lastUsed: "10/12 10:00" },
       { id: U2, name: U2, avatarUrl: null, calls: 4, failureRate: "0.0%", lastUsed: "10/11 23:50" },
+      { id: U1, name: "Mina", avatarUrl: null, calls: 3, failureRate: "33.3%", lastUsed: "10/12 10:00" },
     ]);
     expect(data.tools.slice(0, 2)).toEqual([
-      { tool: "discord_read_messages", calls: 2, failureRate: "100.0%", avgDuration: "25 ms" },
       { tool: "notion_search", calls: 2, failureRate: "0.0%", avgDuration: "200 ms" },
+      { tool: "discord_read_messages", calls: 1, failureRate: "100.0%", avgDuration: "50 ms" },
     ]);
 
     const month = await statsPage(deps, new URLSearchParams(), reader, NOW);
     expect(month.range).toBe(30);
     expect(month.daily.rows.length).toBe(30);
-    expect(month.summary.calls).toBe(9);
+    expect(month.summary.calls).toBe(8);
     expect(month.tools[0]).toMatchObject({ tool: "notion_search", calls: 3 });
   });
 
@@ -132,5 +134,20 @@ describe("usage statistics", () => {
     expect(data.daily.series).toEqual([]);
     expect(data.daily.rows.length).toBe(30);
     expect(data.users).toEqual([]);
+  });
+
+  test("a range with only rate-limited calls is not empty, so the rate limit tile shows", async () => {
+    const database = freshDatabase();
+    new ToolCallStore(database.db).record({
+      discordUserId: U1,
+      tool: "discord_read_messages",
+      ok: false,
+      durationMs: 0,
+      errorKind: "rate_limited",
+      createdAt: jst(12, 9),
+    });
+    const data = await statsPage(depsFor(database), new URLSearchParams(), reader, NOW);
+    expect(data.empty).toBe(false);
+    expect(data.summary).toMatchObject({ calls: 0, rateLimited: 1 });
   });
 });

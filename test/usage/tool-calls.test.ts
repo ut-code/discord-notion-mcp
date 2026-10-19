@@ -103,6 +103,12 @@ describe("tool call recording", () => {
     expect(rows()[0]!.error).toHaveLength(500);
   });
 
+  test("truncation never cuts an emoji in half", () => {
+    const { store, rows } = newStore();
+    store.record({ discordUserId: USER, tool: "test_echo", ok: false, durationMs: 1, error: `${"x".repeat(499)}😀😀` });
+    expect(rows()[0]!.error).toBe(`${"x".repeat(499)}😀`);
+  });
+
   test("rate-limited calls are recorded as rate_limited and never reach the tool", async () => {
     const { store, rows } = newStore();
     const clock = new FakeClock();

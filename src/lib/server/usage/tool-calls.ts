@@ -37,7 +37,8 @@ export class ToolCallStore {
         ok: entry.ok,
         durationMs: entry.durationMs,
         errorKind: entry.ok ? null : (entry.errorKind ?? "error"),
-        error: entry.error ? entry.error.slice(0, ERROR_MAX_LENGTH) : null,
+        // By code point, so a surrogate pair (an emoji) is never cut in half.
+        error: entry.error ? [...entry.error].slice(0, ERROR_MAX_LENGTH).join("") : null,
       })
       .run();
   }
