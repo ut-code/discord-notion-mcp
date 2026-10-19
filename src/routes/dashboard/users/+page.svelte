@@ -83,11 +83,11 @@
             <div class="cell-subject gap-3" title={row.title}>
               <AppAvatar name={row.displayName} url={row.avatarUrl} />
               <div class="stack gap-[3px]">
-                <span class="font-medium">
+                <span class="scroll-x font-medium">
                   {row.displayName}
                   {#if row.username}<span class="sub font-normal">@{row.username}</span>{/if}
                 </span>
-                <span class="sub" title={row.roles.title ?? undefined}>{row.roles.text}</span>
+                <span class="sub scroll-x" title={row.roles.title ?? undefined}>{row.roles.text}</span>
               </div>
             </div>
           </Table.Cell>

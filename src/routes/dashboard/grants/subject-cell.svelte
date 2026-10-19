@@ -14,7 +14,7 @@
     <AppAvatar name={subject.unknown ? "?" : subject.name} url={subject.avatarUrl} size="md" />
   {/if}
   <div class="stack">
-    <span class={subject.unknown ? "mono font-medium text-foreground" : "font-medium"}>{subject.name}</span>
-    <span class="mono">{subject.secondary}</span>
+    <span class={["scroll-x", subject.unknown ? "mono font-medium text-foreground" : "font-medium"]}>{subject.name}</span>
+    <span class="mono scroll-x">{subject.secondary}</span>
   </div>
 </div>
