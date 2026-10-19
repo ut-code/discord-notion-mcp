@@ -8,6 +8,7 @@ import type { ToolListing } from "../mcp/tool-listing";
 import type { NotionAuditService } from "../notion/changes/audit-service";
 import type { GrantStore } from "../permissions/grants";
 import type { PermissionResolver } from "../permissions/resolver";
+import type { ToolCallStore } from "../usage/tool-calls";
 import type { UsageStats } from "../usage/usage-stats";
 import type { MemberRoster } from "./member-roster";
 import type { SubjectResolver } from "./subjects";
@@ -29,6 +30,8 @@ export interface DashboardDeps {
   audit: NotionAuditService;
   /** Usage statistics (tool calls, Notion writes). */
   usage: UsageStats;
+  /** The kept tool calls themselves, for the call history. */
+  calls: Pick<ToolCallStore, "list" | "callers">;
   /** Every MCP tool as clients list it: the tools page, and the permission groups of statistics. */
   tools: readonly ToolListing[];
   revocation: TokenRevocationService;

@@ -15,18 +15,19 @@
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import ServerLogo from "#lib/components/app/server-logo.svelte";
   import { m } from "#lib/paraglide/messages.js";
-  import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH, TOOLS_PATH } from "#lib/paths.js";
+  import { AUDIT_PATH, CALLS_PATH, CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH, TOOLS_PATH } from "#lib/paths.js";
   import { actionResultOf } from "#lib/action-result.js";
   import type { LayoutProps } from "./$types";
 
   let { data, children }: LayoutProps = $props();
 
+  /** `paths`: where the item counts as the current page, when that is more than its own page. */
   const nav = $derived([
-    { href: DASHBOARD_PATH, label: m.stats_title(), icon: ChartColumnIcon },
-    ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: m.grants_title(), icon: ShieldIcon }] : []),
-    { href: `${DASHBOARD_PATH}/users`, label: m.users_title(), icon: UsersIcon },
-    ...(data.viewer.canViewAudit ? [{ href: `${DASHBOARD_PATH}/audit`, label: m.audit_title(), icon: HistoryIcon }] : []),
-    { href: TOOLS_PATH, label: m.tools_title(), icon: WrenchIcon },
+    { href: DASHBOARD_PATH, label: m.stats_title(), icon: ChartColumnIcon, paths: [] },
+    ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: m.grants_title(), icon: ShieldIcon, paths: [] }] : []),
+    { href: `${DASHBOARD_PATH}/users`, label: m.users_title(), icon: UsersIcon, paths: [] },
+    ...(data.historyHref ? [{ href: data.historyHref, label: m.history_title(), icon: HistoryIcon, paths: [CALLS_PATH, AUDIT_PATH] }] : []),
+    { href: TOOLS_PATH, label: m.tools_title(), icon: WrenchIcon, paths: [] },
   ]);
 
   let connectOpen = $state(false);
@@ -37,7 +38,10 @@
     connectOpen = true;
   }
 
-  const isActive = (href: string) => (href === DASHBOARD_PATH ? page.url.pathname === DASHBOARD_PATH : page.url.pathname.startsWith(href));
+  const isActive = (item: { href: string; paths: string[] }) =>
+    item.href === DASHBOARD_PATH
+      ? page.url.pathname === DASHBOARD_PATH
+      : [item.href.replace(/\?.*/, ""), ...item.paths].some((path) => page.url.pathname.startsWith(path));
 </script>
 
 <div class="shell">
@@ -51,7 +55,7 @@
     </div>
     <nav aria-label={m.nav_label()} class="nav-list">
       {#each nav as item (item.href)}
-        <a class="nav" href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
+        <a class="nav" href={item.href} aria-current={isActive(item) ? "page" : undefined}>
           <item.icon class="size-4 shrink-0" />
           {item.label}
         </a>

@@ -6,7 +6,7 @@
   import ExternalLink from "#lib/components/app/external-link.svelte";
   import StatusBadges from "#lib/components/app/status-badges.svelte";
   import { m } from "#lib/paraglide/messages.js";
-  import { DASHBOARD_PATH } from "#lib/paths.js";
+  import { AUDIT_PATH } from "#lib/paths.js";
   import RevertCard from "./revert-card.svelte";
   import type { PageProps } from "./$types";
 
@@ -23,7 +23,7 @@
 <div class="stack gap-3">
   <a
     class="inline-flex items-center gap-1.5 self-start text-note text-muted-foreground no-underline hover:text-foreground"
-    href={`${DASHBOARD_PATH}/audit`}
+    href={AUDIT_PATH}
   >
     <ChevronLeftIcon class="size-3.5" />
     {m.audit_back_to_list()}

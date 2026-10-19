@@ -6,9 +6,9 @@ import type { Permission } from "../permissions/permissions";
 import { TOOL_CALL_RETENTION_DAYS } from "../usage/tool-calls";
 import { jstDay, jstDayStart } from "../lib/jst-day";
 import type { Viewer } from "./access";
-import { auditListHref } from "./audit";
+import { auditListHref } from "./history";
 import type { DashboardDeps } from "./deps";
-import { formatMonthDayJst, formatShortJst, PERMISSION_LABELS } from "./format";
+import { formatDuration, formatMonthDayJst, formatShortJst, PERMISSION_LABELS } from "./format";
 
 const STATS_PATH = DASHBOARD_PATH;
 /** The longest range is all that is kept, so no range reaches past the deleted rows. */
@@ -84,10 +84,6 @@ const ONE_DECIMAL = { minimumFractionDigits: 1, maximumFractionDigits: 1 };
 
 function formatRate(failures: number, calls: number): string {
   return calls === 0 ? "—" : formatNumber(failures / calls, { style: "percent", ...ONE_DECIMAL });
-}
-
-function formatDuration(ms: number): string {
-  return ms < 1000 ? `${formatNumber(Math.round(ms))} ms` : `${formatNumber(ms / 1000, ONE_DECIMAL)} s`;
 }
 
 function categoryOf(permission: Permission | undefined): CategoryKey {

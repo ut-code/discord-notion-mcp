@@ -48,6 +48,13 @@ function jst(date: Date): Temporal.ZonedDateTime {
 
 const pad2 = (value: number): string => String(value).padStart(2, "0");
 
+/** A tool call's duration, e.g. "389 ms" or "1.5 s". */
+export function formatDuration(ms: number): string {
+  return ms < 1000
+    ? `${formatNumber(Math.round(ms))} ms`
+    : `${formatNumber(ms / 1000, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
+}
+
 const VISIBLE_ROLES = 2;
 
 /** Role names on one line: the first two, then how many more. */

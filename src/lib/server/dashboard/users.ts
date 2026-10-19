@@ -5,11 +5,11 @@ import { givesPermission, type Permission } from "../permissions/permissions";
 import { errorMessage } from "../lib/errors";
 import { createLimiter } from "../lib/limiter";
 import { ADMIN_ONLY, type Viewer } from "./access";
-import { auditListHref } from "./audit";
 import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
 import { formatShortJst, PERMISSION_LABELS, roleSummary } from "./format";
 import { GRANTS_PATH } from "./grants";
+import { historyHref } from "./history";
 import { pageLinks, pageParam, type ActionResult } from "./shared";
 import { buildUserRow, matchesUserQuery, type UserRowView } from "./views";
 
@@ -40,7 +40,8 @@ export interface UserTableRow {
   revoked: string | null;
   /** Row menu links; null without a linked Discord account or when the viewer cannot open the page. */
   grantHref: string | null;
-  auditHref: string | null;
+  /** The row's history (its calls and Notion writes): admins for anyone, others for themselves. */
+  historyHref: string | null;
 }
 
 export interface UsersPageData {
@@ -109,7 +110,8 @@ function wasRevokedSinceLogin(user: LoginUser): boolean {
 function userTableRow(
   row: UserRowView,
   lastUsed: Date | undefined,
-  viewer: Pick<Viewer, "isAdmin" | "canViewAudit" | "discordUserId">,
+  viewer: Pick<Viewer, "isAdmin" | "discordUserId" | "permissions">,
+  deps: Pick<DashboardDeps, "tools">,
 ): UserTableRow {
   const discordUserId = row.user.discordUserId;
   return {
@@ -123,19 +125,18 @@ function userTableRow(
     lastUsed: formatShortJst(lastUsed),
     revoked: wasRevokedSinceLogin(row.user) ? m.users_revoked_at({ time: formatShortJst(row.user.revokedAt) }) : null,
     grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subject=${encodeURIComponent(`user:${discordUserId}`)}` : null,
-    // Non-admin writers only have their own history.
-    auditHref: !discordUserId
+    historyHref: !discordUserId
       ? null
       : viewer.isAdmin
-        ? auditListHref({ user: discordUserId })
-        : viewer.canViewAudit && discordUserId === viewer.discordUserId
-          ? auditListHref({})
+        ? historyHref(deps, viewer, discordUserId)
+        : discordUserId === viewer.discordUserId
+          ? historyHref(deps, viewer)
           : null,
   };
 }
 
 export async function usersPage(
-  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError">,
+  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError" | "tools">,
   params: URLSearchParams,
   viewer: Viewer,
 ): Promise<UsersPageData> {
@@ -175,7 +176,7 @@ export async function usersPage(
   const { prevHref, nextHref } = pageLinks(page, USERS_PAGE_SIZE, total, rows.length, (target) => usersHref(query, target));
   const lastUsed = deps.usage.lastUsed(rows.flatMap((row) => (row.user.discordUserId ? [row.user.discordUserId] : [])));
   return {
-    rows: rows.map((row) => userTableRow(row, row.user.discordUserId ? lastUsed.get(row.user.discordUserId) : undefined, viewer)),
+    rows: rows.map((row) => userTableRow(row, row.user.discordUserId ? lastUsed.get(row.user.discordUserId) : undefined, viewer, deps)),
     canRevoke: viewer.isAdmin,
     query,
     total,

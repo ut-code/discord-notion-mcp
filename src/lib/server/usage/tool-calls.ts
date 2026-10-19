@@ -1,6 +1,6 @@
-import { lt } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../db/client";
-import { toolCall, type ToolCallErrorKind } from "../db/schema";
+import { TOOL_CALL_ERROR_KINDS, toolCall, type ToolCallErrorKind, type ToolCallRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
 import type { ErrorSink, EventSink } from "../lib/log";
 import { runPeriodically } from "../lib/periodic";
@@ -23,6 +23,23 @@ export interface ToolCallRecord {
   createdAt?: Date;
 }
 
+/** How a call ended: it ran fine, failed, or was refused by the rate limit. */
+export const CALL_RESULTS = ["ok", ...TOOL_CALL_ERROR_KINDS] as const;
+export type CallResult = (typeof CALL_RESULTS)[number];
+
+export interface ToolCallQuery {
+  /** Only calls of these tools. */
+  tools: readonly string[];
+  discordUserId?: string;
+  result?: CallResult;
+  limit: number;
+  offset: number;
+}
+
+function resultCondition(result: CallResult): SQL {
+  return result === "ok" ? eq(toolCall.ok, true) : eq(toolCall.errorKind, result);
+}
+
 /** Usage statistics source: one row per MCP tool call (never the arguments). */
 export class ToolCallStore {
   constructor(private readonly db: AppDatabase) {}
@@ -41,6 +58,37 @@ export class ToolCallStore {
         error: entry.error ? [...entry.error].slice(0, ERROR_MAX_LENGTH).join("") : null,
       })
       .run();
+  }
+
+  /** A page of calls, newest first, and how many match. */
+  list(query: ToolCallQuery): { rows: ToolCallRow[]; total: number } {
+    if (query.tools.length === 0) return { rows: [], total: 0 };
+    const where = and(
+      inArray(toolCall.tool, [...query.tools]),
+      query.discordUserId ? eq(toolCall.discordUserId, query.discordUserId) : undefined,
+      query.result ? resultCondition(query.result) : undefined,
+    );
+    const rows = this.db
+      .select()
+      .from(toolCall)
+      .where(where)
+      .orderBy(desc(toolCall.createdAt), desc(toolCall.id))
+      .limit(query.limit)
+      .offset(query.offset)
+      .all();
+    const [row] = this.db.select({ total: count() }).from(toolCall).where(where).all();
+    return { rows, total: row?.total ?? 0 };
+  }
+
+  /** Everyone with a kept call of these tools, for picking whose calls to show. */
+  callers(tools: readonly string[]): string[] {
+    if (tools.length === 0) return [];
+    return this.db
+      .selectDistinct({ discordUserId: toolCall.discordUserId })
+      .from(toolCall)
+      .where(inArray(toolCall.tool, [...tools]))
+      .all()
+      .map((row) => row.discordUserId);
   }
 
   /** Deletes rows created before `cutoff`; returns how many. */

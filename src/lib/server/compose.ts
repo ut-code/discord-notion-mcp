@@ -125,6 +125,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     users: new LoginUserStore(database.db),
     audit: notionAudit,
     usage: new UsageStats(database.db),
+    calls: toolCalls,
     tools: tools.map(toolListing),
     revocation,
     log: reportEvent,

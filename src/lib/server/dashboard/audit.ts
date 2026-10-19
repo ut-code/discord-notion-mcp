@@ -1,7 +1,7 @@
 import { isOneOf } from "../../one-of";
 import { formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
-import { dashboardAuditPath, DASHBOARD_PATH } from "../../paths";
+import { dashboardAuditPath } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
@@ -18,6 +18,7 @@ import type { ContentHunk } from "../notion/content/content-diff";
 import { renderPropertyValue } from "../notion/content/properties";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
+import { auditListHref, historyTabs, type AuditFilters, type HistoryTab } from "./history";
 import type { DashboardDeps } from "./deps";
 import {
   AUDIT_OPERATION_LABELS,
@@ -26,7 +27,6 @@ import {
   formatShortJst,
   isAuditStatusFilter,
   renderRequestedPropertyValue,
-  type AuditStatusFilter,
 } from "./format";
 import { auditNoteText, revertReasonText, revertSuccessText } from "./outcome-text";
 import { formString, pageLinks, pageParam, type ActionResult, type Option } from "./shared";
@@ -36,24 +36,8 @@ const AUDIT_PAGE_SIZE = 50;
 /** 404 page of an unknown write-history entry. */
 export const AUDIT_NOT_FOUND = { title: m.error_title_404(), message: m.audit_not_found() };
 
-export interface AuditFilters {
-  user?: string;
-  operation?: NotionAuditOperation;
-  status?: AuditStatusFilter;
-}
-
 function isAuditOperation(value: string | null): value is NotionAuditOperation {
   return isOneOf(NOTION_AUDIT_OPERATIONS, value);
-}
-
-export function auditListHref(filters: AuditFilters, page = 1): string {
-  const params = new URLSearchParams();
-  if (filters.user) params.set("user", filters.user);
-  if (filters.operation) params.set("operation", filters.operation);
-  if (filters.status) params.set("status", filters.status);
-  if (page > 1) params.set("page", String(page));
-  const query = params.toString();
-  return query ? `${DASHBOARD_PATH}/audit?${query}` : `${DASHBOARD_PATH}/audit`;
 }
 
 const BADGES = {
@@ -70,7 +54,7 @@ function statusBadges(row: NotionAuditRow): BadgeView[] {
   return row.revertedAt ? [BADGES.ok, BADGES.reverted] : [BADGES.ok];
 }
 
-/** Lists flag only exceptions; a plain successful write has no badge. */
+/** Exceptions only: compact lists flag just these, and tables show a success badge for the rest. */
 function exceptionBadge(row: NotionAuditRow): BadgeView | null {
   if (row.status !== "ok") return BADGES[row.status];
   return row.revertedAt ? BADGES.reverted : null;
@@ -87,6 +71,8 @@ export interface AuditRowView {
   title: string;
   targetUrl: string | null;
   badge: BadgeView | null;
+  /** Every row's status, for tables. */
+  status: BadgeView;
   /** One-line summary under the title in compact lists: "operation · user · time". */
   meta: string;
 }
@@ -107,11 +93,13 @@ function auditRowView(row: NotionAuditRow, avatars: ReadonlyMap<string, string> 
     title: row.targetTitle,
     targetUrl: row.targetUrl,
     badge: exceptionBadge(row),
+    status: exceptionBadge(row) ?? BADGES.ok,
     meta: [action, row.discordDisplayName, createdAt].join(" · "),
   };
 }
 
 export interface AuditListData {
+  tabs: HistoryTab[];
   rows: AuditRowView[];
   total: number;
   /** "a–b of N"; null when the page shows no rows. */
@@ -129,7 +117,7 @@ export interface AuditListData {
 }
 
 /** Who opens the write history: admins see everyone's writes, other writers only their own. */
-type AuditViewer = Pick<Viewer, "isAdmin" | "discordUserId">;
+type AuditViewer = Pick<Viewer, "isAdmin" | "discordUserId" | "permissions">;
 
 export async function auditList(deps: DashboardDeps, params: URLSearchParams, viewer: AuditViewer): Promise<AuditListData> {
   const filters: AuditFilters = {};
@@ -137,7 +125,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams, vi
   const user = viewer.isAdmin ? params.get("user")?.trim() : undefined;
   if (user) {
     if (isSnowflake(user)) filters.user = user;
-    else error = m.audit_filter_invalid_user();
+    else error = m.filter_invalid_user();
   }
   const operation = params.get("operation");
   if (isAuditOperation(operation)) filters.operation = operation;
@@ -163,6 +151,7 @@ export async function auditList(deps: DashboardDeps, params: URLSearchParams, vi
     userOptions.push({ value: filters.user, label: filters.user });
   }
   return {
+    tabs: historyTabs(deps, viewer, "notion:write", filters.user ?? null),
     rows: rows.map((row) => auditRowView(row, avatars)),
     total,
     ...pageLinks(page, AUDIT_PAGE_SIZE, total, rows.length, (target) => auditListHref(filters, target)),

@@ -491,21 +491,35 @@
 		flex-wrap: wrap;
 	}
 
-	/* Write-history list that replaces the table on phones (see .audit-table). */
-	.audit-list {
+	/* On wide screens history tables share the width by their <colgroup> shares, so no column takes
+	   all the slack and leaves a gap before the status; a long name slides within its share. Narrower,
+	   the shares would squeeze columns into each other, so the automatic layout stays. */
+	@media (min-width: 1200px) {
+		.history-table {
+			table-layout: fixed;
+		}
+		.history-table col {
+			width: var(--share);
+		}
+		.data-table.history-table td.primary {
+			width: auto;
+		}
+	}
+	/* History list (calls, Notion writes) that replaces the table on phones (see .history-table). */
+	.history-list {
 		display: none;
 		border-radius: inherit;
 		overflow: hidden;
 	}
-	.audit-list ul {
+	.history-list ul {
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-	.audit-list li + li {
+	.history-list li + li {
 		border-top: 1px solid var(--muted);
 	}
-	.audit-item {
+	.history-item {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
@@ -515,39 +529,46 @@
 		color: var(--foreground);
 		text-decoration: none;
 	}
-	.audit-item:active {
+	.history-item:active {
 		background: var(--sidebar);
 	}
-	.audit-item-head {
+	.history-item-head {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		min-width: 0;
 	}
-	.audit-item-title,
-	.audit-item-meta {
+	.history-item-title,
+	.history-item-meta {
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.audit-item-title {
+	.history-item-title {
 		flex: 1 1 auto;
 		font-size: 14px;
 		font-weight: 500;
 	}
-	.audit-item-meta {
+	.history-item-meta {
 		font-size: 12px;
 		color: var(--muted-foreground);
 	}
-	.audit-list-empty {
+	/* Why a call failed, under its tool. */
+	.call-error {
+		font-size: 12px;
+		color: var(--muted-foreground);
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+	.history-list-empty {
 		padding: 24px 16px;
 		text-align: center;
 		font-size: 14px;
 		color: var(--muted-foreground);
 	}
 
-	/* Audit filters: inline bar on wider screens, a closed disclosure on phones. */
+	/* List filters: inline bar on wider screens, a closed disclosure on phones. */
 	.filter-bar {
 		display: flex;
 		flex-wrap: wrap;
@@ -686,7 +707,7 @@
 		grid-column: 1 / -1;
 	}
 	@media (max-width: 640px) {
-		.audit-list {
+		.history-list {
 			display: block;
 		}
 		.filter-bar {
@@ -1302,7 +1323,21 @@ input[type="search"]::-webkit-search-cancel-button:hover {
 			padding-right: 12px;
 		}
 	}
-	.data-table.audit-table {
+	.data-table.history-table {
+		display: none;
+	}
+}
+
+/* Histories also switch to their list when their box is too narrow for the table (the write
+   history needs about 720px), whatever the window: a tablet, or a narrow window beside the sidebar. */
+.history-wrap {
+	container-type: inline-size;
+}
+@container (max-width: 760px) {
+	.history-wrap .history-list {
+		display: block;
+	}
+	.history-wrap .data-table.history-table {
 		display: none;
 	}
 }

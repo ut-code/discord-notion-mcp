@@ -10,6 +10,10 @@ export const DASHBOARD_PATH = "/dashboard";
 /** POST endpoint that stores the color theme cookie. */
 export const THEME_PATH = "/theme";
 
+/** History: tool calls per read permission (`?permission=`), and the Notion write history. */
+export const CALLS_PATH = `${DASHBOARD_PATH}/calls`;
+export const AUDIT_PATH = `${DASHBOARD_PATH}/audit`;
+
 /** Every MCP tool with the description the AI reads; `#<tool name>` opens one. */
 export const TOOLS_PATH = `${DASHBOARD_PATH}/tools`;
 
@@ -18,5 +22,5 @@ export function toolPath(name: string): string {
 }
 
 export function dashboardAuditPath(auditId: number): string {
-  return `${DASHBOARD_PATH}/audit/${auditId}`;
+  return `${AUDIT_PATH}/${auditId}`;
 }

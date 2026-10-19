@@ -500,16 +500,19 @@ describe("read-only members", () => {
     expect(await requireAdminViewer(guardEvent(owner))).toBe(owner);
   });
 
-  test("the users page hides grant links and revocation; writers get a history link on their own row only", async () => {
-    const member = { ...(await viewerFor(MEMBER)), canViewAudit: false };
+  test("the users page hides grant links and revocation; members get a history link on their own row only", async () => {
+    const member = { ...(await viewerFor(MEMBER)), permissions: [] };
     const memberLogin = await signIn(h, MEMBER);
     const data = await usersPage(deps, params(), member);
     expect(data.canRevoke).toBe(false);
-    expect(data.rows.every((row) => row.grantHref === null && row.auditHref === null)).toBe(true);
-    const asWriter = { ...member, canViewAudit: true };
-    expect(await userRow(memberLogin.userId, "", asWriter)).toMatchObject({ grantHref: null, auditHref: "/dashboard/audit" });
-    const others = (await usersPage(deps, params(), asWriter)).rows.filter((row) => row.userId !== memberLogin.userId);
-    expect(others.every((row) => row.auditHref === null)).toBe(true);
+    expect(data.rows.every((row) => row.grantHref === null && row.historyHref === null)).toBe(true);
+    const asReader = { ...member, permissions: ["discord:read" as const] };
+    expect(await userRow(memberLogin.userId, "", asReader)).toMatchObject({
+      grantHref: null,
+      historyHref: "/dashboard/calls?permission=discord%3Aread",
+    });
+    const others = (await usersPage(deps, params(), asReader)).rows.filter((row) => row.userId !== memberLogin.userId);
+    expect(others.every((row) => row.historyHref === null)).toBe(true);
   });
 
   test("audit details offer no revert to non-admins", async () => {
@@ -741,11 +744,11 @@ describe("users", () => {
     await h.server.grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
   });
 
-  test("row menu links grant and audit pages of the Discord account", async () => {
+  test("row menu links grant and history pages of the Discord account", async () => {
     const member = await signIn(h, MEMBER);
     const row = await userRow(member.userId);
     expect(row.grantHref).toBe(`/dashboard/grants?subject=user%3A${MEMBER}`);
-    expect(row.auditHref).toBe(`/dashboard/audit?user=${MEMBER}`);
+    expect(row.historyHref).toBe(`/dashboard/calls?permission=discord%3Aread&user=${MEMBER}`);
   });
 
   test("search filters by name, @username and id", async () => {
@@ -788,7 +791,8 @@ describe("user search scan cap", () => {
       resolver: { resolve: async () => Promise.reject(new Error("unlinked logins are not resolved")) },
       usage: { lastUsed: () => new Map() },
       logError: () => {},
-    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError">;
+      tools: [],
+    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError" | "tools">;
 
     const found = await usersPage(fakeDeps, params("q=needle"), owner);
     expect(queries).toEqual([{ limit: USER_SEARCH_SCAN_LIMIT, offset: 0 }]);
@@ -1022,7 +1026,7 @@ describe("audit log", () => {
         request: {},
       },
     );
-    const writer = { isAdmin: false, discordUserId: MEMBER };
+    const writer = { isAdmin: false, discordUserId: MEMBER, permissions: ["notion:read" as const, "notion:write" as const] };
 
     const own = await auditList(deps, params(`user=${STRANGER}`), writer);
     expect(own.rows.map((row) => row.id)).toContain(mine.auditId);

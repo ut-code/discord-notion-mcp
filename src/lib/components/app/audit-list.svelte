@@ -6,22 +6,22 @@
   let { rows, empty }: { rows: AuditRowView[]; empty: string } = $props();
 </script>
 
-<div class="audit-list">
+<div class="history-list">
   {#if rows.length > 0}
     <ul>
       {#each rows as row (row.id)}
         <li>
-          <a class="audit-item" href={row.href}>
-            <span class="audit-item-head">
-              <span class="audit-item-title">{row.title}</span>
+          <a class="history-item" href={row.href}>
+            <span class="history-item-head">
+              <span class="history-item-title">{row.title}</span>
               {#if row.badge}<ToneBadge badge={row.badge} />{/if}
             </span>
-            <span class="audit-item-meta">{row.meta}</span>
+            <span class="history-item-meta">{row.meta}</span>
           </a>
         </li>
       {/each}
     </ul>
   {:else}
-    <p class="audit-list-empty">{empty}</p>
+    <p class="history-list-empty">{empty}</p>
   {/if}
 </div>

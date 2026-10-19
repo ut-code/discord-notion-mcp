@@ -11,11 +11,11 @@
 
   let confirming = $state(false);
   const confirmId = $derived(`user-revoke-${index}`);
-  const hasLinks = $derived(row.grantHref !== null || row.auditHref !== null);
+  const hasLinks = $derived(row.grantHref !== null || row.historyHref !== null);
   const items = $derived.by(() => {
     const entries: RowMenuItem[] = [];
     if (row.grantHref) entries.push({ kind: "link", label: m.grants_add(), href: row.grantHref, icon: ShieldIcon });
-    if (row.auditHref) entries.push({ kind: "link", label: m.users_menu_audit(), href: row.auditHref, icon: HistoryIcon });
+    if (row.historyHref) entries.push({ kind: "link", label: m.users_menu_history(), href: row.historyHref, icon: HistoryIcon });
     if (canRevoke) {
       if (hasLinks) entries.push({ kind: "separator" });
       entries.push({
