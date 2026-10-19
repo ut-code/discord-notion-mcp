@@ -3,11 +3,11 @@
   import MoonIcon from "@lucide/svelte/icons/moon";
   import SunIcon from "@lucide/svelte/icons/sun";
   import { page } from "$app/state";
-  import { Button } from "$lib/components/ui/button";
-  import { m } from "$lib/paraglide/messages.js";
-  import { THEME_PATH } from "$lib/paths";
-  import { nextTheme, THEME_LABELS } from "$lib/theme";
-  import { getThemeState } from "$lib/theme-state.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import { THEME_PATH } from "#lib/paths.js";
+  import { nextTheme, THEME_LABELS } from "#lib/theme.js";
+  import { getThemeState } from "#lib/theme-state.svelte.js";
 
   const theme = getThemeState();
   const icons = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };

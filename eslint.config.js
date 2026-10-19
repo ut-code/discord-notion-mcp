@@ -3,7 +3,12 @@ import svelte from "eslint-plugin-svelte";
 import { defineConfig, globalIgnores } from "eslint/config";
 import globals from "globals";
 import ts from "typescript-eslint";
-import svelteConfig from "./svelte.config.js";
+import { loadConfig } from "@sveltejs/load-config";
+
+// The Svelte config lives in vite.config.ts (sveltekit() options).
+const loaded = await loadConfig("./", { traverse: false });
+if (!loaded || !("config" in loaded)) throw new Error("Could not load the Svelte config", { cause: loaded?.error });
+const svelteConfig = loaded.config;
 
 export default defineConfig(
   globalIgnores(["build/", ".svelte-kit/", "node_modules/", "drizzle/meta/", "src/lib/paraglide/"]),
@@ -14,8 +19,12 @@ export default defineConfig(
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
       parserOptions: {
-        // Files outside tsconfig's include (config files and scripts at the root).
-        projectService: { allowDefaultProject: ["*.js", "drizzle.config.ts", "scripts/*.ts", "project.inlang/*.ts"] },
+        // Files outside tsconfig's include (config files and scripts at the root), typed with its
+        // options: TypeScript's defaults ignore package.json "exports" and cannot type some imports.
+        projectService: {
+          allowDefaultProject: ["*.js", "scripts/*.ts", "project.inlang/*.ts"],
+          defaultProject: "tsconfig.json",
+        },
         tsconfigRootDir: import.meta.dirname,
         // The same for TypeScript and Svelte files, or the project service reloads on every switch.
         // Cross-component types in .svelte need SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 (set by `bun run lint`).

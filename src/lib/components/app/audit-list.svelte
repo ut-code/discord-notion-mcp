@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { AuditRowView } from "$lib/server/dashboard/audit";
+  import type { AuditRowView } from "#lib/server/dashboard/audit.js";
   import ToneBadge from "./tone-badge.svelte";
 
   /** Compact write-history list shown on phones in place of the table. */

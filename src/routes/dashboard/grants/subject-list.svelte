@@ -3,12 +3,12 @@
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
   import SearchIcon from "@lucide/svelte/icons/search";
   import { onDestroy } from "svelte";
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import { Input } from "$lib/components/ui/input";
-  import { MAX_QUERY_LENGTH, namesMatch, searchNeedle } from "$lib/name-match";
-  import { m } from "$lib/paraglide/messages.js";
-  import { DASHBOARD_PATH } from "$lib/paths";
-  import type { GrantFormView, SubjectOption } from "$lib/server/dashboard/grants";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { MAX_QUERY_LENGTH, namesMatch, searchNeedle } from "#lib/name-match.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import { DASHBOARD_PATH } from "#lib/paths.js";
+  import type { GrantFormView, SubjectOption } from "#lib/server/dashboard/grants.js";
   import { MemberLookup } from "./member-lookup.svelte";
 
   // One markup with and without JavaScript: the tabs switch in CSS, and the search box

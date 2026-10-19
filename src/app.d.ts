@@ -1,7 +1,7 @@
-import type { ViewerGate } from "$lib/server/dashboard/access";
-import type { DashboardDeps } from "$lib/server/dashboard/deps";
-import type { Preview } from "$lib/server/preview";
-import type { Theme } from "$lib/theme";
+import type { ViewerGate } from "#lib/server/dashboard/access.js";
+import type { DashboardDeps } from "#lib/server/dashboard/deps.js";
+import type { Preview } from "#lib/server/preview.js";
+import type { Theme } from "#lib/theme.js";
 
 declare global {
   namespace App {

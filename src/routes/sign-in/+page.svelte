@@ -1,11 +1,11 @@
 <script lang="ts">
   import LockIcon from "@lucide/svelte/icons/lock";
   import LogInIcon from "@lucide/svelte/icons/log-in";
-  import AuthLayout from "$lib/components/app/auth-layout.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import ServerLogo from "$lib/components/app/server-logo.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import { jsonStrings } from "$lib/json-strings";
+  import AuthLayout from "#lib/components/app/auth-layout.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import ServerLogo from "#lib/components/app/server-logo.svelte";
+  import { m } from "#lib/paraglide/messages.js";
+  import { jsonStrings } from "#lib/json-strings.js";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();

@@ -1,6 +1,6 @@
 import { json } from "@sveltejs/kit";
-import { memberSearchResult } from "$lib/server/dashboard/grants";
-import { requireApiViewer } from "$lib/server/dashboard/guard";
+import { memberSearchResult } from "#lib/server/dashboard/grants.js";
+import { requireApiViewer } from "#lib/server/dashboard/guard.js";
 import type { RequestHandler } from "./$types";
 
 export const GET: RequestHandler = async (event) => {

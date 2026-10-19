@@ -1,6 +1,6 @@
 import { error } from "@sveltejs/kit";
-import { m } from "$lib/paraglide/messages.js";
-import { signInErrorMessage } from "$lib/server/dashboard/session";
+import { m } from "#lib/paraglide/messages.js";
+import { signInErrorMessage } from "#lib/server/dashboard/session.js";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = ({ url }) => {

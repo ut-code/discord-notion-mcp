@@ -6,16 +6,16 @@
   import ShieldIcon from "@lucide/svelte/icons/shield";
   import UsersIcon from "@lucide/svelte/icons/users";
   import { page } from "$app/state";
-  import ActionFeedback from "$lib/components/app/action-feedback.svelte";
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import ConnectGuide from "$lib/components/app/connect-guide.svelte";
-  import ThemeToggle from "$lib/components/app/theme-toggle.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Dialog from "$lib/components/ui/dialog";
-  import ServerLogo from "$lib/components/app/server-logo.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "$lib/paths";
-  import { actionResultOf } from "$lib/action-result";
+  import ActionFeedback from "#lib/components/app/action-feedback.svelte";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import ConnectGuide from "#lib/components/app/connect-guide.svelte";
+  import ThemeToggle from "#lib/components/app/theme-toggle.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import ServerLogo from "#lib/components/app/server-logo.svelte";
+  import { m } from "#lib/paraglide/messages.js";
+  import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "#lib/paths.js";
+  import { actionResultOf } from "#lib/action-result.js";
   import type { LayoutProps } from "./$types";
 
   let { data, children }: LayoutProps = $props();

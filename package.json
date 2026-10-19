@@ -35,7 +35,6 @@
     "zod": "^4.6.6"
   },
   "overrides": {
-    "cookie": "^0.7.2",
     "@esbuild-kit/core-utils>esbuild": "^0.25.4"
   },
   "trustedDependencies": [],
@@ -45,8 +44,9 @@
     "@inlang/plugin-message-format": "4.5.3",
     "@internationalized/date": "^3.12.4",
     "@lucide/svelte": "^1.55.0",
-    "@sveltejs/adapter-node": "^5.5.7",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/adapter-node": "^6.0.0",
+    "@sveltejs/kit": "^3.0.0",
+    "@sveltejs/load-config": "^0.2.2",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "^1.4.2",
@@ -73,5 +73,8 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
     "vite": "^8.3.4"
+  },
+  "imports": {
+    "#lib/*": "./src/lib/*"
   }
 }

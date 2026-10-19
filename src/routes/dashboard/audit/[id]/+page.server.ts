@@ -1,5 +1,5 @@
-import { auditDetail, AUDIT_NOT_FOUND, revertAudit } from "$lib/server/dashboard/audit";
-import { orNotFound, requireAuditViewer, respond } from "$lib/server/dashboard/guard";
+import { auditDetail, AUDIT_NOT_FOUND, revertAudit } from "#lib/server/dashboard/audit.js";
+import { orNotFound, requireAuditViewer, respond } from "#lib/server/dashboard/guard.js";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) =>

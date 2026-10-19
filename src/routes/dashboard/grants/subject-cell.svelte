@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import type { SubjectView } from "$lib/server/dashboard/grants";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import type { SubjectView } from "#lib/server/dashboard/grants.js";
 
   let { subject }: { subject: SubjectView } = $props();
 </script>

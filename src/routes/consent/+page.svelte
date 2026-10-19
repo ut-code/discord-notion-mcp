@@ -6,12 +6,12 @@
   import PenLineIcon from "@lucide/svelte/icons/pen-line";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import AuthLayout from "$lib/components/app/auth-layout.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { m } from "$lib/paraglide/messages.js";
-  import { SIGN_OUT_PATH } from "$lib/paths";
-  import { jsonStrings } from "$lib/json-strings";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import AuthLayout from "#lib/components/app/auth-layout.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import { SIGN_OUT_PATH } from "#lib/paths.js";
+  import { jsonStrings } from "#lib/json-strings.js";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();

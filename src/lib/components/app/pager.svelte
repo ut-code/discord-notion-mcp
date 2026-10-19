@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { m } from "$lib/paraglide/messages.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
 
   let { prev, next }: { prev: string | null; next: string | null } = $props();
 </script>

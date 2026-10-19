@@ -2,11 +2,11 @@
   import CheckIcon from "@lucide/svelte/icons/check";
   import ChevronLeftIcon from "@lucide/svelte/icons/chevron-left";
   import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import ExternalLink from "$lib/components/app/external-link.svelte";
-  import StatusBadges from "$lib/components/app/status-badges.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import { DASHBOARD_PATH } from "$lib/paths";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import ExternalLink from "#lib/components/app/external-link.svelte";
+  import StatusBadges from "#lib/components/app/status-badges.svelte";
+  import { m } from "#lib/paraglide/messages.js";
+  import { DASHBOARD_PATH } from "#lib/paths.js";
   import RevertCard from "./revert-card.svelte";
   import type { PageProps } from "./$types";
 

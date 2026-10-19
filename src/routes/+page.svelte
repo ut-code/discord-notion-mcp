@@ -1,10 +1,10 @@
 <script lang="ts">
   import ArrowRightIcon from "@lucide/svelte/icons/arrow-right";
-  import AuthLayout from "$lib/components/app/auth-layout.svelte";
-  import ConnectGuide from "$lib/components/app/connect-guide.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { m } from "$lib/paraglide/messages.js";
-  import { DASHBOARD_PATH } from "$lib/paths";
+  import AuthLayout from "#lib/components/app/auth-layout.svelte";
+  import ConnectGuide from "#lib/components/app/connect-guide.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import { DASHBOARD_PATH } from "#lib/paths.js";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();

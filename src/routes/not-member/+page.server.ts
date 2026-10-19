@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { NOT_MEMBER } from "$lib/server/dashboard/session";
+import { NOT_MEMBER } from "#lib/server/dashboard/session.js";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = () => {

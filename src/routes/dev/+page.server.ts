@@ -1,6 +1,6 @@
 import { error } from "@sveltejs/kit";
-import { dev } from "$app/environment";
-import { m } from "$lib/paraglide/messages.js";
+import { dev } from "$app/env";
+import { m } from "#lib/paraglide/messages.js";
 import type { PageServerLoad } from "./$types";
 
 // Preview only: `dev` is false in production builds and `locals.preview` needs PREVIEW=1.

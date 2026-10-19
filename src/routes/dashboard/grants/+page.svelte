@@ -1,9 +1,9 @@
 <script lang="ts">
   import LockIcon from "@lucide/svelte/icons/lock";
-  import PageHeader from "$lib/components/app/page-header.svelte";
-  import ToneBadge from "$lib/components/app/tone-badge.svelte";
-  import * as Table from "$lib/components/ui/table";
-  import { m } from "$lib/paraglide/messages.js";
+  import PageHeader from "#lib/components/app/page-header.svelte";
+  import ToneBadge from "#lib/components/app/tone-badge.svelte";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { m } from "#lib/paraglide/messages.js";
   import GrantForm from "./grant-form.svelte";
   import GrantMenu from "./grant-menu.svelte";
   import SubjectCell from "./subject-cell.svelte";

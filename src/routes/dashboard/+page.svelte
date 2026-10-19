@@ -1,9 +1,9 @@
 <script lang="ts">
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import PageHeader from "$lib/components/app/page-header.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as Table from "$lib/components/ui/table";
-  import { m } from "$lib/paraglide/messages.js";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import PageHeader from "#lib/components/app/page-header.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
+  import { m } from "#lib/paraglide/messages.js";
   import StackedBars from "./stacked-bars.svelte";
   import type { PageProps } from "./$types";
 

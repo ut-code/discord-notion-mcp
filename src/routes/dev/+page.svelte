@@ -1,6 +1,6 @@
 <script lang="ts">
-  import AuthLayout from "$lib/components/app/auth-layout.svelte";
-  import { m } from "$lib/paraglide/messages.js";
+  import AuthLayout from "#lib/components/app/auth-layout.svelte";
+  import { m } from "#lib/paraglide/messages.js";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();

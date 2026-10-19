@@ -1,10 +1,10 @@
-import type { Handle, HandleServerError, ServerInit } from "@sveltejs/kit";
-import { m } from "$lib/paraglide/messages.js";
-import { checkViewer, type ViewerGate } from "$lib/server/dashboard/access";
-import { withSecurityHeaders } from "$lib/server/http";
-import { errorMessage } from "$lib/server/lib/errors";
-import { ensureStarted } from "$lib/server/runtime";
-import { THEME_COOKIE, themeFromCookie, withThemeClass } from "$lib/server/theme";
+import type { Handle, HandleServerError, ServerInit } from "@sveltejs/kit/hooks";
+import { m } from "#lib/paraglide/messages.js";
+import { checkViewer, type ViewerGate } from "#lib/server/dashboard/access.js";
+import { withSecurityHeaders } from "#lib/server/http.js";
+import { errorMessage } from "#lib/server/lib/errors.js";
+import { ensureStarted } from "#lib/server/runtime.js";
+import { THEME_COOKIE, themeFromCookie, withThemeClass } from "#lib/server/theme.js";
 
 export const init: ServerInit = async () => {
   await ensureStarted();
@@ -25,10 +25,12 @@ export const handle: Handle = async ({ event, resolve }) => {
   return withSecurityHeaders(await resolve(event, { transformPageChunk: ({ html }) => withThemeClass(html, theme) }));
 };
 
-export const handleError: HandleServerError = async ({ error, event, status }) => {
-  if (status !== 404) {
+export const handleError: HandleServerError = async (caught) => {
+  // Thrown with error(...): shown as written, not logged.
+  if (caught.kind === "app") return;
+  if (caught.kind !== "framework" || caught.error.status !== 404) {
     const { server } = await ensureStarted();
-    server.logError({ event: "http_error", path: event.url.pathname, error: errorMessage(error) });
+    server.logError({ event: "http_error", path: caught.event.url.pathname, error: errorMessage(caught.error) });
   }
   return { message: m.error_unexpected() };
 };

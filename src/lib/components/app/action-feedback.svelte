@@ -4,9 +4,9 @@
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import { onMount } from "svelte";
   import { toast } from "svelte-sonner";
-  import * as Alert from "$lib/components/ui/alert";
-  import type { ActionResult } from "$lib/server/dashboard/shared";
-  import { cn } from "$lib/utils";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import type { ActionResult } from "#lib/server/dashboard/shared.js";
+  import { cn } from "#lib/utils.js";
 
   let { result }: { result: ActionResult | null | undefined } = $props();
 

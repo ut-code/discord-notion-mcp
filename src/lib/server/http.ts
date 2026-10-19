@@ -33,7 +33,7 @@ const notFound = () => Response.json({ error: "not_found" }, { status: 404 });
  * Applied to every response, UI included: no framing, no referrer leaving this origin
  * (same-origin requests keep a real Origin header, which "no-referrer" would turn into
  * `Origin: null` and break CSRF checks), and no caching unless the handler chose a policy.
- * Pages carry SvelteKit's full policy (`kit.csp` in svelte.config.js, which includes
+ * Pages carry SvelteKit's full policy (`csp` of sveltekit() in vite.config.ts, which includes
  * frame-ancestors); every other response gets the frame-ancestors policy here.
  */
 export function withSecurityHeaders(response: Response): Response {
@@ -87,7 +87,7 @@ export function createHttpHandler(deps: HttpDeps): HttpHandler {
 
   /**
    * Routes answered here skip the UI's Origin check (SvelteKit's own is off, see
-   * svelte.config.js): MCP and OAuth clients post from other origins. None of them may
+   * vite.config.ts): MCP and OAuth clients post from other origins. None of them may
    * authenticate with the session cookie unless it checks the origin itself (Better Auth does).
    */
   const route = async (request: Request, socketAddress?: () => string | null): Promise<Response | null> => {

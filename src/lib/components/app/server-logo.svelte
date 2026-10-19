@@ -1,7 +1,7 @@
 <script lang="ts">
-  import * as Avatar from "$lib/components/ui/avatar";
-  import { initialOf } from "$lib/initial";
-  import { cn } from "$lib/utils";
+  import * as Avatar from "#lib/components/ui/avatar/index.js";
+  import { initialOf } from "#lib/initial.js";
+  import { cn } from "#lib/utils.js";
 
   let { name, iconUrl = null, large = false }: { name: string; iconUrl?: string | null; large?: boolean } = $props();
 </script>

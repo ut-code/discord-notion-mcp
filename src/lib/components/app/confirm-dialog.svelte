@@ -2,11 +2,11 @@
   import type { Snippet } from "svelte";
   import { enhance } from "$app/forms";
   import { page } from "$app/state";
-  import { actionUrl } from "$lib/action-url";
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { useHydrated } from "$lib/hydrated.svelte";
-  import { m } from "$lib/paraglide/messages.js";
+  import { actionUrl } from "#lib/action-url.js";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { useHydrated } from "#lib/hydrated.svelte.js";
+  import { m } from "#lib/paraglide/messages.js";
 
   let {
     id,

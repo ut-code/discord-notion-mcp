@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { labelIndexes, niceScale } from "$lib/chart-scale";
-  import { m } from "$lib/paraglide/messages.js";
-  import type { ChartRow, ChartSeries } from "$lib/server/dashboard/stats";
+  import { labelIndexes, niceScale } from "#lib/chart-scale.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import type { ChartRow, ChartSeries } from "#lib/server/dashboard/stats.js";
 
   let { rows, series, label }: { rows: ChartRow[]; series: ChartSeries[]; label: string } = $props();
 

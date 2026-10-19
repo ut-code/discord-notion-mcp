@@ -3,14 +3,14 @@
   import Undo2Icon from "@lucide/svelte/icons/undo-2";
   import { enhance } from "$app/forms";
   import { page } from "$app/state";
-  import { actionUrl } from "$lib/action-url";
-  import ConfirmDialog from "$lib/components/app/confirm-dialog.svelte";
-  import ToneBadge from "$lib/components/app/tone-badge.svelte";
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
-  import { useHydrated } from "$lib/hydrated.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import type { RevertView } from "$lib/server/dashboard/audit";
+  import { actionUrl } from "#lib/action-url.js";
+  import ConfirmDialog from "#lib/components/app/confirm-dialog.svelte";
+  import ToneBadge from "#lib/components/app/tone-badge.svelte";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { useHydrated } from "#lib/hydrated.svelte.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import type { RevertView } from "#lib/server/dashboard/audit.js";
 
   let { revert, conflict, targetUrl }: { revert: RevertView; conflict: boolean; targetUrl: string | null } = $props();
 

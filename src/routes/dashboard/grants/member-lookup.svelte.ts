@@ -1,6 +1,6 @@
-import { isRecord } from "$lib/guards";
-import { m } from "$lib/paraglide/messages.js";
-import type { SubjectOption } from "$lib/server/dashboard/grants";
+import { isRecord } from "#lib/guards.js";
+import { m } from "#lib/paraglide/messages.js";
+import type { SubjectOption } from "#lib/server/dashboard/grants.js";
 
 const DEBOUNCE_MS = 250;
 

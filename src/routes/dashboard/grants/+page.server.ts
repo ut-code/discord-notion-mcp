@@ -1,5 +1,5 @@
-import { createGrant, deleteGrant, grantsPage } from "$lib/server/dashboard/grants";
-import { requireAdminViewer, requireViewer, respond } from "$lib/server/dashboard/guard";
+import { createGrant, deleteGrant, grantsPage } from "#lib/server/dashboard/grants.js";
+import { requireAdminViewer, requireViewer, respond } from "#lib/server/dashboard/guard.js";
 import type { Actions, PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {

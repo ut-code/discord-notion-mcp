@@ -1,10 +1,10 @@
 <script lang="ts">
   import LogOutIcon from "@lucide/svelte/icons/log-out";
   import { page } from "$app/state";
-  import AuthLayout from "$lib/components/app/auth-layout.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { m } from "$lib/paraglide/messages.js";
-  import { SIGN_OUT_PATH } from "$lib/paths";
+  import AuthLayout from "#lib/components/app/auth-layout.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import { SIGN_OUT_PATH } from "#lib/paths.js";
 
   const DEFAULT_TITLES: Record<number, string> = { 400: m.error_title_400(), 403: m.access_denied_title(), 404: m.error_title_404() };
 

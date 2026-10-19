@@ -1,5 +1,5 @@
 import { redirect } from "@sveltejs/kit";
-import { parseThemeForm, THEME_COOKIE, THEME_COOKIE_OPTIONS } from "$lib/server/theme";
+import { parseThemeForm, THEME_COOKIE, THEME_COOKIE_OPTIONS } from "#lib/server/theme.js";
 import type { RequestHandler } from "./$types";
 
 // Cross-origin posts are rejected by the HTTP handler (http.ts) before reaching this one.

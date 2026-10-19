@@ -2,8 +2,8 @@
   import CheckIcon from "@lucide/svelte/icons/check";
   import CopyIcon from "@lucide/svelte/icons/copy";
   import { onMount } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { m } from "$lib/paraglide/messages.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { m } from "#lib/paraglide/messages.js";
 
   let { text, label }: { text: string; label: string } = $props();
 

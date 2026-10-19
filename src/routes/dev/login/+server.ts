@@ -1,7 +1,7 @@
 import { error } from "@sveltejs/kit";
-import { dev } from "$app/environment";
-import { m } from "$lib/paraglide/messages.js";
-import { DASHBOARD_PATH } from "$lib/paths";
+import { dev } from "$app/env";
+import { m } from "#lib/paraglide/messages.js";
+import { DASHBOARD_PATH } from "#lib/paths.js";
 import type { RequestHandler } from "./$types";
 
 const NEXT = /^(\/|\/dashboard(\/[\w/-]*)?(\?[\w=&%-]*)?)$/;

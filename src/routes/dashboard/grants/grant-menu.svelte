@@ -1,9 +1,9 @@
 <script lang="ts">
   import TrashIcon from "@lucide/svelte/icons/trash";
-  import ConfirmDialog from "$lib/components/app/confirm-dialog.svelte";
-  import RowMenu from "$lib/components/app/row-menu.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import type { GrantTableRow } from "$lib/server/dashboard/grants";
+  import ConfirmDialog from "#lib/components/app/confirm-dialog.svelte";
+  import RowMenu from "#lib/components/app/row-menu.svelte";
+  import { m } from "#lib/paraglide/messages.js";
+  import type { GrantTableRow } from "#lib/server/dashboard/grants.js";
 
   let { remove, index }: { remove: NonNullable<GrantTableRow["remove"]>; index: number } = $props();
 

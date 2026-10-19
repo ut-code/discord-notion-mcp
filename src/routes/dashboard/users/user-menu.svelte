@@ -2,10 +2,10 @@
   import BanIcon from "@lucide/svelte/icons/ban";
   import HistoryIcon from "@lucide/svelte/icons/history";
   import ShieldIcon from "@lucide/svelte/icons/shield";
-  import ConfirmDialog from "$lib/components/app/confirm-dialog.svelte";
-  import RowMenu, { type RowMenuItem } from "$lib/components/app/row-menu.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import type { UserTableRow } from "$lib/server/dashboard/users";
+  import ConfirmDialog from "#lib/components/app/confirm-dialog.svelte";
+  import RowMenu, { type RowMenuItem } from "#lib/components/app/row-menu.svelte";
+  import { m } from "#lib/paraglide/messages.js";
+  import type { UserTableRow } from "#lib/server/dashboard/users.js";
 
   let { row, index, canRevoke }: { row: UserTableRow; index: number; canRevoke: boolean } = $props();
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
-  import * as Alert from "$lib/components/ui/alert";
-  import { m } from "$lib/paraglide/messages.js";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { m } from "#lib/paraglide/messages.js";
   import CopyButton from "./copy-button.svelte";
   import ExternalLink from "./external-link.svelte";
 

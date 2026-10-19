@@ -1,18 +1,18 @@
 <script lang="ts">
   import SearchIcon from "@lucide/svelte/icons/search";
   import UserIcon from "@lucide/svelte/icons/user";
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import PageHeader from "$lib/components/app/page-header.svelte";
-  import Pager from "$lib/components/app/pager.svelte";
-  import ToneBadge from "$lib/components/app/tone-badge.svelte";
-  import { Input } from "$lib/components/ui/input";
-  import * as Table from "$lib/components/ui/table";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import PageHeader from "#lib/components/app/page-header.svelte";
+  import Pager from "#lib/components/app/pager.svelte";
+  import ToneBadge from "#lib/components/app/tone-badge.svelte";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import { onDestroy } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
-  import { useHydrated } from "$lib/hydrated.svelte";
-  import { m } from "$lib/paraglide/messages.js";
+  import { useHydrated } from "#lib/hydrated.svelte.js";
+  import { m } from "#lib/paraglide/messages.js";
   import type { PageProps } from "./$types";
-  import { DASHBOARD_PATH } from "$lib/paths";
+  import { DASHBOARD_PATH } from "#lib/paths.js";
   import UserMenu from "./user-menu.svelte";
 
   let { data }: PageProps = $props();
@@ -35,8 +35,7 @@
       const q = query.trim();
       if (q === data.query) return;
       void goto(`${DASHBOARD_PATH}/users${q ? `?q=${encodeURIComponent(q)}` : ""}`, {
-        keepFocus: true,
-        noScroll: true,
+        reset: false,
         replaceState: true,
       });
     }, SEARCH_DEBOUNCE_MS);

@@ -1,5 +1,5 @@
-import { auditList } from "$lib/server/dashboard/audit";
-import { requireAuditViewer } from "$lib/server/dashboard/guard";
+import { auditList } from "#lib/server/dashboard/audit.js";
+import { requireAuditViewer } from "#lib/server/dashboard/guard.js";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async (event) => {

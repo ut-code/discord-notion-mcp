@@ -1,4 +1,4 @@
-import type { ActionResult } from "$lib/server/dashboard/shared";
+import type { ActionResult } from "#lib/server/dashboard/shared.js";
 import { isRecord } from "./guards";
 import { isOneOf } from "./one-of";
 

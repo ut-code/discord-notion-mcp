@@ -2,19 +2,19 @@
   import ChevronDownIcon from "@lucide/svelte/icons/chevron-down";
   import ChevronRightIcon from "@lucide/svelte/icons/chevron-right";
   import ListFilterIcon from "@lucide/svelte/icons/list-filter";
-  import ActionFeedback from "$lib/components/app/action-feedback.svelte";
-  import AppAvatar from "$lib/components/app/app-avatar.svelte";
-  import AuditList from "$lib/components/app/audit-list.svelte";
-  import ExternalLink from "$lib/components/app/external-link.svelte";
-  import PageHeader from "$lib/components/app/page-header.svelte";
-  import Pager from "$lib/components/app/pager.svelte";
-  import ToneBadge from "$lib/components/app/tone-badge.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import * as NativeSelect from "$lib/components/ui/native-select";
-  import * as Table from "$lib/components/ui/table";
+  import ActionFeedback from "#lib/components/app/action-feedback.svelte";
+  import AppAvatar from "#lib/components/app/app-avatar.svelte";
+  import AuditList from "#lib/components/app/audit-list.svelte";
+  import ExternalLink from "#lib/components/app/external-link.svelte";
+  import PageHeader from "#lib/components/app/page-header.svelte";
+  import Pager from "#lib/components/app/pager.svelte";
+  import ToneBadge from "#lib/components/app/tone-badge.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import * as Table from "#lib/components/ui/table/index.js";
   import { goto } from "$app/navigation";
-  import { m } from "$lib/paraglide/messages.js";
-  import { DASHBOARD_PATH } from "$lib/paths";
+  import { m } from "#lib/paraglide/messages.js";
+  import { DASHBOARD_PATH } from "#lib/paths.js";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
@@ -28,7 +28,7 @@
       (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
     );
     const query = new URLSearchParams(filled).toString();
-    void goto(`${DASHBOARD_PATH}/audit${query ? `?${query}` : ""}`, { keepFocus: true, noScroll: true });
+    void goto(`${DASHBOARD_PATH}/audit${query ? `?${query}` : ""}`, { reset: false });
   }
 </script>
 

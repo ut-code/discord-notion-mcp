@@ -1,7 +1,7 @@
 <script lang="ts">
   import "../app.css";
-  import { Toaster } from "$lib/components/ui/sonner";
-  import { setThemeState, ThemeState } from "$lib/theme-state.svelte";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
+  import { setThemeState, ThemeState } from "#lib/theme-state.svelte.js";
   import type { LayoutProps } from "./$types";
 
   let { data, children }: LayoutProps = $props();

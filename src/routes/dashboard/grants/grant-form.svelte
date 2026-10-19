@@ -2,14 +2,14 @@
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import { enhance } from "$app/forms";
   import { page } from "$app/state";
-  import { actionUrl } from "$lib/action-url";
-  import { Button } from "$lib/components/ui/button";
-  import { Label } from "$lib/components/ui/label";
-  import * as NativeSelect from "$lib/components/ui/native-select";
-  import { grantSubmitLabel } from "$lib/grant-label";
-  import { useHydrated } from "$lib/hydrated.svelte";
-  import { m } from "$lib/paraglide/messages.js";
-  import type { GrantFormView } from "$lib/server/dashboard/grants";
+  import { actionUrl } from "#lib/action-url.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
+  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { grantSubmitLabel } from "#lib/grant-label.js";
+  import { useHydrated } from "#lib/hydrated.svelte.js";
+  import { m } from "#lib/paraglide/messages.js";
+  import type { GrantFormView } from "#lib/server/dashboard/grants.js";
   import SubjectList from "./subject-list.svelte";
 
   let { form, filter }: { form: GrantFormView; filter: string | null } = $props();

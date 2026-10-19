@@ -1,4 +1,4 @@
-import { dev } from "$app/environment";
+import { dev } from "$app/env";
 import { composeServer, type AppServer } from "./compose";
 import { ConfigError, loadConfig, type Config } from "./config";
 import { logEvent } from "./lib/log";
