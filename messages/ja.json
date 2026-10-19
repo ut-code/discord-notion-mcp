@@ -284,6 +284,7 @@
   "revert_failure_text_gone": "ページの本文が書き込み時から変わっているため、自動では取り消せません。手作業で戻してください。（Notion: {notionMessage}）",
   "revert_failure_nothing_restorable": "戻せるプロパティがありません: {skipped}",
   "revert_failure_superseded": "取り消しは実行されましたが、その間に中断扱いになり、別の取り消しが始まっていました。ページを確認してください。",
+  "revert_failure_unconfirmed": "Notion から完了の応答がなく（{detail}）、取り消しが反映されたか分かりません。ページを確認してから、もう一度取り消してください。",
   "revert_blocker_no_anchor": "ページに文字が残っておらず、元に戻す位置を決められません",
   "revert_blocker_ambiguous_inverse": "元に戻す編集を一つに決められません",
   "revert_blocker_truncated_after_write": "書き込み後のページが大きすぎて、変更内容を記録できませんでした",

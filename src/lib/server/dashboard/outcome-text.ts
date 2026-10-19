@@ -100,6 +100,8 @@ function failureText(failure: RevertFailure): string {
       return m.revert_failure_nothing_restorable({ skipped: skippedText(failure.skipped) });
     case "superseded":
       return m.revert_failure_superseded();
+    case "unconfirmed":
+      return m.revert_failure_unconfirmed({ detail: failure.detail });
     case "error":
       return failure.message;
     default:

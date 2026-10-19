@@ -7,7 +7,7 @@ import type { Actor } from "../../src/lib/server/notion/changes/attribution";
 import { NotionAuditService, startInterruptedWriteSweep } from "../../src/lib/server/notion/changes/audit-service";
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import type { RevertNote, WriteWarning } from "../../src/lib/server/notion/changes/audit-records";
-import { revertSuccessText, writeWarningText } from "../../src/lib/server/notion/changes/outcome-text";
+import { revertReasonText, revertSuccessText, writeWarningText } from "../../src/lib/server/notion/changes/outcome-text";
 import type { RevertResult } from "../../src/lib/server/notion/changes/revert-reasons";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { sha256 } from "../../src/lib/server/notion/content/content-diff";
@@ -726,15 +726,33 @@ describe("NotionAuditService.revert", () => {
     expect((await audit.listAudit({ operation: "revert" })).total).toBe(1);
   });
 
-  test("a Notion error during revert is recorded as a failed revert and leaves the original revertible", async () => {
+  test("a revert Notion refuses is recorded as failed and leaves the original revertible", async () => {
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "A", request: {} });
+    api.failNext("updatePage", new NotionRequestError("Conflict occurred while saving.", 409, "conflict_error"));
+    const result = await audit.revert(created.auditId, ADMIN);
+    expect(result).toEqual({
+      ok: false,
+      reason: { kind: "failed", failure: { kind: "error", message: "Conflict occurred while saving." }, revertAuditId: 2 },
+    });
+    expect(await store.get(2)).toMatchObject({ operation: "revert", status: "failed", revertOfAuditId: created.auditId });
+    expect((await store.get(created.auditId))!.revertedAt).toBeNull();
+    expect((await audit.revert(created.auditId, ADMIN)).ok).toBe(true);
+  });
+
+  test("a revert Notion did not confirm is interrupted, keeps its comment and leaves the original revertible", async () => {
+    const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "A", request: {} });
+    const comments = api.comments.length;
     api.failNext("updatePage", new NotionRequestError("service unavailable", 503, "service_unavailable"));
     const result = await audit.revert(created.auditId, ADMIN);
     expect(result).toEqual({
       ok: false,
-      reason: { kind: "failed", failure: { kind: "error", message: "service unavailable" }, revertAuditId: 2 },
+      reason: { kind: "failed", failure: { kind: "unconfirmed", detail: "HTTP 503" }, revertAuditId: 2 },
     });
-    expect(await store.get(2)).toMatchObject({ operation: "revert", status: "failed", revertOfAuditId: created.auditId });
+    expect(result.ok || revertReasonText(created.auditId, result.reason)).toBe(
+      `Revert of audit #${created.auditId} failed: Notion did not confirm the revert (HTTP 503), so it may or may not have been applied. Read the page with notion_get_page before reverting audit #${created.auditId} again.`,
+    );
+    expect(await store.get(2)).toMatchObject({ operation: "revert", status: "interrupted", revertOfAuditId: created.auditId });
+    expect(api.comments).toHaveLength(comments + 1);
     expect((await store.get(created.auditId))!.revertedAt).toBeNull();
     expect((await audit.revert(created.auditId, ADMIN)).ok).toBe(true);
   });

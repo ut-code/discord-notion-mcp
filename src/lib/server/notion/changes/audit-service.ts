@@ -2,7 +2,15 @@ import type { NotionAuditRow } from "../../db/schema";
 import { errorMessage } from "../../lib/errors";
 import { logError, type ErrorSink, type EventSink } from "../../lib/log";
 import { runPeriodically } from "../../lib/periodic";
-import { isNotionMiss, NotionRequestError, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
+import {
+  isNotionMiss,
+  notionFailure,
+  NotionRequestError,
+  writeMayHaveApplied,
+  type NotionApi,
+  type NotionPage,
+  type PageMarkdown,
+} from "../client/api";
 import { sha256 } from "../content/content-diff";
 import { mayBeTruncated, samePropertyValue, toWritablePropertyValue, valueFromPropertyItems } from "../content/properties";
 import { postComment, retractComment, revertComment, type AttributionComment } from "./attribution";
@@ -233,6 +241,13 @@ export class NotionAuditService {
     try {
       executed = await this.execute(api, record, current, comment);
     } catch (error) {
+      // Only the revert's own write throws here (comments and read-backs never do), so an
+      // unanswered one may have been applied: interrupted, and the original stays revertible.
+      if (!(error instanceof RevertFailed) && writeMayHaveApplied(error)) {
+        const failure: RevertFailure = { kind: "unconfirmed", detail: notionFailure(error) };
+        await this.store.finishPending(revertRow.id, { status: "interrupted", error: revertFailureText(row.id, failure) });
+        return { ok: false, reason: { kind: "failed", failure, revertAuditId: revertRow.id } };
+      }
       const failure: RevertFailure = error instanceof RevertFailed ? error.failure : { kind: "error", message: errorMessage(error) };
       await this.store.finishPending(revertRow.id, { status: "failed", error: revertFailureText(row.id, failure) });
       return { ok: false, reason: { kind: "failed", failure, revertAuditId: revertRow.id } };
@@ -281,13 +296,14 @@ export class NotionAuditService {
             lastEditedTime: current.last_edited_time,
           };
         }
-        // Comment first: a trashed page may not accept comments. It is taken back if trashing fails.
+        // Comment first: a trashed page may not accept comments. It is taken back if Notion refuses
+        // the trashing, and kept when the page may be in the trash after all.
         const { commentId, commentError } = await postComment(api, pageId, comment);
         let trashed: NotionPage;
         try {
           trashed = await api.updatePage({ pageId: record.result.pageId, inTrash: true });
         } catch (error) {
-          if (commentId) await this.retractOrReport(api, pageId, commentId);
+          if (commentId && !writeMayHaveApplied(error)) await this.retractOrReport(api, pageId, commentId);
           throw error;
         }
         return { result: { inTrash: true }, note: null, partial: false, commentError, lastEditedTime: trashed.last_edited_time };

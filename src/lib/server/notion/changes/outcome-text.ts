@@ -89,6 +89,8 @@ export function revertFailureText(id: number, failure: RevertFailure): string {
       return `No property could be restored: ${skippedText(failure.skipped)}`;
     case "superseded":
       return `The revert ran, but meanwhile it had been marked interrupted and another revert of audit #${id} started; check the page.`;
+    case "unconfirmed":
+      return `Notion did not confirm the revert (${failure.detail}), so it may or may not have been applied. Read the page with notion_get_page before reverting audit #${id} again.`;
     case "error":
       return failure.message;
     default:

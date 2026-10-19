@@ -24,6 +24,8 @@ export type RevertFailure =
   | { kind: "nothing_restorable"; skipped: PropertySkip[] }
   /** Notion was reverted, but the log had given this revert up as interrupted and another one started. */
   | { kind: "superseded" }
+  /** Notion did not confirm the revert (5xx, timeout): it may have been applied; `detail` says why. */
+  | { kind: "unconfirmed"; detail: string }
   | { kind: "error"; message: string };
 
 export type RevertReason =
