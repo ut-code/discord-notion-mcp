@@ -40,26 +40,12 @@ export function isAuditStatusFilter(value: string | undefined): value is AuditSt
   return value !== undefined && Object.hasOwn(AUDIT_STATUS_FILTERS, value);
 }
 
-const JST_PARTS = new Intl.DateTimeFormat("en-US", {
-  timeZone: "Asia/Tokyo",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  second: "2-digit",
-  hourCycle: "h23",
-});
-
-function jstParts(date: Date): Record<"year" | "month" | "day" | "hour" | "minute" | "second", string> {
-  const parts = JST_PARTS.formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes): string => {
-    const value = parts.find((candidate) => candidate.type === type)?.value;
-    if (value === undefined) throw new Error(`Intl.DateTimeFormat omitted the ${type} part`);
-    return value;
-  };
-  return { year: part("year"), month: part("month"), day: part("day"), hour: part("hour"), minute: part("minute"), second: part("second") };
+/** A moment as Japan's wall-clock time. */
+function jst(date: Date): Temporal.ZonedDateTime {
+  return date.toTemporalInstant().toZonedDateTimeISO("Asia/Tokyo");
 }
+
+const pad2 = (value: number): string => String(value).padStart(2, "0");
 
 const VISIBLE_ROLES = 2;
 
@@ -72,28 +58,28 @@ export function roleSummary(names: readonly string[]): string {
 /** Japan time, e.g. "2026/10/12 23:03:00". */
 export function formatJst(date: Date | null | undefined): string {
   if (!date) return "—";
-  const p = jstParts(date);
-  return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}:${p.second}`;
+  const t = jst(date);
+  return `${t.year}/${pad2(t.month)}/${pad2(t.day)} ${pad2(t.hour)}:${pad2(t.minute)}:${pad2(t.second)}`;
 }
 
 /** Japan time without year and seconds, e.g. "10/12 23:03". */
 export function formatShortJst(date: Date | null | undefined): string {
   if (!date) return "—";
-  const p = jstParts(date);
-  return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+  const t = jst(date);
+  return `${pad2(t.month)}/${pad2(t.day)} ${pad2(t.hour)}:${pad2(t.minute)}`;
 }
 
 /** Japan date without year, e.g. "10/12". */
 export function formatMonthDayJst(date: Date): string {
-  const p = jstParts(date);
-  return `${p.month}/${p.day}`;
+  const t = jst(date);
+  return `${pad2(t.month)}/${pad2(t.day)}`;
 }
 
 /** Japan date, e.g. "2026/10/12". */
 export function formatDateJst(date: Date | null | undefined): string {
   if (!date) return "—";
-  const p = jstParts(date);
-  return `${p.year}/${p.month}/${p.day}`;
+  const t = jst(date);
+  return `${t.year}/${pad2(t.month)}/${pad2(t.day)}`;
 }
 
 export function roleColor(color: number): string | undefined {
