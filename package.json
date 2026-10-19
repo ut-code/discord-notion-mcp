@@ -34,6 +34,10 @@
     "drizzle-orm": "^0.45.4",
     "zod": "^4.6.6"
   },
+  "overrides": {
+    "cookie": "^0.7.2",
+    "@esbuild-kit/core-utils>esbuild": "^0.25.4"
+  },
   "trustedDependencies": [],
   "devDependencies": {
     "@eslint/js": "^10.0.1",
