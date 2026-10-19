@@ -37,6 +37,7 @@ const revertBlockerSchema = z.enum([
   "no_anchor",
   "ambiguous_inverse",
   "concurrent_edit",
+  "unlocated_edit",
   "truncated_after_write",
 ]) satisfies z.ZodType<RevertBlocker>;
 

@@ -17,6 +17,8 @@ function blockerText(blocker: RevertBlocker): string {
       return m.revert_blocker_truncated_after_write();
     case "concurrent_edit":
       return m.revert_blocker_concurrent_edit();
+    case "unlocated_edit":
+      return m.revert_blocker_unlocated_edit();
     default:
       throw new Error(`Unknown revert blocker: ${blocker satisfies never}`);
   }

@@ -38,6 +38,8 @@ function revertBlockerText(blocker: RevertBlocker): string {
       return "Notion returned truncated content after the write, so the change could not be captured";
     case "concurrent_edit":
       return "someone else edited the page at the same moment, and undoing the change would undo theirs too";
+    case "unlocated_edit":
+      return "where the change landed in the page could not be determined, so undoing it might also undo someone else's edit made at the same moment";
     default:
       throw new Error(`Unknown revert blocker: ${blocker satisfies never}`);
   }

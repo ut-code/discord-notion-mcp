@@ -205,8 +205,11 @@ function changedOnlyWhereTouched(a: readonly string[], b: readonly string[], ran
   return true;
 }
 
-/** Why no inverse edit exists: nothing left to anchor it on, no unique one, or someone else edited meanwhile. */
-export type RevertPlanBlocker = "no_anchor" | "ambiguous_inverse" | "concurrent_edit";
+/**
+ * Why no inverse edit exists: nothing left to anchor it on, no unique one, someone else edited
+ * meanwhile, or where our update landed cannot be told (so neither can someone else's edit).
+ */
+export type RevertPlanBlocker = "no_anchor" | "ambiguous_inverse" | "concurrent_edit" | "unlocated_edit";
 
 export type RevertPlan =
   | { kind: "unchanged" }
@@ -225,8 +228,12 @@ export function buildRevertPlan(before: string, after: string, update?: PageMark
   const raw = lineHunks(a, b);
   const hunks = raw.map((h) => ({ before: a.slice(h.aStart, h.aEnd).join("\n"), after: b.slice(h.bStart, h.bEnd).join("\n") }));
 
-  const touched = update ? touchedRanges(before, a.length, update) : null;
-  if (touched && !changedOnlyWhereTouched(a, b, touched)) return { kind: "unsupported", blocker: "concurrent_edit", hunks };
+  if (update) {
+    const touched = touchedRanges(before, a.length, update);
+    // Undoing an edit we cannot rule out as someone else's would undo theirs: refuse instead.
+    if (!touched) return { kind: "unsupported", blocker: "unlocated_edit", hunks };
+    if (!changedOnlyWhereTouched(a, b, touched)) return { kind: "unsupported", blocker: "concurrent_edit", hunks };
+  }
 
   // Nothing left to anchor an update on: put the old content back instead.
   if (after.trim() === "") {

@@ -222,6 +222,14 @@ describe("buildRevertPlan: someone else's edit between our read and our write", 
     expect(isConcurrent(buildRevertPlan(doc, applyInverse(doc.replace("2. second", "2. second edited"), update), update))).toBe(true);
   });
 
+  test("an edit whose place cannot be located is not revertible", () => {
+    // Two "Note" lines in what we read, yet Notion (matching whitespace-tolerantly) applied it.
+    const twice = "Note\n\nBody\n\nNote ";
+    const update = replace("Note", "Note changed");
+    const plan = buildRevertPlan(twice, "Note changed\n\nBody\n\nNote ", update);
+    expect(plan).toMatchObject({ kind: "unsupported", blocker: "unlocated_edit" });
+  });
+
   test("an edit within the lines we changed cannot be told apart", () => {
     const update = replace("Middle", "Middle changed");
     const after = applyInverse(doc, update).replace("Middle changed", "Middle changed twice");
