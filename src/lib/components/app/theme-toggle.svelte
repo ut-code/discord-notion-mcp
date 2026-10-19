@@ -10,8 +10,6 @@
   import { getThemeState } from "#lib/theme-state.svelte.js";
 
   const theme = getThemeState();
-  const icons = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };
-  const Icon = $derived(icons[theme.current]);
   const label = $derived(m.theme_toggle_label({ theme: THEME_LABELS[theme.current] }));
   const next = $derived(nextTheme(theme.current));
 
@@ -26,6 +24,18 @@
   <input type="hidden" name="theme" value={next} />
   <input type="hidden" name="next" value={page.url.pathname + page.url.search} />
   <Button type="submit" variant="ghost" size="icon-sm" class="text-muted-foreground" aria-label={label} title={label}>
-    <Icon />
+    {#if theme.current === "system"}
+      <!-- What the system picks now (CSS follows it without JavaScript), marked with a small monitor.
+           The corner under the monitor is cut out of the sun/moon, so any background shows through. -->
+      <span class="relative size-4" aria-hidden="true">
+        <SunIcon class="size-4 [clip-path:polygon(0_0,100%_0,100%_62%,62%_62%,62%_100%,0_100%)] dark:hidden" />
+        <MoonIcon class="hidden size-4 [clip-path:polygon(0_0,100%_0,100%_62%,62%_62%,62%_100%,0_100%)] dark:block" />
+        <MonitorIcon class="absolute -right-1 -bottom-1 size-[9px]" strokeWidth={2.6} />
+      </span>
+    {:else if theme.current === "light"}
+      <SunIcon />
+    {:else}
+      <MoonIcon />
+    {/if}
   </Button>
 </form>
