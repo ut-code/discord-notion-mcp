@@ -96,7 +96,7 @@ function categoryOf(permission: Permission | undefined): CategoryKey {
 
 /** Query: `range` (one of STATS_RANGES in days, ending today in Japan time). */
 export async function statsPage(
-  deps: Pick<DashboardDeps, "usage" | "subjects" | "toolPermissions">,
+  deps: Pick<DashboardDeps, "usage" | "subjects" | "tools">,
   params: URLSearchParams,
   viewer: Pick<Viewer, "canViewAudit">,
   now = Date.now(),
@@ -114,10 +114,11 @@ export async function statsPage(
   const notion = usage.notionTotals(since);
   const users = await deps.subjects.resolveUsers(byUser.map((row) => row.discordUserId));
 
+  const permissions = new Map(deps.tools.map((tool) => [tool.name, tool.permission]));
   const counts = new Map<number, Partial<Record<CategoryKey, number>>>();
   const used = new Set<CategoryKey>();
   for (const row of daily) {
-    const key = categoryOf(deps.toolPermissions.get(row.tool));
+    const key = categoryOf(permissions.get(row.tool));
     const bucket = counts.get(row.day) ?? {};
     bucket[key] = (bucket[key] ?? 0) + row.calls;
     counts.set(row.day, bucket);

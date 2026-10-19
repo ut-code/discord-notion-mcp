@@ -1,6 +1,7 @@
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH, SIGN_IN_PATH } from "../../paths";
 import { isGuildOwner } from "../discord/permissions";
+import type { Permission } from "../permissions/permissions";
 import type { EffectiveAccess } from "../permissions/resolver";
 import { displayName } from "../lib/display-name";
 import { errorMessage } from "../lib/errors";
@@ -21,6 +22,8 @@ export interface Viewer {
   isAdmin: boolean;
   /** The write history: writers see their own writes (notion:write), admins everyone's. */
   canViewAudit: boolean;
+  /** What the viewer's MCP clients may use, included permissions spelled out. */
+  permissions: Permission[];
 }
 
 export type ViewerGate =
@@ -54,6 +57,7 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
       guildIconUrl: access.guild.iconUrl,
       isAdmin: access.isAdmin,
       canViewAudit: access.permissions.has("notion:write"),
+      permissions: [...access.permissions],
     },
   };
 }

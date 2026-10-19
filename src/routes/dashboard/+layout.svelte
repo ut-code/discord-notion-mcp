@@ -5,6 +5,7 @@
   import PlugIcon from "@lucide/svelte/icons/plug";
   import ShieldIcon from "@lucide/svelte/icons/shield";
   import UsersIcon from "@lucide/svelte/icons/users";
+  import WrenchIcon from "@lucide/svelte/icons/wrench";
   import { page } from "$app/state";
   import ActionFeedback from "#lib/components/app/action-feedback.svelte";
   import AppAvatar from "#lib/components/app/app-avatar.svelte";
@@ -14,7 +15,7 @@
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   import ServerLogo from "#lib/components/app/server-logo.svelte";
   import { m } from "#lib/paraglide/messages.js";
-  import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH } from "#lib/paths.js";
+  import { CONNECT_PATH, DASHBOARD_PATH, SIGN_OUT_PATH, TOOLS_PATH } from "#lib/paths.js";
   import { actionResultOf } from "#lib/action-result.js";
   import type { LayoutProps } from "./$types";
 
@@ -25,6 +26,7 @@
     ...(data.viewer.isAdmin ? [{ href: `${DASHBOARD_PATH}/grants`, label: m.grants_title(), icon: ShieldIcon }] : []),
     { href: `${DASHBOARD_PATH}/users`, label: m.users_title(), icon: UsersIcon },
     ...(data.viewer.canViewAudit ? [{ href: `${DASHBOARD_PATH}/audit`, label: m.audit_title(), icon: HistoryIcon }] : []),
+    { href: TOOLS_PATH, label: m.tools_title(), icon: WrenchIcon },
   ]);
 
   let connectOpen = $state(false);

@@ -10,6 +10,13 @@ export const DASHBOARD_PATH = "/dashboard";
 /** POST endpoint that stores the color theme cookie. */
 export const THEME_PATH = "/theme";
 
+/** Every MCP tool with the description the AI reads; `#<tool name>` opens one. */
+export const TOOLS_PATH = `${DASHBOARD_PATH}/tools`;
+
+export function toolPath(name: string): string {
+  return `${TOOLS_PATH}#${name}`;
+}
+
 export function dashboardAuditPath(auditId: number): string {
   return `${DASHBOARD_PATH}/audit/${auditId}`;
 }

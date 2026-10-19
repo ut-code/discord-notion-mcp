@@ -176,6 +176,7 @@ describe("dashboard access control", () => {
       guildIconUrl: null,
       isAdmin: true,
       canViewAudit: true,
+      permissions: ["discord:read", "notion:read", "notion:write", "admin"],
     });
   });
 

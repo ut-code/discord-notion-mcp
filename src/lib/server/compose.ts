@@ -17,6 +17,7 @@ import { logError, logEvent, type ErrorSink, type EventSink } from "./lib/log";
 import { createMcpEndpoint } from "./mcp/endpoint";
 import type { AnyToolDefinition } from "./mcp/registry";
 import type { McpServerDeps } from "./mcp/server";
+import { toolListing } from "./mcp/tool-listing";
 import { SdkNotionApi, type NotionApi } from "./notion/client/api";
 import { NotionAuditService, startInterruptedWriteSweep } from "./notion/changes/audit-service";
 import { NotionAuditStore } from "./notion/changes/audit-store";
@@ -124,7 +125,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     users: new LoginUserStore(database.db),
     audit: notionAudit,
     usage: new UsageStats(database.db),
-    toolPermissions: new Map(tools.map((tool) => [tool.name, tool.permission])),
+    tools: tools.map(toolListing),
     revocation,
     log: reportEvent,
     logError: reportError,

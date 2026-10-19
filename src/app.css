@@ -581,6 +581,88 @@
 	.filter-disclosure[open] .filter-chevron {
 		transform: rotate(180deg);
 	}
+
+	/* Tools page: one disclosure per tool, its description and parameters as the AI reads them. */
+	.tool-list > .tool + .tool {
+		border-top: 1px solid var(--border);
+	}
+	.tool-summary {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 14px 18px;
+		cursor: pointer;
+		list-style: none;
+	}
+	/* The title stays whole: it moves under the name when both do not fit. */
+	.tool-names {
+		display: flex;
+		flex: 1;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 2px 12px;
+		min-width: 0;
+	}
+	.tool-summary::-webkit-details-marker {
+		display: none;
+	}
+	.tool-name {
+		font-weight: 500;
+		color: var(--foreground);
+	}
+	.tool-title {
+		font-size: var(--text-note);
+		color: var(--muted-foreground);
+		white-space: nowrap;
+	}
+	.tool-chevron {
+		flex-shrink: 0;
+		color: var(--muted-foreground);
+	}
+	.tool[open] .tool-chevron {
+		transform: rotate(180deg);
+	}
+	.tool-body {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 0 18px 16px;
+		min-width: 0;
+	}
+	.tool-description {
+		white-space: pre-wrap;
+		overflow-wrap: anywhere;
+	}
+	.tool-heading {
+		margin-top: 4px;
+		font-size: var(--text-note);
+		font-weight: 600;
+	}
+	.tool-params {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.tool-params dd {
+		margin-top: 2px;
+		font-size: var(--text-note);
+		overflow-wrap: anywhere;
+	}
+	.tool-schema summary {
+		width: fit-content;
+		font-size: var(--text-note);
+		color: var(--muted-foreground);
+		cursor: pointer;
+	}
+	.tool-schema pre {
+		margin-top: 6px;
+		max-height: 360px;
+		overflow: auto;
+		padding: 10px 12px;
+		border-radius: 8px;
+		background: var(--muted);
+		font-size: 12px;
+	}
 	.filter-count {
 		display: inline-flex;
 		align-items: center;

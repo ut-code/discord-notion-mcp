@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { consentPage } from "../src/lib/server/dashboard/session";
 import { toolCall } from "../src/lib/server/db/schema";
 import { NO_PERMISSIONS_INSTRUCTIONS } from "../src/lib/server/mcp/server";
+import { toolListing } from "../src/lib/server/mcp/tool-listing";
 import { extractSignedOAuthQuery } from "../src/lib/server/dashboard/oauth-query";
 import { GUILD_ID, makeGuild, makeMember, message, textChannel } from "./support/fakes";
 import {
@@ -233,6 +234,22 @@ describe("OAuth + MCP end to end", () => {
       params: { name: "notion_revert_change", arguments: { audit_id: 1 } },
     });
     expect(reverted.json.result.content[0].text).toBe("Reverted audit #1.");
+  });
+
+  test("the dashboard's tool listing is exactly what tools/list gives the AI", async () => {
+    const list = await mcpCall(accessToken, { jsonrpc: "2.0", id: 16, method: "tools/list", params: {} });
+    const listed = list.json.result.tools as Array<{ name: string; title: string; description: string; inputSchema: unknown }>;
+    expect(listed.map((tool) => tool.name).sort()).toEqual(h.server.tools.map((tool) => tool.name).sort());
+    for (const tool of h.server.tools) {
+      const { name, title, description, inputSchema } = toolListing(tool);
+      const entry = listed.find((candidate) => candidate.name === name)!;
+      expect({ name: entry.name, title: entry.title, description: entry.description, inputSchema: entry.inputSchema }).toEqual({
+        name,
+        title,
+        description,
+        inputSchema,
+      });
+    }
   });
 
   test("refresh token rotates", async () => {

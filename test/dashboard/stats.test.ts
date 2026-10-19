@@ -29,12 +29,14 @@ function depsFor(database: DatabaseHandle) {
   return {
     usage: new UsageStats(database.db),
     subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, () => {}),
-    toolPermissions: new Map<string, Permission>([
-      ["discord_read_messages", "discord:read"],
-      ["notion_search", "notion:read"],
-      ["notion_get_page", "notion:read"],
-      ["notion_create_page", "notion:write"],
-    ]),
+    tools: (
+      [
+        ["discord_read_messages", "discord:read"],
+        ["notion_search", "notion:read"],
+        ["notion_get_page", "notion:read"],
+        ["notion_create_page", "notion:write"],
+      ] satisfies Array<[string, Permission]>
+    ).map(([name, permission]) => ({ name, title: name, description: "", inputSchema: {}, permission })),
   };
 }
 
