@@ -1,16 +1,19 @@
-FROM oven/bun:1.4 AS build
+# Same as packageManager in package.json.
+ARG BUN_VERSION=1.4.2
+
+FROM oven/bun:${BUN_VERSION} AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN bun run build
 
-FROM oven/bun:1.4 AS deps
+FROM oven/bun:${BUN_VERSION} AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production --ignore-scripts
 
-FROM oven/bun:1.4
+FROM oven/bun:${BUN_VERSION}
 WORKDIR /app
 ENV PORT=3000 \
     DATABASE_PATH=/data/app.db

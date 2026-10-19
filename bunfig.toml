@@ -1,2 +1,6 @@
+[install]
+# Skip versions published in the last 3 days: hijacked releases are usually pulled within that time.
+minimumReleaseAge = 259200
+
 [test]
 preload = ["./scripts/compile-messages.ts"]
