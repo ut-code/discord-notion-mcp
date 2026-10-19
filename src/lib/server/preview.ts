@@ -55,18 +55,21 @@ const extraRoleId = (index: number) => String(210000000000000000n + BigInt(index
 /** Holds every role, with long names: how crowded rows look. */
 const CROWDED_ID = "300000000000000005";
 
+/** Discord's built-in default avatars (public images, no account behind them), so rows show real CDN avatars. */
+const defaultAvatar = (index: number) => `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+
 const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...rest: MemberInfo[]] = [
-  { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: null },
+  { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: defaultAvatar(0) },
   {
     userId: "300000000000000001",
     roles: [ROLE_STAFF, ROLE_MEMBER],
     nick: "田中",
     username: "tanaka",
     globalName: "Tanaka",
-    avatarUrl: null,
+    avatarUrl: defaultAvatar(1),
   },
   { userId: "300000000000000002", roles: [ROLE_MEMBER], nick: null, username: "suzuki", globalName: "鈴木", avatarUrl: null },
-  { userId: "300000000000000003", roles: [ROLE_MEMBER], nick: null, username: "sato", globalName: null, avatarUrl: null },
+  { userId: "300000000000000003", roles: [ROLE_MEMBER], nick: null, username: "sato", globalName: null, avatarUrl: defaultAvatar(3) },
   { userId: "300000000000000004", roles: [], nick: null, username: "guest_yamada", globalName: "山田 (guest)", avatarUrl: null },
   {
     userId: CROWDED_ID,
