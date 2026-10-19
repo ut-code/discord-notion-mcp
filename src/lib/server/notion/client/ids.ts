@@ -1,8 +1,9 @@
 import { ToolError } from "../../lib/errors";
 
-const COMPACT = /^[0-9a-f]{32}$/i;
-const DASHED = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const TRAILING_ID = /([0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+/** 32 hex digits, compact or dashed 8-4-4-4-12. */
+const ID = "[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const RAW_ID = new RegExp(`^(?:${ID})$`, "i");
+const TRAILING_ID = new RegExp(`(${ID})$`, "i");
 
 function formatNotionId(compact: string): string {
   const hex = compact.replace(/-/g, "").toLowerCase();
@@ -10,8 +11,7 @@ function formatNotionId(compact: string): string {
 }
 
 function normalizeRaw(value: string): string | null {
-  if (COMPACT.test(value) || DASHED.test(value)) return formatNotionId(value);
-  return null;
+  return RAW_ID.test(value) ? formatNotionId(value) : null;
 }
 
 /** Notion's app (app.notion.com, notion.so), published sites (*.notion.site) and their subdomains. */
@@ -59,9 +59,4 @@ export function requireNotionId(input: string, field: string, options: ParseIdOp
   const id = parseNotionId(input, options);
   if (!id) throw new ToolError(`Invalid "${field}": expected a Notion URL or id (32 hex characters, with or without dashes).`);
   return id;
-}
-
-/** Best-effort public URL for a page/block id when the API does not return one. */
-export function notionUrlFor(id: string): string {
-  return `https://www.notion.so/${id.replace(/-/g, "")}`;
 }
