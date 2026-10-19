@@ -1,5 +1,6 @@
 import { DiscordSnowflake, Snowflake } from "@sapphire/snowflake";
 import { z } from "zod";
+import { parseInstant } from "./instant";
 
 /** Discord ids (snowflakes) as decimal strings. */
 const SNOWFLAKE_PATTERN = /^\d{15,22}$/;
@@ -21,20 +22,13 @@ export function dateToSnowflake(date: Date): string {
   return DiscordSnowflake.generate({ timestamp: date, increment: 0n, processId: 0n, workerId: 0n }).toString();
 }
 
-const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/i;
-
-/** Accepts a message snowflake or an ISO 8601 date/datetime and returns a snowflake cursor. */
+/** Accepts a message snowflake or an ISO 8601 datetime with a UTC offset and returns a snowflake cursor. */
 export function parseMessageCursor(value: string): string {
   const trimmed = value.trim();
   if (isSnowflake(trimmed)) return trimmed;
-  if (ISO_DATETIME.test(trimmed)) {
-    const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
-    const isDateOnly = !/[T ]/.test(trimmed);
-    const normalized = hasZone || isDateOnly ? trimmed : `${trimmed}Z`;
-    const date = new Date(normalized.replace(" ", "T"));
-    if (!Number.isNaN(date.getTime())) return dateToSnowflake(date);
-  }
-  throw new Error(`Invalid cursor "${value}": expected a message id or an ISO 8601 datetime`);
+  const instant = parseInstant(trimmed);
+  if (instant) return dateToSnowflake(new Date(instant.epochMilliseconds));
+  throw new Error(`Invalid cursor "${value}": expected a message id or an ISO 8601 datetime with a time zone`);
 }
 
 /** Compared as numbers: the string fast path of `Snowflake.compare` misorders ids with leading zeros. */

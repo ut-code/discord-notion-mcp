@@ -2,6 +2,7 @@
 import { ChannelType } from "discord-api-types/v10";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
+import { INSTANT_EXAMPLE, parseInstant } from "../../lib/instant";
 import { snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
 import { NotAccessibleError } from "../access";
@@ -9,15 +10,12 @@ import type { GuildChannel } from "../api";
 import { canViewChannel } from "../permissions";
 import { byPosition, describeThread, LISTED_CHANNEL_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
-/** Accepts the archive timestamps Discord returns, e.g. "2026-10-01T12:34:56.789000+00:00". */
-const archiveTimestampSchema = z.iso.datetime({ offset: true });
-
+/** Also accepts the archive timestamps Discord returns, e.g. "2026-10-01T12:34:56.789000+00:00". */
 function parseArchiveTimestamp(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  if (!archiveTimestampSchema.safeParse(value).success) {
-    throw new ToolError('Invalid "before": expected an ISO 8601 datetime with a time zone, e.g. 2026-10-01T00:00:00Z.');
-  }
-  return new Date(value).toISOString();
+  const instant = parseInstant(value);
+  if (!instant) throw new ToolError(`Invalid "before": expected an ISO 8601 datetime with a time zone, e.g. ${INSTANT_EXAMPLE}.`);
+  return instant.toString({ smallestUnit: "millisecond" });
 }
 
 export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyToolDefinition; listThreads: AnyToolDefinition } {
@@ -78,7 +76,9 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
       before: z
         .string()
         .optional()
-        .describe("ISO 8601 datetime with time zone; return threads archived before this time (only with channel_id)"),
+        .describe(
+          `ISO 8601 datetime with time zone, e.g. ${INSTANT_EXAMPLE}; return threads archived before this time (only with channel_id)`,
+        ),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withDiscordErrors(async (args, principal) => {

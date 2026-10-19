@@ -8,7 +8,7 @@ import { NotAccessibleError } from "../access";
 import { formatMessages } from "../format";
 import { fetchHistory } from "../history";
 import { parseMessageLink } from "../links";
-import { channelLabel, formatContextFor, parseCursor, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
+import { channelLabel, cursorSchema, formatContextFor, parseCursor, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
 /** Pins are listed in pages of PIN_PAGE_SIZE, up to MAX_PINS per call. */
 const PIN_PAGE_SIZE = 50;
@@ -23,13 +23,13 @@ export function createMessageTools(deps: DiscordToolDeps): {
     name: "discord_read_messages",
     title: "Read Discord messages",
     description:
-      "Read messages from a channel or thread you can access, returned oldest first. `before`/`after` accept a message id or an ISO 8601 datetime. Without cursors, returns the latest messages.",
+      "Read messages from a channel or thread you can access, returned oldest first. `before`/`after` accept a message id or an ISO 8601 datetime with time zone. Without cursors, returns the latest messages.",
     permission: "discord:read",
     inputSchema: z.object({
       channel_id: snowflakeSchema.describe("Channel or thread id"),
       limit: z.number().int().min(1).max(200).default(50).describe("Number of messages (1-200)"),
-      before: z.string().optional().describe("Only messages before this message id or ISO 8601 datetime"),
-      after: z.string().optional().describe("Only messages after this message id or ISO 8601 datetime"),
+      before: cursorSchema("before"),
+      after: cursorSchema("after"),
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withDiscordErrors(async (args, principal) => {

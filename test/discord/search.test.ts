@@ -294,6 +294,8 @@ describe("discord_search_messages results", () => {
   });
 
   test("rejects inverted cursors", async () => {
-    await expect(search({ before: "2026-01-01", after: "2026-02-01" })).rejects.toThrow('"before" must be later than "after"');
+    await expect(search({ before: "2026-01-01T00:00:00Z", after: "2026-02-01T00:00:00Z" })).rejects.toThrow(
+      '"before" must be later than "after"',
+    );
   });
 });

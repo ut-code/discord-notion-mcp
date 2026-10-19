@@ -6,7 +6,7 @@ import { compareSnowflakes, snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
 import { formatMessage } from "../format";
 import { buildSearchScope, MAX_SEARCH_OFFSET, searchReadableMessages } from "../search";
-import { formatContextFor, parseCursor, SEARCH_HAS_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
+import { cursorSchema, formatContextFor, parseCursor, SEARCH_HAS_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
 export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyToolDefinition } {
   const searchMessages = defineTool({
@@ -23,8 +23,8 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
       has: z.array(z.enum(SEARCH_HAS_TYPES)).max(SEARCH_HAS_TYPES.length).optional().describe("Only messages containing all of these"),
       pinned: z.boolean().optional().describe("Only pinned (true) or unpinned (false) messages"),
       exclude_bots: z.boolean().default(false).describe("Exclude messages from bots and webhooks"),
-      before: z.string().optional().describe("Only messages before this message id or ISO 8601 datetime"),
-      after: z.string().optional().describe("Only messages after this message id or ISO 8601 datetime"),
+      before: cursorSchema("before"),
+      after: cursorSchema("after"),
       sort: z.enum(["newest", "oldest", "relevance"]).default("newest"),
       limit: z.number().int().min(1).max(25).default(25).describe("Results per page (1-25)"),
       offset: z.number().int().min(0).max(MAX_SEARCH_OFFSET).default(0).describe("Number of results to skip"),

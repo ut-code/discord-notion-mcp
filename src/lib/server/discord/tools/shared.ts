@@ -1,7 +1,9 @@
 // Shared types, constants and helpers used by the Discord tool modules.
 import { DiscordAPIError } from "@discordjs/rest";
 import { ChannelType, GuildScheduledEventStatus, MessageSearchHasType, type APIThreadChannel } from "discord-api-types/v10";
+import { z } from "zod";
 import { ToolError } from "../../lib/errors";
+import { INSTANT_EXAMPLE } from "../../lib/instant";
 import { compareSnowflakes, parseMessageCursor } from "../../lib/snowflake";
 import type { Principal, ToolResult } from "../../mcp/registry";
 import { NotAccessibleError, type ChannelAccess, type ChannelDirectory, type ResolvedChannel, type Viewer } from "../access";
@@ -74,12 +76,20 @@ export function withDiscordErrors<A>(handler: (args: A, principal: Principal) =>
   };
 }
 
+/** A `before` / `after` argument, read with parseCursor. */
+export function cursorSchema(field: "before" | "after") {
+  return z
+    .string()
+    .optional()
+    .describe(`Only messages ${field} this message id or ISO 8601 datetime with time zone, e.g. ${INSTANT_EXAMPLE}`);
+}
+
 export function parseCursor(value: string | undefined, field: string): string | undefined {
   if (value === undefined) return undefined;
   try {
     return parseMessageCursor(value);
   } catch {
-    throw new ToolError(`Invalid "${field}": expected a message id or an ISO 8601 datetime.`);
+    throw new ToolError(`Invalid "${field}": expected a message id or an ISO 8601 datetime with a time zone, e.g. ${INSTANT_EXAMPLE}.`);
   }
 }
 

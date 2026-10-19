@@ -51,13 +51,9 @@ describe("parseMessageCursor", () => {
     expect(parseMessageCursor("2016-04-30T20:18:25.796+09:00")).toBe(dateToSnowflake(new Date("2016-04-30T11:18:25.796Z")));
   });
 
-  test("treats zone-less datetimes and plain dates as UTC", () => {
-    expect(parseMessageCursor("2026-10-12T00:00:00")).toBe(dateToSnowflake(new Date("2026-10-12T00:00:00Z")));
-    expect(parseMessageCursor("2026-10-12")).toBe(dateToSnowflake(new Date("2026-10-12T00:00:00Z")));
-  });
-
-  test("rejects garbage", () => {
-    expect(() => parseMessageCursor("yesterday")).toThrow();
-    expect(() => parseMessageCursor("12345")).toThrow();
+  test("rejects datetimes and dates without a time zone, and garbage", () => {
+    for (const value of ["2026-10-12T00:00:00", "2026-10-12", "yesterday", "12345"]) {
+      expect(() => parseMessageCursor(value)).toThrow();
+    }
   });
 });
