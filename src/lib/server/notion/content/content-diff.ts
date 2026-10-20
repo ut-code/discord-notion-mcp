@@ -64,7 +64,7 @@ function occurrences(text: string, needle: string): 0 | 1 | 2 {
  * and drops blank lines between blocks, so neither may count as someone else's change.
  */
 const comparable = (lines: readonly string[]) =>
-  lines.map((line) => line.replace(/^(\s*)\d+\.(\s)/, "$11.$2").trimEnd()).filter((line) => line !== "");
+  lines.map((line) => line.replace(/^(?<indent>\s*)\d+\.(?<space>\s)/, "$<indent>1.$<space>").trimEnd()).filter((line) => line !== "");
 
 const lineAt = (text: string, offset: number) => text.slice(0, offset).split("\n").length - 1;
 
