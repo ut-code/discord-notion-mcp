@@ -12,7 +12,7 @@ import { ChannelAccess, ChannelDirectory } from "./discord/access";
 import { RestDiscordApi, type DiscordApi } from "./discord/api";
 import { CachedGuildDirectory } from "./discord/directory";
 import { createDiscordTools } from "./discord/tools";
-import { createHttpHandler, type HttpHandler } from "./http";
+import { createHttpHandler, withSecurityHeaders, type HttpHandler } from "./http";
 import { logError, logEvent, type ErrorSink, type EventSink } from "./lib/log";
 import { createMcpEndpoint } from "./mcp/endpoint";
 import type { AnyToolDefinition } from "./mcp/registry";
@@ -52,6 +52,8 @@ export interface ComposeOptions {
 export interface AppServer {
   /** Runs before SvelteKit: /mcp, /api/auth/*, /.well-known/*, /healthz, and the UI's CSRF check. */
   http: HttpHandler;
+  /** The security headers of every response (http.ts), for the responses SvelteKit resolves. */
+  withSecurityHeaders: (response: Response) => Response;
   /** Data and actions of the browser pages. */
   dashboard: DashboardDeps;
   auth: Auth;
@@ -159,6 +161,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
 
   return {
     http,
+    withSecurityHeaders: (response) => withSecurityHeaders(response, config.publicUrl.startsWith("https:")),
     dashboard,
     auth,
     database,

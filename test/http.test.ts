@@ -45,6 +45,19 @@ describe("http handler", () => {
     expect(seen).toEqual(["203.0.113.7", ""]);
   });
 
+  test("a public URL on HTTPS asks browsers to keep to HTTPS", async () => {
+    const handler = (publicOrigin: string) =>
+      createHttpHandler({
+        auth: fakeAuth(async () => new Response()),
+        mcpEndpoint: async () => new Response(),
+        trustedProxyCount: 0,
+        publicOrigin,
+      });
+    const secure = (await handler("https://x")(new Request("https://x/healthz")))!;
+    expect(secure.headers.get("strict-transport-security")).toBe("max-age=31536000");
+    expect((await handler("http://x")(new Request("http://x/healthz")))!.headers.has("strict-transport-security")).toBe(false);
+  });
+
   test("without trusted proxies the socket address is used", async () => {
     const seen: Array<string | null> = [];
     const http = createHttpHandler({
@@ -96,8 +109,15 @@ describe("http handler", () => {
 });
 
 describe("security headers", () => {
+  test("no MIME sniffing; HTTPS only from then on when served over HTTPS, its subdomains left alone", () => {
+    const plain = withSecurityHeaders(new Response("ok"), false);
+    expect(plain.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(plain.headers.has("strict-transport-security")).toBe(false);
+    expect(withSecurityHeaders(new Response("ok"), true).headers.get("strict-transport-security")).toBe("max-age=31536000");
+  });
+
   test("a cache policy chosen by the handler is kept", () => {
-    const res = withSecurityHeaders(new Response("ok", { headers: { "Cache-Control": "public, max-age=60" } }));
+    const res = withSecurityHeaders(new Response("ok", { headers: { "Cache-Control": "public, max-age=60" } }), false);
     expect(res.headers.get("cache-control")).toBe("public, max-age=60");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
   });
@@ -115,7 +135,7 @@ describe("security headers", () => {
 
   test("immutable responses are copied", () => {
     const frozen = withFrozenHeaders(Response.redirect("http://x/next", 302), new TypeError("immutable"));
-    const res = withSecurityHeaders(frozen);
+    const res = withSecurityHeaders(frozen, false);
     expect(res).not.toBe(frozen);
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("http://x/next");
@@ -124,7 +144,7 @@ describe("security headers", () => {
 
   test("other failures while setting headers are not mistaken for immutability", () => {
     const broken = withFrozenHeaders(new Response("x"), new RangeError("unexpected"));
-    expect(() => withSecurityHeaders(broken)).toThrow("unexpected");
+    expect(() => withSecurityHeaders(broken, false)).toThrow("unexpected");
   });
 });
 

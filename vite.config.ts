@@ -31,6 +31,7 @@ export default defineConfig({
           "script-src-attr": ["unsafe-hashes", "sha256-7dQwUgLau1NFCCGjfn9FsYptB6ZtWxJin6VohGIu20I="],
           "style-src": ["self", "unsafe-inline", "https://fonts.googleapis.com"],
           "font-src": ["https://fonts.gstatic.com"],
+          // data: for icons drawn in CSS (app.css) and the preview's server icon; the CDN for Discord avatars.
           "img-src": ["self", "data:", "https://cdn.discordapp.com"],
           "connect-src": ["self"],
           "base-uri": ["self"],

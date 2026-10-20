@@ -32,11 +32,14 @@ const notFound = () => Response.json({ error: "not_found" }, { status: 404 });
 /**
  * Applied to every response, UI included: no framing, no referrer leaving this origin
  * (same-origin requests keep a real Origin header, which "no-referrer" would turn into
- * `Origin: null` and break CSRF checks), and no caching unless the handler chose a policy.
- * Pages carry SvelteKit's full policy (`csp` of sveltekit() in vite.config.ts, which includes
- * frame-ancestors); every other response gets the frame-ancestors policy here.
+ * `Origin: null` and break CSRF checks), no MIME sniffing, no caching unless the handler chose
+ * a policy, and, served over HTTPS, HTTPS only from then on (not for subdomains, which other
+ * services may share). Pages carry SvelteKit's full policy (`csp` of sveltekit() in
+ * vite.config.ts, which includes frame-ancestors); every other response gets the
+ * frame-ancestors policy here. Static files (`_app/*`) are served by adapter-node before
+ * any hook and go without these headers.
  */
-export function withSecurityHeaders(response: Response): Response {
+export function withSecurityHeaders(response: Response, https: boolean): Response {
   let target = response;
   try {
     target.headers.set("X-Frame-Options", "DENY");
@@ -49,11 +52,16 @@ export function withSecurityHeaders(response: Response): Response {
   const headers = target.headers;
   if (!headers.has("Content-Security-Policy")) headers.set("Content-Security-Policy", "frame-ancestors 'none'");
   headers.set("Referrer-Policy", "same-origin");
+  headers.set("X-Content-Type-Options", "nosniff");
   if (!headers.has("Cache-Control")) headers.set("Cache-Control", "no-store");
+  if (https) headers.set("Strict-Transport-Security", "max-age=31536000");
   return target;
 }
 
-/** CSRF for the UI: state-changing requests must carry this origin. */
+/**
+ * CSRF for the UI: state-changing requests must carry this origin. Browsers send Origin on
+ * every write, so one without it is refused too rather than let through unchecked.
+ */
 function isCrossOriginWrite(request: Request, ownOrigins: ReadonlySet<string>): boolean {
   if (SAFE_METHODS.has(request.method)) return false;
   const origin = request.headers.get("origin");
@@ -79,6 +87,7 @@ export function createHttpHandler(deps: HttpDeps): HttpHandler {
   const reportEvent = deps.logEvent ?? logEvent;
   const reportError = deps.logError ?? logError;
   const ownOrigins = new Set([deps.publicOrigin, ...(deps.otherOrigins ?? [])]);
+  const https = deps.publicOrigin.startsWith("https:");
 
   const clientIp = (request: Request, socketAddress?: () => string | null): string | null => {
     if (deps.trustedProxyCount > 0) return clientIpFromForwardedFor(request.headers.get("x-forwarded-for"), deps.trustedProxyCount);
@@ -111,16 +120,16 @@ export function createHttpHandler(deps: HttpDeps): HttpHandler {
   return async (request, socketAddress) => {
     try {
       const response = await route(request, socketAddress);
-      if (response) return withSecurityHeaders(response);
+      if (response) return withSecurityHeaders(response, https);
       if (isCrossOriginWrite(request, ownOrigins)) {
         const { pathname } = new URL(request.url);
         reportEvent({ event: "cross_origin_write_refused", method: request.method, path: pathname, origin: request.headers.get("origin") });
-        return withSecurityHeaders(crossOriginRefusal(request, deps.publicOrigin));
+        return withSecurityHeaders(crossOriginRefusal(request, deps.publicOrigin), https);
       }
       return null;
     } catch (error) {
       reportError({ event: "http_error", path: new URL(request.url).pathname, error: errorMessage(error) });
-      return withSecurityHeaders(Response.json({ error: "internal_error" }, { status: 500 }));
+      return withSecurityHeaders(Response.json({ error: "internal_error" }, { status: 500 }), https);
     }
   };
 }
