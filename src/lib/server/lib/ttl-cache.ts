@@ -1,6 +1,10 @@
 export type Clock = () => number;
 
-export const systemClock: Clock = () => Date.now();
+/**
+ * Milliseconds on a monotonic clock. Unlike Date.now(), it never jumps when the system time is
+ * set, so an expiry or a refill stays as long as intended.
+ */
+export const systemClock: Clock = () => performance.now();
 
 interface Entry<V> {
   value: V;
@@ -21,31 +25,13 @@ export class TtlCache<K, V> {
     private readonly maxEntries = Number.POSITIVE_INFINITY,
   ) {}
 
-  get(key: K): V | undefined {
-    const entry = this.entries.get(key);
-    if (!entry) return undefined;
-    if (entry.expiresAt <= this.clock()) {
-      this.entries.delete(key);
-      return undefined;
-    }
-    return entry.value;
-  }
-
-  set(key: K, value: V): void {
+  private set(key: K, value: V): void {
     this.entries.delete(key);
     this.entries.set(key, { value, expiresAt: this.clock() + this.ttlMs });
     for (const oldest of this.entries.keys()) {
       if (this.entries.size <= this.maxEntries) break;
       this.entries.delete(oldest);
     }
-  }
-
-  delete(key: K): void {
-    this.entries.delete(key);
-  }
-
-  clear(): void {
-    this.entries.clear();
   }
 
   async getOrLoad(key: K, loader: () => Promise<V>): Promise<V> {

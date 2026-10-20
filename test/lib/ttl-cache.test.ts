@@ -36,10 +36,24 @@ describe("TtlCache", () => {
     const loader = async () => ++loads;
     expect(await cache.getOrLoad("k", loader)).toBe(1);
     now = 999;
-    expect(cache.get("k")).toBe(1);
+    expect(await cache.getOrLoad("k", loader)).toBe(1);
     now = 1000;
-    expect(cache.get("k")).toBeUndefined();
     expect(await cache.getOrLoad("k", loader)).toBe(2);
+  });
+
+  test("while an expired entry is loaded again, other reads wait for that load instead of taking the old value", async () => {
+    let now = 0;
+    const cache = new TtlCache<string, number>(1000, () => now);
+    await cache.getOrLoad("k", async () => 1);
+    now = 1000;
+    const gate = deferred<number>();
+    let loads = 0;
+    const loader = () => (loads++, gate.promise);
+    const first = cache.getOrLoad("k", loader);
+    const second = cache.getOrLoad("k", loader);
+    gate.resolve(2);
+    expect(await Promise.all([first, second])).toEqual([2, 2]);
+    expect(loads).toBe(1);
   });
 
   test("a failed load is not cached and does not block later loads", async () => {
@@ -48,14 +62,16 @@ describe("TtlCache", () => {
     expect(await cache.getOrLoad("k", async () => 3)).toBe(3);
   });
 
-  test("maxEntries drops the least recently stored entries", () => {
+  test("maxEntries drops the least recently stored entries, however recently read", async () => {
     const cache = new TtlCache<string, number>(1000, () => 0, 2);
-    cache.set("a", 1);
-    cache.set("b", 2);
-    cache.set("a", 3);
-    cache.set("c", 4);
-    expect(cache.get("b")).toBeUndefined();
-    expect(cache.get("a")).toBe(3);
-    expect(cache.get("c")).toBe(4);
+    let loads = 0;
+    const load = (key: string) => cache.getOrLoad(key, async () => ++loads);
+    await load("a");
+    await load("b");
+    expect(await load("a")).toBe(1);
+    await load("c");
+    expect(await load("b")).toBe(2);
+    expect(await load("c")).toBe(3);
+    expect(await load("a")).toBe(4);
   });
 });
