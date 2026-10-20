@@ -98,7 +98,7 @@ export function createWriteTools(deps: NotionToolDeps): {
   const editContent = defineTool({
     name: "notion_edit_content",
     title: "Edit Notion page content",
-    description: `Edit a page's content by search and replace on its Notion-flavored Markdown. Call notion_get_page first and copy old_str exactly from the current content. Each old_str must match exactly one place: include surrounding text to make it unique. To insert new blocks in the middle, use an anchor sentence as old_str and the anchor followed by the new blocks as new_str (e.g. old_str "Anchor." → new_str "Anchor.\\n\\nNew paragraph."). To delete, set new_str to "" or to the surrounding text without the removed part. Edits are applied in order. ${NO_CHILD_OBJECTS} ${WRITE_NOTE}`,
+    description: `Edit a page's content by search and replace on its Notion-flavored Markdown. Call notion_get_page first and copy old_str exactly from the current content. Each old_str must match exactly one place: include surrounding text to make it unique. To insert new blocks in the middle, use an anchor sentence as old_str and the anchor followed by the new blocks as new_str (e.g. old_str "Anchor." → new_str "Anchor.\\n\\nNew paragraph."). To delete, set new_str to "" or to the surrounding text without the removed part. Edits are applied in order. An edit whose old_str matches nothing is skipped and reported while the others apply; when every edit matches nothing, or one matches several places, nothing is applied. ${NO_CHILD_OBJECTS} ${WRITE_NOTE}`,
     permission: "notion:write",
     inputSchema: z.object({
       page: idOrUrl("Page"),
@@ -120,7 +120,17 @@ export function createWriteTools(deps: NotionToolDeps): {
         edits: args.edits,
         request: args,
       });
-      return [`Applied ${args.edits.length} edit(s) to ${outcome.url} — audit #${outcome.auditId}`, ...outcomeLines(outcome)].join("\n");
+      const total = args.edits.length;
+      const applied = total - outcome.missedEdits.length;
+      const lines = [
+        `Applied ${applied === total ? total : `${applied} of ${total}`} edit(s) to ${outcome.url} — audit #${outcome.auditId}`,
+      ];
+      if (outcome.missedEdits.length > 0) {
+        lines.push(
+          `Not applied, as Notion found no match (retry only these, with old_str copied from notion_get_page): ${outcome.missedEdits.join(" ")}`,
+        );
+      }
+      return [...lines, ...outcomeLines(outcome)].join("\n");
     }),
   });
 

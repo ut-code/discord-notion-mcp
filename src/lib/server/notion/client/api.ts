@@ -60,6 +60,18 @@ export interface PageMarkdown {
   unknownBlockIds: string[];
 }
 
+/** Code of the warning for an update_content edit that matched nothing. */
+export const NO_MATCH_WARNING = "no_match";
+
+/** The page content after an edit, with what Notion warned about it. */
+export interface EditedPageMarkdown extends PageMarkdown {
+  /**
+   * E.g. NO_MATCH_WARNING: Notion applies the update_content edits that match and reports each
+   * miss here instead of failing (it fails only when every edit misses).
+   */
+  warnings: Array<{ code: string; message: string }>;
+}
+
 /** A workspace member, guest or bot. Emails are not read (the integration does not need them). */
 export interface NotionUser {
   id: string;
@@ -133,7 +145,7 @@ export interface NotionApi {
   retrievePropertyItems(pageId: string, propertyId: string): Promise<PropertyItemObjectResponse[]>;
   retrievePageMarkdown(pageId: string): Promise<PageMarkdown>;
   /** Edits page content; returns the full resulting markdown. */
-  updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<PageMarkdown>;
+  updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<EditedPageMarkdown>;
   retrieveUser(userId: string): Promise<NotionUser>;
   retrieveDatabase(databaseId: string): Promise<NotionDatabase>;
   retrieveDataSource(dataSourceId: string): Promise<NotionDataSource>;
@@ -182,6 +194,16 @@ function retryDelayMs(error: unknown, kind: "read" | "write", attempt: number): 
     return attempt === 0 && wait !== undefined && wait <= MAX_RATE_LIMIT_WAIT_MS ? wait : null;
   }
   return kind === "read" && SERVER_FAILURES.has(code) ? INITIAL_RETRY_DELAY_MS * 2 ** attempt : null;
+}
+
+/** The `warnings` Notion returns with an edit, which the SDK's response type lacks. */
+function editWarnings(response: unknown): EditedPageMarkdown["warnings"] {
+  if (!isRecord(response) || !Array.isArray(response.warnings)) return [];
+  return response.warnings.flatMap((warning) =>
+    isRecord(warning) && typeof warning.code === "string" && typeof warning.message === "string"
+      ? [{ code: warning.code, message: warning.message }]
+      : [],
+  );
 }
 
 function expectFull<R, T extends R>(value: R, guard: (value: R) => value is T, what: string): T {
@@ -268,9 +290,14 @@ export class SdkNotionApi implements NotionApi {
     return { markdown: response.markdown, truncated: response.truncated, unknownBlockIds: response.unknown_block_ids };
   }
 
-  async updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<PageMarkdown> {
+  async updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<EditedPageMarkdown> {
     const response = await this.call(() => this.client.pages.updateMarkdown({ page_id: pageId, ...update }), "write");
-    return { markdown: response.markdown, truncated: response.truncated, unknownBlockIds: response.unknown_block_ids };
+    return {
+      markdown: response.markdown,
+      truncated: response.truncated,
+      unknownBlockIds: response.unknown_block_ids,
+      warnings: editWarnings(response),
+    };
   }
 
   async retrieveUser(userId: string): Promise<NotionUser> {

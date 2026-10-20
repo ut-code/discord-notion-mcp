@@ -194,6 +194,18 @@ describe("Notion tools", () => {
     await expect(
       call("notion_edit_content", { page: page.id, edits: [{ old_str: "Anchor B.", new_str: '<page url="">Sub</page>' }] }),
     ).rejects.toThrow("notion_create_page");
+    const partial = await call("notion_edit_content", {
+      page: page.id,
+      edits: [
+        { old_str: "Anchor B.", new_str: "Anchor B, edited." },
+        { old_str: "Gone", new_str: "x" },
+      ],
+    });
+    expect(partial).toContain("Applied 1 of 2 edit(s)");
+    expect(partial).toContain(
+      "Not applied, as Notion found no match (retry only these, with old_str copied from notion_get_page): No matches found for Gone.",
+    );
+    expect(api.markdown.get(page.id)).toBe("Anchor A.\n\nInserted paragraph.\nAnchor B, edited.");
     expect(() => tools.get("notion_edit_content")!.inputSchema.parse({ page: page.id, edits: [] })).toThrow();
     expect(tools.get("notion_edit_content")!.description).toContain("exactly one place");
   });

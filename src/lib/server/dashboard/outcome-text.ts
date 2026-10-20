@@ -9,10 +9,6 @@ import { formatJst } from "./format";
 
 function blockerText(blocker: RevertBlocker): string {
   switch (blocker) {
-    case "no_anchor":
-      return m.revert_blocker_no_anchor();
-    case "ambiguous_inverse":
-      return m.revert_blocker_ambiguous_inverse();
     case "truncated_after_write":
       return m.revert_blocker_truncated_after_write();
     case "concurrent_edit":
@@ -96,8 +92,10 @@ export function auditNoteText(stored: unknown): string | null {
 
 function failureText(failure: RevertFailure): string {
   switch (failure.kind) {
-    case "text_gone":
-      return m.revert_failure_text_gone({ notionMessage: failure.notionMessage });
+    case "changed_meanwhile":
+      return m.revert_failure_changed_meanwhile();
+    case "refused":
+      return m.revert_failure_refused({ notionMessage: failure.notionMessage });
     case "nothing_restorable":
       return m.revert_failure_nothing_restorable({ skipped: skippedText(failure.skipped) });
     case "superseded":
@@ -153,12 +151,7 @@ export function revertReasonText(reason: RevertReason): string {
   }
 }
 
-function revertHeadText({ forced, partial }: { forced: boolean; partial: boolean }): string {
-  if (forced) return partial ? m.revert_success_forced_partial() : m.revert_success_forced();
-  return partial ? m.revert_success_partial() : m.revert_success();
-}
-
-export function revertSuccessText(result: { forced: boolean; partial: boolean; note: RevertNote | null }): string {
-  const head = revertHeadText(result);
+export function revertSuccessText(result: { partial: boolean; note: RevertNote | null }): string {
+  const head = result.partial ? m.revert_success_partial() : m.revert_success();
   return result.note ? `${head}${noteText(result.note)}` : head;
 }

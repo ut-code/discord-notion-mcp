@@ -1,9 +1,6 @@
 <script lang="ts">
   import TriangleAlertIcon from "@lucide/svelte/icons/triangle-alert";
   import Undo2Icon from "@lucide/svelte/icons/undo-2";
-  import { enhance } from "$app/forms";
-  import { page } from "$app/state";
-  import { actionUrl } from "#lib/action-url.js";
   import ConfirmDialog from "#lib/components/app/confirm-dialog.svelte";
   import ToneBadge from "#lib/components/app/tone-badge.svelte";
   import * as Alert from "#lib/components/ui/alert/index.js";
@@ -16,7 +13,6 @@
 
   const hydrated = useHydrated();
   let confirming = $state(false);
-  const action = $derived(actionUrl(page.url, "revert"));
 </script>
 
 <aside class="col-side" aria-labelledby="revert-heading">
@@ -35,8 +31,7 @@
     {:else if revert.state === "unavailable"}
       <p class="text-muted-foreground">{revert.reason}</p>
     {:else if conflict}
-      <form method="post" {action} class="stack gap-4" use:enhance>
-        <input type="hidden" name="force" value="true" />
+      <div class="stack gap-4">
         <Alert.Root class="rounded-lg border-warn-border bg-warn-bg p-3.5 *:[svg]:text-warn-icon">
           <TriangleAlertIcon />
           <Alert.Title class="font-semibold text-warn-text">{m.revert_card_conflict_title()}</Alert.Title>
@@ -44,22 +39,12 @@
             {m.revert_card_conflict_body()}
           </Alert.Description>
         </Alert.Root>
-        <label class="flex cursor-pointer items-start gap-2.5 text-sm">
-          <input type="checkbox" name="confirm" value="yes" required class="mt-0.5 size-4 shrink-0 accent-primary" />
-          <span>{m.revert_card_conflict_confirm()}</span>
-        </label>
-        <div class="stack gap-2">
-          <Button type="submit" variant="destructive" class="w-full">
-            <Undo2Icon />
-            {m.revert_card_force()}
-          </Button>
-          {#if targetUrl}
-            <Button variant="outline" class="w-full" href={targetUrl} target="_blank" rel="noopener noreferrer"
-              >{m.revert_card_open_in_notion()}</Button
-            >
-          {/if}
-        </div>
-      </form>
+        {#if targetUrl}
+          <Button variant="outline" class="w-full" href={targetUrl} target="_blank" rel="noopener noreferrer"
+            >{m.revert_card_open_in_notion()}</Button
+          >
+        {/if}
+      </div>
     {:else}
       <!-- Before hydration the button opens the dialog's native popover. -->
       <Button

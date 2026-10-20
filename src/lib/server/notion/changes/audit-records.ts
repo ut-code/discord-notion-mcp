@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { isRecord } from "../../../guards";
-import type { ContentHunk } from "../content/content-diff";
 import type { PagePropertyValue, PropertyWriteRefusal } from "../content/properties";
-import type { PageMarkdownUpdate } from "../client/types";
 import type { RevertBlocker } from "./revert-reasons";
 
 /*
@@ -13,29 +11,14 @@ import type { RevertBlocker } from "./revert-reasons";
 
 export const ContentUpdateSchema = z.object({ old_str: z.string(), new_str: z.string() });
 
-/** The parts of the `request` column (the tool arguments) shown for failed content writes, which have no hunks. */
+/** The parts of the `request` column (the tool arguments) shown for content writes whose content was not recorded. */
 export const AppendContentRequestSchema = z.object({ content: z.string() });
 /** Entries are checked one by one with ContentUpdateSchema so one malformed edit does not hide the rest. */
 export const EditContentRequestSchema = z.object({ edits: z.array(z.unknown()) });
 /** The requested values of update_properties, keyed by property name or id. */
 export const UpdatePropertiesRequestSchema = z.object({ properties: z.record(z.string(), z.unknown()) });
 
-const pageMarkdownUpdateSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("update_content"),
-    update_content: z.object({ content_updates: z.array(ContentUpdateSchema) }),
-  }),
-  z.object({
-    type: z.literal("insert_content"),
-    insert_content: z.object({ content: z.string(), position: z.object({ type: z.enum(["start", "end"]) }) }),
-  }),
-]) satisfies z.ZodType<PageMarkdownUpdate>;
-
-const contentHunkSchema = z.object({ before: z.string(), after: z.string() }) satisfies z.ZodType<ContentHunk>;
-
 const revertBlockerSchema = z.enum([
-  "no_anchor",
-  "ambiguous_inverse",
   "concurrent_edit",
   "unlocated_edit",
   "truncated_after_write",
@@ -54,23 +37,24 @@ export const CreatePageSnapshotSchema = z.object({
 export const CreatePageResultSchema = z.object({ pageId: z.string(), url: z.string() });
 export type CreatePageResult = z.infer<typeof CreatePageResultSchema>;
 
-/** Snapshot of append_content / edit_content: what revert needs, without whole-page copies. */
+/**
+ * Snapshot of append_content / edit_content. The content itself is in notion_audit_content: revert
+ * puts `before` back while the page still hashes to `afterSha256`.
+ */
 export const ContentSnapshotSchema = z.object({
   beforeSha256: z.string(),
   /** Hash of the markdown returned by the write; null when it could not be determined. */
   afterSha256: z.string().nullable(),
-  /** The update that restores the previous content; null when there is nothing to restore or it cannot be computed. */
-  inverse: pageMarkdownUpdateSchema.nullable(),
   /** Set when the change cannot be reverted automatically. */
   revertBlocker: revertBlockerSchema.nullable(),
-  hunks: z.array(contentHunkSchema),
 });
 export type ContentSnapshot = z.infer<typeof ContentSnapshotSchema>;
 
 /** A content write as recorded before it runs (and kept when it fails): the hash of the content it applies to. */
 export const ContentBeforeSnapshotSchema = ContentSnapshotSchema.pick({ beforeSha256: true });
 
-export const ContentWriteResultSchema = z.object({ changedHunks: z.number().int().nonnegative() });
+/** Notion's message for each edit it found no match for (and so did not apply), in its order. */
+export const ContentWriteResultSchema = z.object({ missedEdits: z.array(z.string()) });
 export type ContentWriteResult = z.infer<typeof ContentWriteResultSchema>;
 
 const PropertySnapshotEntrySchema = z.object({

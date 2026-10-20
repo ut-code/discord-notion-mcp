@@ -1,133 +1,62 @@
 import { createHash } from "node:crypto";
-import { diffArrays } from "diff";
-import type { ContentUpdate, PageMarkdownUpdate } from "../client/types";
+import { diffArrays, type ArrayChange } from "diff";
+import type { PageMarkdownUpdate } from "../client/types";
 
 export function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
-/** Occurrences of `needle` in `text`, counting overlapping matches (an empty needle matches everywhere). */
-export function countOccurrences(text: string, needle: string): number {
-  if (!needle) return Number.POSITIVE_INFINITY;
-  let count = 0;
-  for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + 1)) count++;
-  return count;
-}
-
-export class ContentUpdateError extends Error {
-  override name = "ContentUpdateError";
-}
-
-function preview(text: string): string {
-  return JSON.stringify(text.length > 80 ? `${text.slice(0, 80)}…` : text);
-}
-
-/**
- * Applies updates in order with the semantics of Notion's update_content: each old_str
- * must occur exactly once in the text as updated so far.
- */
-export function applyContentUpdates(text: string, updates: readonly ContentUpdate[]): string {
-  let current = text;
-  for (const update of updates) {
-    const count = countOccurrences(current, update.old_str);
-    if (count === 0) throw new ContentUpdateError(`No matches found for old_str ${preview(update.old_str)}.`);
-    if (count > 1) throw new ContentUpdateError(`Multiple matches found for old_str ${preview(update.old_str)}.`);
-    const at = current.indexOf(update.old_str);
-    current = current.slice(0, at) + update.new_str + current.slice(at + update.old_str.length);
-  }
-  return current;
-}
-
-/** A changed region: lines [aStart, aEnd) of `before` became lines [bStart, bEnd) of `after`. */
-interface Hunk {
-  aStart: number;
-  aEnd: number;
-  bStart: number;
-  bEnd: number;
-}
-
-/** Changed lines only, for display in the audit log. */
+/** A changed stretch of a page: lines removed and lines added, for display. */
 export interface ContentHunk {
   before: string;
   after: string;
 }
 
-function lineHunks(a: string[], b: string[]): Hunk[] {
-  const hunks: Hunk[] = [];
-  let ai = 0;
-  let bi = 0;
-  let open: Hunk | null = null;
-  for (const change of diffArrays(a, b)) {
-    const n = change.value.length;
+/** Longest a diff for display may take; past it the whole changed stretch shows as one hunk. */
+const DIFF_TIMEOUT_MS = 50;
+
+/**
+ * The changed stretches between two versions of a page, line by line. Lines both share at the
+ * start and the end are set aside first, so the diff only sees what changed; a diff that takes
+ * too long (many changed lines) gives one hunk for that whole stretch instead.
+ */
+export function contentHunks(before: string, after: string): ContentHunk[] {
+  if (before === after) return [];
+  const a = before.split("\n");
+  const b = after.split("\n");
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  const changedA = a.slice(head, a.length - tail);
+  const changedB = b.slice(head, b.length - tail);
+  const changes = diffArrays(changedA, changedB, { timeout: DIFF_TIMEOUT_MS });
+  if (!changes) return [{ before: changedA.join("\n"), after: changedB.join("\n") }];
+  return groupChanges(changes);
+}
+
+/** Consecutive removed and added runs as hunks; unchanged runs separate them. */
+function groupChanges(changes: readonly ArrayChange<string>[]): ContentHunk[] {
+  const hunks: ContentHunk[] = [];
+  let open: { before: string[]; after: string[] } | null = null;
+  for (const change of changes) {
     if (!change.added && !change.removed) {
-      if (open) hunks.push(open);
+      if (open) hunks.push({ before: open.before.join("\n"), after: open.after.join("\n") });
       open = null;
-      ai += n;
-      bi += n;
       continue;
     }
-    open ??= { aStart: ai, aEnd: ai, bStart: bi, bEnd: bi };
-    if (change.removed) {
-      ai += n;
-      open.aEnd = ai;
-    } else {
-      bi += n;
-      open.bEnd = bi;
-    }
+    open ??= { before: [], after: [] };
+    (change.removed ? open.before : open.after).push(...change.value);
   }
-  if (open) hunks.push(open);
+  if (open) hunks.push({ before: open.before.join("\n"), after: open.after.join("\n") });
   return hunks;
 }
 
-const isBlank = (line: string | undefined) => line !== undefined && line.trim() === "";
-
-/**
- * Builds inverse updates (old_str from `after`, new_str from `before`) for each hunk.
- * Context lines are added one above and one below at a time until the old_str is
- * unambiguous, both in `after` and in the text as it will be when this update is
- * applied (earlier inverse updates already done). Both sides must be non-empty so the
- * line separators stay balanced, and edges prefer non-blank lines because Notion
- * matches blocks whitespace-tolerantly. Groups that touch or overlap are merged.
- */
-function inverseUpdates(a: string[], b: string[], raw: Hunk[], after: string): ContentUpdate[] {
-  const groups: Hunk[] = [];
-  const satisfied = (g: Hunk): boolean => {
-    if (g.aEnd === g.aStart || g.bEnd === g.bStart) return false;
-    if (g.bStart > 0 && isBlank(b[g.bStart])) return false;
-    if (g.bEnd < b.length && isBlank(b[g.bEnd - 1])) return false;
-    const oldStr = b.slice(g.bStart, g.bEnd).join("\n");
-    if (countOccurrences(after, oldStr) !== 1) return false;
-    const atApplication = [...a.slice(0, g.aStart), ...b.slice(g.bStart)].join("\n");
-    return countOccurrences(atApplication, oldStr) === 1;
-  };
-
-  let next = 0;
-  for (let start = raw[next]; start !== undefined; start = raw[next]) {
-    next++;
-    let g: Hunk = { ...start };
-    for (;;) {
-      const previous = groups.at(-1);
-      if (previous && previous.bEnd >= g.bStart) {
-        groups.pop();
-        g = { aStart: previous.aStart, aEnd: g.aEnd, bStart: previous.bStart, bEnd: g.bEnd };
-        continue;
-      }
-      const following = raw[next];
-      if (following && following.bStart <= g.bEnd) {
-        g = { ...g, aEnd: following.aEnd, bEnd: following.bEnd };
-        next++;
-        continue;
-      }
-      if (satisfied(g)) break;
-      const canGrowUp = g.bStart > 0;
-      const canGrowDown = g.bEnd < b.length;
-      if (!canGrowUp && !canGrowDown) break;
-      if (canGrowUp) g = { ...g, aStart: g.aStart - 1, bStart: g.bStart - 1 };
-      if (canGrowDown) g = { ...g, aEnd: g.aEnd + 1, bEnd: g.bEnd + 1 };
-    }
-    groups.push(g);
-  }
-  return groups.map((g) => ({ old_str: b.slice(g.bStart, g.bEnd).join("\n"), new_str: a.slice(g.aStart, g.aEnd).join("\n") }));
+/** 0, 1, or 2 for two or more places `needle` occurs in `text`, overlapping ones included. */
+function occurrences(text: string, needle: string): 0 | 1 | 2 {
+  const first = text.indexOf(needle);
+  if (first === -1) return 0;
+  return text.indexOf(needle, first + 1) === -1 ? 1 : 2;
 }
 
 /**
@@ -140,33 +69,55 @@ const comparable = (lines: readonly string[]) =>
 const lineAt = (text: string, offset: number) => text.slice(0, offset).split("\n").length - 1;
 
 /**
- * Lines [start, end) of `before` the update may change, or null when they cannot be told
- * (an old_str that matches several places, or none where Notion still found one).
+ * Lines [start, end) of `before` the update may change, or null when they cannot be told:
+ * an old_str that matches several places, or none while Notion reported no miss for it (it
+ * matches whitespace-tolerantly). Notion applies the edits that match and reports each miss,
+ * so when every edit found nowhere is accounted for by `missed`, those changed nothing.
  */
-function touchedRanges(before: string, lineCount: number, update: PageMarkdownUpdate): Array<[number, number]> | null {
-  if (update.type === "insert_content") {
-    const at = update.insert_content.position.type === "start" ? 0 : lineCount;
-    return [[at, at]];
-  }
-  const ranges: Array<[number, number]> = [];
-  const written: string[] = [];
-  for (const { old_str, new_str } of update.update_content.content_updates) {
-    const count = countOccurrences(before, old_str);
-    if (count === 1) {
-      const at = before.indexOf(old_str);
-      ranges.push([lineAt(before, at), lineAt(before, at + old_str.length) + 1]);
-    } else if (count > 1 || !written.some((text) => text.includes(old_str))) {
-      return null;
+function touchedRanges(before: string, lineCount: number, update: PageMarkdownUpdate, missed: number): Array<[number, number]> | null {
+  switch (update.type) {
+    case "insert_content": {
+      const at = update.insert_content.position.type === "start" ? 0 : lineCount;
+      return [[at, at]];
     }
-    // Otherwise it edits text an earlier update of this call wrote, inside that update's range.
-    written.push(new_str);
+    case "replace_content":
+      return [[0, lineCount]];
+    case "update_content": {
+      const ranges: Array<[number, number]> = [];
+      const written: string[] = [];
+      let unmatched = 0;
+      for (const { old_str, new_str } of update.update_content.content_updates) {
+        const found = occurrences(before, old_str);
+        if (found === 2) return null;
+        if (found === 1) {
+          const at = before.indexOf(old_str);
+          ranges.push([lineAt(before, at), lineAt(before, at + old_str.length) + 1]);
+        } else if (!written.some((text) => text.includes(old_str))) {
+          unmatched++;
+        }
+        // Otherwise it edits text an earlier update of this call wrote, inside that update's range.
+        written.push(new_str);
+      }
+      return unmatched === missed ? ranges : null;
+    }
+    default:
+      throw new Error(`Unknown markdown update: ${update satisfies never}`);
   }
-  return ranges;
 }
 
+/** Where `needle` first occurs in `haystack` within [from, to), by line; -1 if nowhere. Knuth–Morris–Pratt, so linear. */
 function indexOfLines(haystack: readonly string[], needle: readonly string[], from: number, to: number): number {
-  for (let at = from; at + needle.length <= to; at++) {
-    if (needle.every((line, offset) => haystack[at + offset] === line)) return at;
+  if (needle.length === 0) return from;
+  const fallback: number[] = [0];
+  for (let i = 1, k = 0; i < needle.length; i++) {
+    while (k > 0 && needle[i] !== needle[k]) k = fallback[k - 1] ?? 0;
+    if (needle[i] === needle[k]) k++;
+    fallback[i] = k;
+  }
+  for (let i = from, k = 0; i < to; i++) {
+    while (k > 0 && haystack[i] !== needle[k]) k = fallback[k - 1] ?? 0;
+    if (haystack[i] === needle[k]) k++;
+    if (k === needle.length) return i - needle.length + 1;
   }
   return -1;
 }
@@ -206,54 +157,20 @@ function changedOnlyWhereTouched(a: readonly string[], b: readonly string[], ran
 }
 
 /**
- * Why no inverse edit exists: nothing left to anchor it on, no unique one, someone else edited
- * meanwhile, or where our update landed cannot be told (so neither can someone else's edit).
+ * Why a write cannot be reverted by putting `before` back: someone else edited the page between
+ * our read and our write (putting it back would undo theirs), or where our update landed cannot
+ * be told (so neither can someone else's edit).
  */
-export type RevertPlanBlocker = "no_anchor" | "ambiguous_inverse" | "concurrent_edit" | "unlocated_edit";
-
-export type RevertPlan =
-  | { kind: "unchanged" }
-  | { kind: "revertible"; inverse: PageMarkdownUpdate; hunks: ContentHunk[] }
-  | { kind: "unsupported"; blocker: RevertPlanBlocker; hunks: ContentHunk[] };
+export type WriteBlocker = "concurrent_edit" | "unlocated_edit";
 
 /**
- * Computes how to turn `after` back into `before` with Notion's markdown endpoint. With the
- * `update` that produced `after`, a change outside what it touched means someone else edited
- * the page between our read and our write; undoing it would undo theirs, so it is refused.
+ * Checks that `after` is `before` changed only by `update`. `missed` counts the edits Notion
+ * reported it found no match for.
  */
-export function buildRevertPlan(before: string, after: string, update?: PageMarkdownUpdate): RevertPlan {
-  if (before === after) return { kind: "unchanged" };
+export function writeBlocker(before: string, after: string, update: PageMarkdownUpdate, missed: number): WriteBlocker | null {
+  if (before === after) return null;
   const a = before.split("\n");
-  const b = after.split("\n");
-  const raw = lineHunks(a, b);
-  const hunks = raw.map((h) => ({ before: a.slice(h.aStart, h.aEnd).join("\n"), after: b.slice(h.bStart, h.bEnd).join("\n") }));
-
-  if (update) {
-    const touched = touchedRanges(before, a.length, update);
-    // Undoing an edit we cannot rule out as someone else's would undo theirs: refuse instead.
-    if (!touched) return { kind: "unsupported", blocker: "unlocated_edit", hunks };
-    if (!changedOnlyWhereTouched(a, b, touched)) return { kind: "unsupported", blocker: "concurrent_edit", hunks };
-  }
-
-  // Nothing left to anchor an update on: put the old content back instead.
-  if (after.trim() === "") {
-    if (before.trim() === "") return { kind: "unchanged" };
-    if (after !== "") return { kind: "unsupported", blocker: "no_anchor", hunks };
-    return {
-      kind: "revertible",
-      inverse: { type: "insert_content", insert_content: { content: before, position: { type: "start" } } },
-      hunks,
-    };
-  }
-
-  const updates = inverseUpdates(a, b, raw, after);
-  let restored: string | null;
-  try {
-    restored = applyContentUpdates(after, updates);
-  } catch (error) {
-    if (!(error instanceof ContentUpdateError)) throw error;
-    restored = null;
-  }
-  if (restored !== before) return { kind: "unsupported", blocker: "ambiguous_inverse", hunks };
-  return { kind: "revertible", inverse: { type: "update_content", update_content: { content_updates: updates } }, hunks };
+  const touched = touchedRanges(before, a.length, update, missed);
+  if (!touched) return "unlocated_edit";
+  return changedOnlyWhereTouched(a, after.split("\n"), touched) ? null : "concurrent_edit";
 }

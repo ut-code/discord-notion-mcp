@@ -1,7 +1,9 @@
 import type { PropertyItemObjectResponse, RichTextItemResponse } from "@notionhq/client";
 import {
+  NO_MATCH_WARNING,
   NotionRequestError,
   type CursorQuery,
+  type EditedPageMarkdown,
   type NotionApi,
   type NotionComment,
   type NotionDatabase,
@@ -13,7 +15,7 @@ import {
   type SearchResult,
 } from "../../src/lib/server/notion/client/api";
 import type { PageMarkdownUpdate, PageParent, RichTextRequest } from "../../src/lib/server/notion/client/types";
-import { applyContentUpdates, ContentUpdateError } from "../../src/lib/server/notion/content/content-diff";
+import { countChildObjects } from "../../src/lib/server/notion/content/enhanced-markdown";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 
 export function rt(
@@ -209,30 +211,63 @@ export class FakeNotionApi implements NotionApi {
     return this.pageMarkdown(pageId);
   }
 
-  /** Exact-substring update_content (same no-match / multiple-match errors as Notion) and insert_content at start or end. */
-  async updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<PageMarkdown> {
+  /**
+   * As Notion does it (checked live): update_content applies its edits in order by exact substring,
+   * fails as a whole when an old_str matches several places or every edit misses, and otherwise
+   * applies the edits that match and warns of each miss. replace_content refuses to drop a child
+   * page or database.
+   */
+  async updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<EditedPageMarkdown> {
     this.enter("updatePageMarkdown", { pageId, update: structuredClone(update) });
     if (!this.pages.has(pageId)) throw notFound("page");
-    if ("allow_deleting_content" in (update.type === "update_content" ? update.update_content : update.insert_content)) {
-      throw new Error("allow_deleting_content must never be sent");
-    }
+    const body =
+      update.type === "update_content"
+        ? update.update_content
+        : update.type === "insert_content"
+          ? update.insert_content
+          : update.replace_content;
+    if ("allow_deleting_content" in body) throw new Error("allow_deleting_content must never be sent");
     const current = this.markdown.get(pageId) ?? "";
-    let next: string;
-    if (update.type === "update_content") {
-      try {
-        next = applyContentUpdates(current, update.update_content.content_updates);
-      } catch (error) {
-        if (error instanceof ContentUpdateError) throw new NotionRequestError(error.message, 400, "validation_error");
-        throw error;
+    let next = current;
+    const warnings: EditedPageMarkdown["warnings"] = [];
+    switch (update.type) {
+      case "update_content": {
+        const missed: string[] = [];
+        for (const { old_str, new_str } of update.update_content.content_updates) {
+          const at = next.indexOf(old_str);
+          if (at === -1) {
+            missed.push(old_str);
+            continue;
+          }
+          if (next.indexOf(old_str, at + 1) !== -1) {
+            throw new NotionRequestError(`Multiple matches found for "${old_str}".`, 400, "validation_error");
+          }
+          next = next.slice(0, at) + new_str + next.slice(at + old_str.length);
+        }
+        if (missed.length === update.update_content.content_updates.length) {
+          throw new NotionRequestError(`No matches found for ${missed.length} content updates.`, 400, "validation_error");
+        }
+        warnings.push(...missed.map((old_str) => ({ code: NO_MATCH_WARNING, message: `No matches found for ${old_str}.` })));
+        break;
       }
-    } else {
-      const { content, position } = update.insert_content;
-      if (!current) next = content;
-      else next = position.type === "start" ? `${content}\n${current}` : `${current}\n${content}`;
+      case "insert_content": {
+        const { content, position } = update.insert_content;
+        if (!current) next = content;
+        else next = position.type === "start" ? `${content}\n${current}` : `${current}\n${content}`;
+        break;
+      }
+      case "replace_content":
+        if (countChildObjects(update.replace_content.new_str) < countChildObjects(current)) {
+          throw new NotionRequestError("This operation would delete child pages or databases.", 400, "validation_error");
+        }
+        next = update.replace_content.new_str;
+        break;
+      default:
+        throw new Error(`Unknown markdown update: ${update satisfies never}`);
     }
     this.markdown.set(pageId, next);
     this.touch(pageId);
-    return this.pageMarkdown(pageId);
+    return { ...this.pageMarkdown(pageId), warnings };
   }
 
   async retrieveUser(userId: string): Promise<NotionUser> {

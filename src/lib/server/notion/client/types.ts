@@ -26,4 +26,6 @@ export interface ContentUpdate {
  */
 export type PageMarkdownUpdate =
   | { type: "update_content"; update_content: { content_updates: ContentUpdate[] } }
-  | { type: "insert_content"; insert_content: { content: string; position: { type: "start" | "end" } } };
+  | { type: "insert_content"; insert_content: { content: string; position: { type: "start" | "end" } } }
+  /** Reverts only: puts the content before a write back as a whole. */
+  | { type: "replace_content"; replace_content: { new_str: string } };

@@ -30,10 +30,6 @@ export function writeWarningText(warning: WriteWarning): string {
 
 function revertBlockerText(blocker: RevertBlocker): string {
   switch (blocker) {
-    case "no_anchor":
-      return "the page has no text left to anchor a revert on";
-    case "ambiguous_inverse":
-      return "no unambiguous inverse edit could be computed";
     case "truncated_after_write":
       return "Notion returned truncated content after the write, so the change could not be captured";
     case "concurrent_edit":
@@ -75,7 +71,7 @@ export function revertConflictText(id: number, conflict: RevertConflict): string
     case "edited_after":
       return `The page was edited after audit #${id} (last_edited_time ${conflict.recorded} at the time of the write, now ${conflict.now}); reverting may undo or conflict with those later changes.`;
     case "content_changed":
-      return `The page content changed after audit #${id}; reverting may fail or undo those later changes.`;
+      return `The page content changed after audit #${id}; putting the earlier content back would undo those later changes.`;
     case "properties_changed":
       return `${conflict.names.join(", ")} changed after audit #${id}; reverting would overwrite those later changes.`;
     default:
@@ -85,8 +81,10 @@ export function revertConflictText(id: number, conflict: RevertConflict): string
 
 export function revertFailureText(id: number, failure: RevertFailure): string {
   switch (failure.kind) {
-    case "text_gone":
-      return `The page no longer contains the text written by audit #${id} in its original form, so it cannot be reverted automatically; restore it by hand. (Notion: ${failure.notionMessage})`;
+    case "changed_meanwhile":
+      return `The page changed while audit #${id} was being reverted, so nothing was changed; check the page and revert again.`;
+    case "refused":
+      return `Notion refused to put back the content from before audit #${id}, so it was not reverted; restore it by hand. (Notion: ${failure.notionMessage})`;
     case "nothing_restorable":
       return `No property could be restored: ${skippedText(failure.skipped)}`;
     case "superseded":
@@ -143,6 +141,5 @@ export function revertReasonText(id: number, reason: RevertReason): string {
 }
 
 export function revertSuccessText(id: number, result: Extract<RevertResult, { ok: true }>): string {
-  const forced = result.forced ? " (forced despite later edits)" : "";
-  return result.note ? `Reverted audit #${id}${forced}: ${revertNoteText(result.note)}` : `Reverted audit #${id}${forced}.`;
+  return result.note ? `Reverted audit #${id}: ${revertNoteText(result.note)}` : `Reverted audit #${id}.`;
 }

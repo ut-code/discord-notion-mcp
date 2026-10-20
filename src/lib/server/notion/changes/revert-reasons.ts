@@ -1,5 +1,5 @@
 import type { NotionAuditStatus } from "../../db/schema";
-import type { RevertPlanBlocker } from "../content/content-diff";
+import type { WriteBlocker } from "../content/content-diff";
 import type { PropertySkip, RevertNote } from "./audit-records";
 
 /*
@@ -8,9 +8,9 @@ import type { PropertySkip, RevertNote } from "./audit-records";
  */
 
 /** Why a content write cannot be reverted automatically; stored in ContentSnapshot.revertBlocker. */
-export type RevertBlocker = RevertPlanBlocker | "truncated_after_write" | "child_object_created";
+export type RevertBlocker = WriteBlocker | "truncated_after_write" | "child_object_created";
 
-/** Why the page may have changed since the write; reverting anyway needs `force`. */
+/** Why the page may have changed since the write, so it is not reverted automatically. */
 export type RevertConflict =
   | { kind: "no_recorded_time" }
   | { kind: "edited_after"; recorded: string; now: string }
@@ -20,7 +20,10 @@ export type RevertConflict =
 
 /** A revert that was tried and failed; the attempt is recorded as a failed revert row. */
 export type RevertFailure =
-  | { kind: "text_gone"; notionMessage: string }
+  /** The page changed between the conflict check and the write, so nothing was written. */
+  | { kind: "changed_meanwhile" }
+  /** Notion refused to put the content back (e.g. it would delete a child page the change created). */
+  | { kind: "refused"; notionMessage: string }
   | { kind: "nothing_restorable"; skipped: PropertySkip[] }
   /** Notion was reverted, but the log had given this revert up as interrupted and another one started. */
   | { kind: "superseded" }
@@ -44,4 +47,4 @@ export type RevertReason =
   | { kind: "failed"; failure: RevertFailure; revertAuditId: number };
 
 export type RevertResult =
-  { ok: true; revertAuditId: number; forced: boolean; partial: boolean; note: RevertNote | null } | { ok: false; reason: RevertReason };
+  { ok: true; revertAuditId: number; partial: boolean; note: RevertNote | null } | { ok: false; reason: RevertReason };

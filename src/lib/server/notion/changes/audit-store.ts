@@ -1,7 +1,9 @@
+import { gunzipSync, gzipSync } from "node:zlib";
 import { and, count, desc, eq, inArray, isNotNull, isNull, lt, max, ne, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../../db/client";
 import {
   notionAudit,
+  notionAuditContent,
   type NewNotionAuditRow,
   type NotionAuditOperation,
   type NotionAuditRow,
@@ -43,6 +45,12 @@ export type PendingOutcome =
   /** Notion did not confirm the write (5xx, timeout), so whether it applied is unknown. */
   | ({ status: "interrupted"; error: string } & Pick<NewNotionAuditRow, "commentError">);
 
+/** Page markdown around a content write: `after` is null when Notion returned it truncated. */
+export interface AuditContent {
+  before: string;
+  after: string | null;
+}
+
 /** What the original row records about its revert. */
 export type RevertMark = Pick<NewNotionAuditRow, "revertedBy" | "revertNote">;
 
@@ -76,10 +84,32 @@ export class NotionAuditStore {
     return inserted;
   }
 
-  /** Ends a pending write; false when it already ended (a real outcome is never replaced). */
-  async finishPending(id: number, outcome: PendingOutcome): Promise<boolean> {
-    const updated = await this.db.update(notionAudit).set(outcome).where(stillOpen(id)).returning({ id: notionAudit.id });
-    return updated.length > 0;
+  /**
+   * Ends a pending write, with the page content around it for a successful content write; false
+   * when it already ended (a real outcome is never replaced).
+   */
+  finishPending(id: number, outcome: PendingOutcome, content?: AuditContent): Promise<boolean> {
+    const finished = this.db.transaction((tx) => {
+      const updated = tx.update(notionAudit).set(outcome).where(stillOpen(id)).returning({ id: notionAudit.id }).all();
+      if (updated.length === 0) return false;
+      if (content) {
+        tx.insert(notionAuditContent)
+          .values({
+            auditId: id,
+            before: gzipSync(content.before),
+            after: content.after === null ? null : gzipSync(content.after),
+          })
+          .run();
+      }
+      return true;
+    });
+    return Promise.resolve(finished);
+  }
+
+  async getContent(auditId: number): Promise<AuditContent | null> {
+    const [row] = await this.db.select().from(notionAuditContent).where(eq(notionAuditContent.auditId, auditId));
+    if (!row) return null;
+    return { before: gunzipSync(row.before).toString("utf8"), after: row.after ? gunzipSync(row.after).toString("utf8") : null };
   }
 
   /** Marks rows still `pending` that were created before `cutoff` as interrupted; returns how many. */

@@ -314,12 +314,10 @@ export async function startPreview(): Promise<Runtime> {
     await server.notionAudit.revert(editId, { actorDiscordUserId: OWNER_ID, actorDisplayName: "きなこもち", actorUsername: "kinako" });
   }
   await run("notion_archive_page", { page: notion.addPage({ title: "古いメモ" }).id }, tanaka);
-  // Leaves only whitespace, so the revert card explains why it cannot be undone automatically.
-  await run(
-    "notion_edit_content",
-    { page: notion.addPage({ title: "下書き", markdown: "下書き" }).id, edits: [{ old_str: "下書き", new_str: " " }] },
-    suzuki,
-  );
+  // Edited afterwards in Notion, so a revert is refused and the page has to be fixed by hand.
+  const draft = notion.addPage({ title: "下書き", markdown: "下書き" });
+  await run("notion_append_content", { page: draft.id, content: "- 追記した行" }, suzuki);
+  notion.setMarkdown(draft.id, `${notion.markdown.get(draft.id) ?? ""}\n- 後からの編集`);
   seedToolCalls(server.toolCalls);
 
   const sessionCookie = async (discordUserId: string): Promise<string | null> => {

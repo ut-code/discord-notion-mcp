@@ -1,9 +1,16 @@
 import { errorMessage, ToolError } from "../../lib/errors";
 import { logError, type ErrorSink } from "../../lib/log";
-import { notionFailure, writeMayHaveApplied, type NotionApi, type NotionPage, type PageMarkdown } from "../client/api";
+import {
+  NO_MATCH_WARNING,
+  notionFailure,
+  writeMayHaveApplied,
+  type EditedPageMarkdown,
+  type NotionApi,
+  type NotionPage,
+} from "../client/api";
 import { resolveParent, toToolError } from "../client/resolve";
 import type { ContentUpdate, PageMarkdownUpdate, PageParent } from "../client/types";
-import { buildRevertPlan, sha256 } from "../content/content-diff";
+import { sha256, writeBlocker } from "../content/content-diff";
 import { assertNoChildObjects, countChildObjects } from "../content/enhanced-markdown";
 import {
   mayBeTruncated,
@@ -16,7 +23,6 @@ import {
 import { literalRichText } from "../content/rich-text";
 import { postComment, retractComment, writeComment, type Actor, type WriteOperation } from "./attribution";
 import { propertyWriteRefusalText } from "./outcome-text";
-import type { RevertBlocker } from "./revert-reasons";
 import {
   ArchivePageResultSchema,
   ArchivePageSnapshotSchema,
@@ -34,7 +40,7 @@ import {
   type PropertySnapshotEntry,
 } from "./audit-records";
 import type { NotionAuditRow } from "../../db/schema";
-import type { NotionAuditStore } from "./audit-store";
+import type { AuditContent, NotionAuditStore } from "./audit-store";
 
 export type PropertyValues = Record<string, Record<string, unknown>>;
 
@@ -59,6 +65,15 @@ interface AuditBase {
 }
 
 export const MAX_CONTENT_EDITS = 20;
+
+/**
+ * Largest request a revert may send to put a page's content back: Notion takes request bodies
+ * of up to 500 KB (https://developers.notion.com/reference/request-limits), less some headroom.
+ */
+const MAX_RESTORE_BYTES = 450_000;
+
+/** The size of `markdown` as the replace_content request carries it (JSON-escaped). */
+const restoreBytes = (markdown: string) => Buffer.byteLength(JSON.stringify(markdown));
 
 const EDIT_HINT =
   "Call notion_get_page and copy old_str exactly from the current content; include more surrounding text when it matches several places.";
@@ -135,6 +150,8 @@ export class NotionWriteService {
       snapshot?: Record<string, unknown>;
       warning: WriteWarning | null;
       fallbackLastEdited: string | null;
+      /** The page content around a content write. */
+      content?: AuditContent;
     },
   ): Promise<WriteOutcome> {
     const { commentError } = await postComment(this.api, page.id, writeComment(actor, operation, row.id));
@@ -144,16 +161,20 @@ export class NotionWriteService {
       return null;
     });
     const url = final?.url ?? page.url;
-    await this.audit.finishPending(row.id, {
-      status: "ok",
-      result: outcome.result,
-      ...(outcome.snapshot ? { snapshot: outcome.snapshot } : {}),
-      note: outcome.warning,
-      commentError,
-      resultLastEditedTime: final?.last_edited_time ?? outcome.fallbackLastEdited,
-      targetPageId: page.id,
-      targetUrl: url,
-    });
+    await this.audit.finishPending(
+      row.id,
+      {
+        status: "ok",
+        result: outcome.result,
+        ...(outcome.snapshot ? { snapshot: outcome.snapshot } : {}),
+        note: outcome.warning,
+        commentError,
+        resultLastEditedTime: final?.last_edited_time ?? outcome.fallbackLastEdited,
+        targetPageId: page.id,
+        targetUrl: url,
+      },
+      outcome.content,
+    );
     return { auditId: row.id, pageId: page.id, url, commentError, warning: outcome.warning };
   }
 
@@ -265,10 +286,10 @@ export class NotionWriteService {
   }
 
   /**
-   * Shared by append_content and edit_content: reads the content before the write,
-   * writes, and stores an inverse update computed from a line diff of the markdown
-   * before and after (the write response). Revert applies it only while the page
-   * content still hashes to `afterSha256` (or when forced).
+   * Shared by append_content and edit_content: reads the content before the write, writes, and
+   * keeps both versions. Revert puts the content before back as a whole, and only while the page
+   * still hashes to `afterSha256`; that undoes exactly this write when the write changed nothing
+   * else, which writeBlocker checks.
    */
   private async writeContent(
     actor: Actor,
@@ -280,6 +301,12 @@ export class NotionWriteService {
     if (before.truncated) {
       throw new ToolError("This page is too large to edit revertibly (Notion returned truncated content), so it was not changed.");
     }
+    const restoreSize = restoreBytes(before.markdown);
+    if (restoreSize > MAX_RESTORE_BYTES) {
+      throw new ToolError(
+        `This page is too large to edit revertibly (a revert would send its ${Math.ceil(restoreSize / 1000)} KB of content back, more than Notion accepts at once), so it was not changed.`,
+      );
+    }
     const beforeSha256 = sha256(before.markdown);
     const row = await this.begin(actor, {
       operation: input.operation,
@@ -290,38 +317,30 @@ export class NotionWriteService {
       targetTitle: pageTitle(page),
     });
 
-    let after: PageMarkdown;
+    let after: EditedPageMarkdown;
     try {
       after = await this.api.updatePageMarkdown(page.id, input.update);
     } catch (error) {
       return this.fail(row, error, CHECK_PAGE, failureHint);
     }
 
-    const snapshot: ContentSnapshot = { beforeSha256, afterSha256: null, inverse: null, revertBlocker: null, hunks: [] };
-    let warning: WriteWarning | null = null;
+    const missedEdits = after.warnings.filter((warning) => warning.code === NO_MATCH_WARNING).map((warning) => warning.message);
+    for (const { code } of after.warnings) {
+      if (code !== NO_MATCH_WARNING) this.reportError({ event: "notion_unknown_warning", pageId: page.id, code });
+    }
+    const snapshot: ContentSnapshot = { beforeSha256, afterSha256: null, revertBlocker: null };
     if (after.truncated) {
-      snapshot.revertBlocker = "truncated_after_write" satisfies RevertBlocker;
-      warning = { kind: "revert_blocked", blocker: snapshot.revertBlocker };
+      snapshot.revertBlocker = "truncated_after_write";
     } else {
       snapshot.afterSha256 = sha256(after.markdown);
-      const plan = buildRevertPlan(before.markdown, after.markdown, input.update);
       // assertNoChildObjects lets no unescaped tag through, so a new child means Notion read the
-      // write differently than it assumed. A revertible plan changed the page only where this write did.
+      // write differently than it assumed; a revert could not remove it.
       const createdChild = countChildObjects(after.markdown) > countChildObjects(before.markdown);
-      if (plan.kind === "revertible" && createdChild) {
-        snapshot.hunks = plan.hunks;
-        snapshot.revertBlocker = "child_object_created" satisfies RevertBlocker;
-        warning = { kind: "revert_blocked", blocker: snapshot.revertBlocker };
-      } else if (plan.kind === "revertible") {
-        snapshot.inverse = plan.inverse;
-        snapshot.hunks = plan.hunks;
-      } else if (plan.kind === "unsupported") {
-        snapshot.hunks = plan.hunks;
-        snapshot.revertBlocker = plan.blocker;
-        warning = { kind: "revert_blocked", blocker: plan.blocker };
-      }
+      snapshot.revertBlocker =
+        writeBlocker(before.markdown, after.markdown, input.update, missedEdits.length) ?? (createdChild ? "child_object_created" : null);
     }
-    const result: ContentWriteResult = { changedHunks: snapshot.hunks.length };
+    const warning: WriteWarning | null = snapshot.revertBlocker ? { kind: "revert_blocked", blocker: snapshot.revertBlocker } : null;
+    const result: ContentWriteResult = { missedEdits };
     // No fallback timestamp: content reverts compare content hashes, and the server
     // clock would not be a real Notion last_edited_time.
     const outcome = await this.succeed(actor, row, input.operation, page, {
@@ -329,6 +348,7 @@ export class NotionWriteService {
       snapshot: toAuditJson(ContentSnapshotSchema, snapshot),
       warning,
       fallbackLastEdited: null,
+      content: { before: before.markdown, after: after.truncated ? null : after.markdown },
     });
     return { ...outcome, ...result };
   }

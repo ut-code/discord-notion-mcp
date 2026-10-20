@@ -8,6 +8,13 @@
       "when": 1792372284931,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792482989634,
+      "tag": "0001_notion_audit_content",
+      "breakpoints": true
     }
   ]
 }

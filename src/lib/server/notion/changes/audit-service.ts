@@ -25,7 +25,7 @@ import {
   type RevertNote,
   type UpdatePropertiesSnapshot,
 } from "./audit-records";
-import type { AuditActor, AuditListQuery, AuditListResult, NotionAuditStore } from "./audit-store";
+import type { AuditActor, AuditContent, AuditListQuery, AuditListResult, NotionAuditStore } from "./audit-store";
 import { revertFailureText } from "./outcome-text";
 import type { RevertConflict, RevertFailure, RevertReason, RevertResult } from "./revert-reasons";
 
@@ -38,8 +38,6 @@ export interface RevertOptions {
   actorDiscordUserId: string;
   actorDisplayName: string;
   actorUsername?: string | null;
-  /** Revert even when the page changed after the original write (dashboard only). */
-  force?: boolean;
 }
 
 interface Executed {
@@ -107,11 +105,11 @@ function detectConflict(row: NotionAuditRow, current: NotionPage): RevertConflic
 type ContentCheck = { refusal: RevertReason } | { refusal: null; conflict: RevertConflict | null };
 
 /**
- * Content writes are compared by content hash instead of last_edited_time: the inverse
- * edit is only guaranteed to apply to exactly the markdown our write produced.
+ * Content writes are compared by content hash instead of last_edited_time: putting the content
+ * before the write back undoes only that write while the page is exactly as the write left it.
  */
 async function checkContent(api: NotionApi, snapshot: ContentSnapshot, pageId: string): Promise<ContentCheck> {
-  if (!snapshot.inverse) return { refusal: null, conflict: null };
+  if (snapshot.afterSha256 === snapshot.beforeSha256) return { refusal: null, conflict: null };
   let current: PageMarkdown;
   try {
     current = await api.retrievePageMarkdown(pageId);
@@ -166,6 +164,11 @@ export class NotionAuditService {
 
   getAudit(id: number): Promise<NotionAuditRow | null> {
     return this.store.get(id);
+  }
+
+  /** The page content around a successful content write; null for other rows. */
+  getContent(id: number): Promise<AuditContent | null> {
+    return this.store.getContent(id);
   }
 
   listActors(): Promise<AuditActor[]> {
@@ -224,7 +227,19 @@ export class NotionAuditService {
     } else {
       conflict = detectConflict(row, current);
     }
-    if (conflict && !options.force) return { ok: false, reason: { kind: "conflict", conflict } };
+    // Later edits are someone else's: they are left for a person to sort out by hand.
+    if (conflict) return { ok: false, reason: { kind: "conflict", conflict } };
+
+    // The content a content revert puts back; null when the write changed nothing.
+    let restore: string | null = null;
+    if (
+      (record.operation === "append_content" || record.operation === "edit_content") &&
+      record.snapshot.afterSha256 !== record.snapshot.beforeSha256
+    ) {
+      const content = await this.store.getContent(row.id);
+      if (!content) return { ok: false, reason: { kind: "unrecognized_snapshot" } };
+      restore = content.before;
+    }
 
     // Claimed in the database before Notion is touched: a second revert of the row, from any
     // process, finds this pending row and is refused.
@@ -239,7 +254,7 @@ export class NotionAuditService {
     const comment = revertComment(options.actorDisplayName, options.actorUsername ?? null, row.id);
     let executed: Executed;
     try {
-      executed = await this.execute(api, record, current, comment);
+      executed = await this.execute(api, record, current, comment, restore);
     } catch (error) {
       // Only the revert's own write throws here (comments and read-backs never do), so an
       // unanswered one may have been applied: interrupted, and the original stays revertible.
@@ -266,7 +281,7 @@ export class NotionAuditService {
       { revertedBy: options.actorDiscordUserId, revertNote: executed.note },
     );
     if (!finished) return { ok: false, reason: { kind: "failed", failure: { kind: "superseded" }, revertAuditId: revertRow.id } };
-    return { ok: true, revertAuditId: revertRow.id, forced: conflict !== null, partial: executed.partial, note: executed.note };
+    return { ok: true, revertAuditId: revertRow.id, partial: executed.partial, note: executed.note };
   }
 
   private revertColumns(row: NotionAuditRow, options: RevertOptions) {
@@ -278,12 +293,19 @@ export class NotionAuditService {
       targetPageId: row.targetPageId,
       targetUrl: row.targetUrl,
       targetTitle: row.targetTitle,
-      request: { auditId: row.id, force: options.force ?? false },
+      request: { auditId: row.id },
       revertOfAuditId: row.id,
     };
   }
 
-  private async execute(api: NotionApi, record: RevertRecord, current: NotionPage, comment: AttributionComment): Promise<Executed> {
+  /** `restore` is the content a content revert puts back, null when the write changed nothing. */
+  private async execute(
+    api: NotionApi,
+    record: RevertRecord,
+    current: NotionPage,
+    comment: AttributionComment,
+    restore: string | null,
+  ): Promise<Executed> {
     const pageId = current.id;
     switch (record.operation) {
       case "create_page": {
@@ -310,8 +332,7 @@ export class NotionAuditService {
       }
       case "append_content":
       case "edit_content": {
-        const { snapshot } = record;
-        if (!snapshot.inverse) {
+        if (restore === null) {
           const { commentError } = await postComment(api, pageId, comment);
           return {
             result: { restored: false },
@@ -321,19 +342,28 @@ export class NotionAuditService {
             lastEditedTime: await this.lastEdited(api, pageId),
           };
         }
+        // Checked again right before writing: an edit made since the check in revert() would be put back
+        // over with the rest of the page, unlike with an edit that changes only part of it.
+        const latest = await api.retrievePageMarkdown(pageId).catch((error: unknown) => {
+          throw new RevertFailed({ kind: "error", message: errorMessage(error) });
+        });
+        if (latest.truncated || sha256(latest.markdown) !== record.snapshot.afterSha256) {
+          throw new RevertFailed({ kind: "changed_meanwhile" });
+        }
         let restored: PageMarkdown;
         try {
-          restored = await api.updatePageMarkdown(pageId, snapshot.inverse);
+          restored = await api.updatePageMarkdown(pageId, { type: "replace_content", replace_content: { new_str: restore } });
         } catch (error) {
+          // E.g. the change created a child page, which Notion will not delete without being told to.
           if (error instanceof NotionRequestError && error.status === 400) {
-            throw new RevertFailed({ kind: "text_gone", notionMessage: error.message });
+            throw new RevertFailed({ kind: "refused", notionMessage: error.message });
           }
           throw error;
         }
         const { commentError } = await postComment(api, pageId, comment);
         const contentSha256 = restored.truncated ? null : sha256(restored.markdown);
         const note: RevertNote | null =
-          contentSha256 !== null && contentSha256 !== snapshot.beforeSha256 ? { kind: "content_differs" } : null;
+          contentSha256 !== null && contentSha256 !== record.snapshot.beforeSha256 ? { kind: "content_differs" } : null;
         return {
           result: { restored: true, contentSha256 },
           note,

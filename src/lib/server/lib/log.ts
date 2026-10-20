@@ -27,7 +27,7 @@ export type EventEntry =
   | ({ event: "grant_added" } & GrantChange)
   | ({ event: "grant_removed" } & GrantChange)
   | { event: "tokens_revoked"; userId: string; by: string; sessions: number; refreshTokens: number; accessTokens: number }
-  | { event: "audit_revert"; auditId: number; by: string; force: boolean; ok: boolean; revertAuditId?: number; error?: string }
+  | { event: "audit_revert"; auditId: number; by: string; ok: boolean; revertAuditId?: number; error?: string }
   | BetterAuthLog<"debug" | "info" | "warn">;
 
 /** Unexpected failures (stderr). */
@@ -41,6 +41,8 @@ export type ErrorEntry =
   | { event: "audit_sweep_failed"; error: string }
   | { event: "notion_readback_failed"; pageId: string; error: string }
   | { event: "notion_comment_retract_failed"; pageId: string; commentId: string; error: string }
+  /** A warning Notion returned with an edit that this server does not handle; its message may quote page text. */
+  | { event: "notion_unknown_warning"; pageId: string; code: string }
   | { event: "access_resolution_failed"; source: "mcp" | "dashboard" | "consent"; discordUserId: string; error: string }
   | { event: "membership_check_failed"; error: string }
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }

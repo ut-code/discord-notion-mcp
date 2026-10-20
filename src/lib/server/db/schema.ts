@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { PERMISSIONS, SUBJECT_TYPES } from "../permissions/permissions";
 
 export const grants = sqliteTable(
@@ -83,6 +83,19 @@ export const notionAudit = sqliteTable(
 
 export type NotionAuditRow = typeof notionAudit.$inferSelect;
 export type NewNotionAuditRow = typeof notionAudit.$inferInsert;
+
+/**
+ * Page markdown around a successful append_content / edit_content, gzip-compressed: a revert puts
+ * `before` back, and both show what changed. Apart from notion_audit so listing rows loads no pages.
+ */
+export const notionAuditContent = sqliteTable("notion_audit_content", {
+  auditId: integer("audit_id")
+    .primaryKey()
+    .references(() => notionAudit.id),
+  before: blob("before", { mode: "buffer" }).notNull(),
+  /** Null when Notion returned the page truncated after the write. */
+  after: blob("after", { mode: "buffer" }),
+});
 
 export const TOOL_CALL_ERROR_KINDS = ["error", "rate_limited"] as const;
 export type ToolCallErrorKind = (typeof TOOL_CALL_ERROR_KINDS)[number];

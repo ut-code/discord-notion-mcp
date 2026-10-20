@@ -63,7 +63,7 @@ export function createNotionChangeTools(deps: NotionChangeToolDeps): AnyToolDefi
     name: "notion_revert_change",
     title: "Revert a Notion change",
     description:
-      "Revert one of your Notion writes by its audit id (admins: anyone's). A created page is moved to the trash, appended or edited content is put back to its previous text, previous property values are restored, an archived page is restored. If the page was edited after the change the revert is refused; only an admin can force it, from the dashboard.",
+      "Revert one of your Notion writes by its audit id (admins: anyone's). A created page is moved to the trash, appended or edited content is put back to its previous text, previous property values are restored, an archived page is restored. If the page was edited after the change the revert is refused, so later edits are kept; the page then has to be fixed by hand.",
     permission: "notion:write",
     inputSchema: z.object({
       audit_id: z.number().int().positive().describe("Audit id (see notion_list_recent_changes)"),
@@ -83,7 +83,7 @@ export function createNotionChangeTools(deps: NotionChangeToolDeps): AnyToolDefi
       if (result.ok) return revertSuccessText(row.id, result);
       if (result.reason.kind === "conflict") {
         throw new ToolError(
-          `Not reverted: the page changed after the write. ${revertConflictText(row.id, result.reason.conflict)} An admin can force the revert from the dashboard at ${auditUrl(row.id)}.`,
+          `Not reverted: the page changed after the write. ${revertConflictText(row.id, result.reason.conflict)} Fix the page by hand; the change is shown at ${auditUrl(row.id)}.`,
         );
       }
       throw new ToolError(revertReasonText(row.id, result.reason));

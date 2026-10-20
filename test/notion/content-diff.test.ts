@@ -1,245 +1,147 @@
 import { describe, expect, test } from "bun:test";
-import {
-  applyContentUpdates,
-  buildRevertPlan,
-  ContentUpdateError,
-  countOccurrences,
-  type RevertPlan,
-} from "../../src/lib/server/notion/content/content-diff";
-import type { ContentUpdate, PageMarkdownUpdate } from "../../src/lib/server/notion/client/types";
+import { contentHunks, writeBlocker } from "../../src/lib/server/notion/content/content-diff";
+import type { PageMarkdownUpdate } from "../../src/lib/server/notion/client/types";
 
-function updatesOf(plan: RevertPlan): ContentUpdate[] {
-  if (plan.kind !== "revertible" || plan.inverse.type !== "update_content") throw new Error(`unexpected plan ${JSON.stringify(plan)}`);
-  return plan.inverse.update_content.content_updates;
-}
-
-/** Applies an inverse the way the fake Notion does. */
-function applyInverse(after: string, inverse: PageMarkdownUpdate): string {
-  if (inverse.type === "update_content") return applyContentUpdates(after, inverse.update_content.content_updates);
-  const { content, position } = inverse.insert_content;
-  if (!after) return content;
-  return position.type === "start" ? `${content}\n${after}` : `${after}\n${content}`;
-}
-
-function expectRoundTrip(before: string, after: string): RevertPlan {
-  const plan = buildRevertPlan(before, after);
-  if (plan.kind === "unchanged") {
-    expect(after.trim() === before.trim()).toBe(true);
-    return plan;
-  }
-  if (plan.kind === "unsupported") {
-    // Only a whitespace-only result has nothing to anchor on.
-    expect(after.trim()).toBe("");
-    return plan;
-  }
-  expect(plan.kind).toBe("revertible");
-  if (plan.kind !== "revertible") return plan;
-  expect(applyInverse(after, plan.inverse)).toBe(before);
-  if (plan.inverse.type === "update_content") {
-    for (const update of plan.inverse.update_content.content_updates) {
-      expect(countOccurrences(after, update.old_str)).toBe(1);
-      expect(update.old_str.length).toBeGreaterThan(0);
-    }
-  }
-  return plan;
-}
-
-describe("applyContentUpdates", () => {
-  test("replaces exactly one match per update, in order", () => {
-    expect(
-      applyContentUpdates("a b c", [
-        { old_str: "b", new_str: "B" },
-        { old_str: "B c", new_str: "x" },
-      ]),
-    ).toBe("a x");
-  });
-
-  test("no match and multiple matches are errors", () => {
-    expect(() => applyContentUpdates("abc", [{ old_str: "z", new_str: "" }])).toThrow(ContentUpdateError);
-    expect(() => applyContentUpdates("abc", [{ old_str: "z", new_str: "" }])).toThrow("No matches found");
-    expect(() => applyContentUpdates("a a", [{ old_str: "a", new_str: "" }])).toThrow("Multiple matches found");
-    expect(() => applyContentUpdates("aaa", [{ old_str: "aa", new_str: "" }])).toThrow("Multiple matches found");
-  });
+const replace = (oldStr: string, newStr: string): PageMarkdownUpdate => ({
+  type: "update_content",
+  update_content: { content_updates: [{ old_str: oldStr, new_str: newStr }] },
+});
+const insert = (content: string, position: "start" | "end"): PageMarkdownUpdate => ({
+  type: "insert_content",
+  insert_content: { content, position: { type: position } },
 });
 
-describe("buildRevertPlan", () => {
-  test("unchanged content needs no revert", () => {
-    expect(buildRevertPlan("a\nb", "a\nb")).toEqual({ kind: "unchanged" });
-  });
+/** Applies an update the plain way: each old_str at its first place. */
+function apply(text: string, update: PageMarkdownUpdate): string {
+  switch (update.type) {
+    case "update_content":
+      return update.update_content.content_updates.reduce((current, { old_str, new_str }) => current.replace(old_str, new_str), text);
+    case "insert_content": {
+      const { content, position } = update.insert_content;
+      if (!text) return content;
+      return position.type === "start" ? `${content}\n${text}` : `${text}\n${content}`;
+    }
+    case "replace_content":
+      return update.replace_content.new_str;
+  }
+}
 
-  test("a single edited line becomes a single inverse update without context", () => {
-    const plan = expectRoundTrip("Title\nOld sentence.\nEnd", "Title\nNew sentence.\nEnd");
-    expect(updatesOf(plan)).toEqual([{ old_str: "New sentence.", new_str: "Old sentence." }]);
-    if (plan.kind === "revertible") expect(plan.hunks).toEqual([{ before: "Old sentence.", after: "New sentence." }]);
-  });
+const timed = <T>(run: () => T): { value: T; ms: number } => {
+  const start = performance.now();
+  const value = run();
+  return { value, ms: performance.now() - start };
+};
 
-  test("separated edits produce separate updates", () => {
-    const before = ["# A", "one", "two", "three", "four", "five", "six"].join("\n");
-    const after = ["# A", "ONE", "two", "three", "four", "five", "SIX"].join("\n");
-    const plan = expectRoundTrip(before, after);
-    expect(updatesOf(plan)).toEqual([
-      { old_str: "ONE", new_str: "one" },
-      { old_str: "SIX", new_str: "six" },
+describe("contentHunks", () => {
+  test("lists each changed stretch with its removed and added lines", () => {
+    expect(contentHunks("a\nb\nc", "a\nb\nc")).toEqual([]);
+    expect(contentHunks("a\nb\nc", "a\nB\nc")).toEqual([{ before: "b", after: "B" }]);
+    expect(contentHunks("a\nb\nc\nd\ne", "A\nb\nc\nd\nE")).toEqual([
+      { before: "a", after: "A" },
+      { before: "e", after: "E" },
     ]);
+    expect(contentHunks("a\nc", "a\nb\nc")).toEqual([{ before: "", after: "b" }]);
+    expect(contentHunks("a\nb\nc", "a\nc")).toEqual([{ before: "b", after: "" }]);
+    expect(contentHunks("", "added")).toEqual([{ before: "", after: "added" }]);
   });
 
-  test("insertion in the middle anchors on a neighbouring line", () => {
-    const before = "Anchor A.\nAnchor B.";
-    const after = "Anchor A.\nInserted paragraph.\n- bullet\nAnchor B.";
-    const plan = expectRoundTrip(before, after);
-    const [update] = updatesOf(plan);
-    expect(update!.old_str).toContain("Inserted paragraph.\n- bullet");
-    expect(update!.new_str.length).toBeGreaterThan(0);
+  test("a diff that would take too long shows the whole changed stretch as one hunk", () => {
+    const old = Array.from({ length: 8000 }, (_, i) => `old line ${i}`);
+    const rewritten = Array.from({ length: 8000 }, (_, i) => `new line ${i}`);
+    const { value, ms } = timed(() => contentHunks(["kept", ...old, "kept too"].join("\n"), ["kept", ...rewritten, "kept too"].join("\n")));
+    expect(value).toEqual([{ before: old.join("\n"), after: rewritten.join("\n") }]);
+    expect(ms).toBeLessThan(500);
   });
 
-  test("insertion at the start and at the end", () => {
-    expect(updatesOf(expectRoundTrip("Body", "Intro\nBody"))).toEqual([{ old_str: "Intro\nBody", new_str: "Body" }]);
-    expect(updatesOf(expectRoundTrip("Body", "Body\nOutro"))).toEqual([{ old_str: "Body\nOutro", new_str: "Body" }]);
-  });
-
-  test("an inserted blank line plus paragraph anchors on the non-blank line above", () => {
-    const plan = expectRoundTrip("Anchor A.\nTail", "Anchor A.\n\nInserted.\nTail");
-    const [update] = updatesOf(plan);
-    expect(update!.old_str.startsWith("Anchor A.")).toBe(true);
-  });
-
-  test("deletion is reverted by re-inserting with context", () => {
-    const plan = expectRoundTrip("keep 1\ndrop me\nkeep 2", "keep 1\nkeep 2");
-    const [update] = updatesOf(plan);
-    expect(update!.new_str).toContain("drop me");
-  });
-
-  test("repeated lines expand the context until the old_str is unique", () => {
-    const before = ["- [ ] task", "x", "- [ ] task", "y", "- [ ] task", "z"].join("\n");
-    const after = ["- [ ] task", "x", "- [x] task", "y", "- [ ] task", "z"].join("\n");
-    expect(updatesOf(expectRoundTrip(before, after))).toEqual([{ old_str: "- [x] task", new_str: "- [ ] task" }]);
-
-    const before2 = ["item", "item", "item"].join("\n");
-    const after2 = ["item", "item", "new", "item"].join("\n");
-    const plan2 = expectRoundTrip(before2, after2);
-    for (const update of updatesOf(plan2)) expect(countOccurrences(after2, update.old_str)).toBe(1);
-  });
-
-  test("hunks whose contexts touch are merged into one update", () => {
-    const before = ["same", "a", "same", "b", "same"].join("\n");
-    const after = ["same", "A", "same", "B", "same"].join("\n");
-    const plan = expectRoundTrip(before, after);
-    expect(updatesOf(plan).length).toBeLessThanOrEqual(2);
-
-    const repetitive = ["x", "x", "x", "x"].join("\n");
-    const changed = ["x", "y", "x", "y", "x", "x"].join("\n");
-    expectRoundTrip(repetitive, changed);
-  });
-
-  test("an empty page: the inverse removes the whole content", () => {
-    const plan = expectRoundTrip("", "# Heading\nBody text");
-    expect(updatesOf(plan)).toEqual([{ old_str: "# Heading\nBody text", new_str: "" }]);
-  });
-
-  test("content deleted entirely is restored by inserting it again", () => {
-    const plan = expectRoundTrip("# Heading\nBody", "");
-    expect(plan.kind === "revertible" && plan.inverse).toEqual({
-      type: "insert_content",
-      insert_content: { content: "# Heading\nBody", position: { type: "start" } },
-    });
-  });
-
-  test("toggle children (tab-indented) round-trip", () => {
-    const before = "<details>\n<summary>More</summary>\n\tChild one\n</details>\nAfter";
-    const after = "<details>\n<summary>More</summary>\n\tChild one\n\tChild two\n</details>\nAfter";
-    expectRoundTrip(before, after);
-  });
-
-  test("property: applying the inverse to after always yields before (randomized)", () => {
-    let seed = 42;
-    const random = () => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed / 2147483648;
-    };
-    const vocabulary = ["a", "b", "c", "", "- x", "# H", "\tchild", "a b", "b a"];
-    const doc = (max: number) =>
-      Array.from({ length: Math.floor(random() * max) }, () => vocabulary[Math.floor(random() * vocabulary.length)]!).join("\n");
-    const mutate = (text: string) => {
-      const lines = text.split("\n");
-      const edits = 1 + Math.floor(random() * 4);
-      for (let i = 0; i < edits; i++) {
-        const at = Math.floor(random() * (lines.length + 1));
-        const choice = random();
-        const line = vocabulary[Math.floor(random() * vocabulary.length)]!;
-        if (choice < 0.4) lines.splice(at, 0, line);
-        else if (choice < 0.7 && lines.length > 0) lines.splice(Math.min(at, lines.length - 1), 1);
-        else if (lines.length > 0) lines[Math.min(at, lines.length - 1)] = line;
-      }
-      return lines.join("\n");
-    };
-    for (let i = 0; i < 2000; i++) {
-      const before = doc(12);
-      const after = random() < 0.1 ? doc(12) : mutate(before);
-      expectRoundTrip(before, after);
-    }
+  test("a long run of identical lines is quick", () => {
+    const lines = Array.from({ length: 50_000 }, () => "x").join("\n");
+    const { value, ms } = timed(() => contentHunks(lines, `x\n${lines}`));
+    expect(value).toEqual([{ before: "", after: "x" }]);
+    expect(ms).toBeLessThan(500);
   });
 });
 
-describe("buildRevertPlan: someone else's edit between our read and our write", () => {
-  const replace = (oldStr: string, newStr: string): PageMarkdownUpdate => ({
-    type: "update_content",
-    update_content: { content_updates: [{ old_str: oldStr, new_str: newStr }] },
-  });
-  const insert = (content: string, position: "start" | "end"): PageMarkdownUpdate => ({
-    type: "insert_content",
-    insert_content: { content, position: { type: position } },
-  });
-  const isConcurrent = (plan: RevertPlan) => plan.kind === "unsupported" && plan.blocker === "concurrent_edit";
+describe("writeBlocker: someone else's edit between our read and our write", () => {
   const doc = "# Notes\n\nIntro\n\n1. first\n2. second\n\nMiddle\n\nOutro";
 
   test("our own change alone is not flagged", () => {
     for (const update of [replace("Middle", "Middle changed"), insert("Added", "end"), insert("Added", "start")]) {
-      const plan = buildRevertPlan(doc, applyInverse(doc, update), update);
-      expect(plan.kind).toBe("revertible");
+      expect(writeBlocker(doc, apply(doc, update), update, 0)).toBeNull();
     }
   });
 
-  test("a change elsewhere is flagged, and the write is not revertible", () => {
+  test("a change elsewhere is flagged", () => {
     const theirs = doc.replace("Intro", "Intro edited by someone");
     for (const update of [replace("Middle", "Middle changed"), insert("Added", "end")]) {
-      expect(isConcurrent(buildRevertPlan(doc, applyInverse(theirs, update), update))).toBe(true);
+      expect(writeBlocker(doc, apply(theirs, update), update, 0)).toBe("concurrent_edit");
     }
     const atEnd = doc.replace("Outro", "Outro edited");
-    expect(isConcurrent(buildRevertPlan(doc, applyInverse(atEnd, insert("Added", "start")), insert("Added", "start")))).toBe(true);
+    expect(writeBlocker(doc, apply(atEnd, insert("Added", "start")), insert("Added", "start"), 0)).toBe("concurrent_edit");
   });
 
   test("Notion renumbering a list or dropping blank lines is not flagged", () => {
     const update = replace("1. first", "1. first\n2. inserted");
-    const renumbered = applyInverse(doc, update).replace("2. second", "3. second");
-    expect(buildRevertPlan(doc, renumbered, update).kind).toBe("revertible");
-    const blankDropped = applyInverse(doc, replace("Middle", "Middle changed")).replace("\n\nOutro", "\nOutro");
-    expect(isConcurrent(buildRevertPlan(doc, blankDropped, replace("Middle", "Middle changed")))).toBe(false);
+    const renumbered = apply(doc, update).replace("2. second", "3. second");
+    expect(writeBlocker(doc, renumbered, update, 0)).toBeNull();
+    const blankDropped = apply(doc, replace("Middle", "Middle changed")).replace("\n\nOutro", "\nOutro");
+    expect(writeBlocker(doc, blankDropped, replace("Middle", "Middle changed"), 0)).toBeNull();
   });
 
   test("an edit of the very next block is flagged", () => {
     const update = replace("Middle", "Middle changed");
-    expect(isConcurrent(buildRevertPlan(doc, applyInverse(doc.replace("Outro", "Outro edited"), update), update))).toBe(true);
-    expect(isConcurrent(buildRevertPlan(doc, applyInverse(doc.replace("2. second", "2. second edited"), update), update))).toBe(true);
+    expect(writeBlocker(doc, apply(doc.replace("Outro", "Outro edited"), update), update, 0)).toBe("concurrent_edit");
+    expect(writeBlocker(doc, apply(doc.replace("2. second", "2. second edited"), update), update, 0)).toBe("concurrent_edit");
   });
 
   test("an edit whose place cannot be located is not revertible", () => {
     // Two "Note" lines in what we read, yet Notion (matching whitespace-tolerantly) applied it.
-    const twice = "Note\n\nBody\n\nNote ";
-    const update = replace("Note", "Note changed");
-    const plan = buildRevertPlan(twice, "Note changed\n\nBody\n\nNote ", update);
-    expect(plan).toMatchObject({ kind: "unsupported", blocker: "unlocated_edit" });
+    expect(writeBlocker("Note\n\nBody\n\nNote ", "Note changed\n\nBody\n\nNote ", replace("Note", "Note changed"), 0)).toBe(
+      "unlocated_edit",
+    );
+    // Found nowhere in what we read, and Notion did not report it missed.
+    expect(writeBlocker("Body", "Changed", replace("Bodyy", "Changed"), 0)).toBe("unlocated_edit");
+  });
+
+  test("edits Notion reported missed changed nothing, so the others are still located", () => {
+    const update: PageMarkdownUpdate = {
+      type: "update_content",
+      update_content: {
+        content_updates: [
+          { old_str: "Middle", new_str: "Middle changed" },
+          { old_str: "Nowhere", new_str: "x" },
+        ],
+      },
+    };
+    const after = doc.replace("Middle", "Middle changed");
+    expect(writeBlocker(doc, after, update, 1)).toBeNull();
+    expect(writeBlocker(doc, after, update, 0)).toBe("unlocated_edit");
   });
 
   test("an edit within the lines we changed cannot be told apart", () => {
     const update = replace("Middle", "Middle changed");
-    const after = applyInverse(doc, update).replace("Middle changed", "Middle changed twice");
-    expect(isConcurrent(buildRevertPlan(doc, after, update))).toBe(false);
+    expect(writeBlocker(doc, apply(doc, update).replace("Middle changed", "Middle changed twice"), update, 0)).toBeNull();
   });
 
-  test("when an old_str cannot be located the check is skipped rather than guessed", () => {
-    const ambiguous = "x\nx\ny";
-    const update = replace("x", "z");
-    expect(isConcurrent(buildRevertPlan(ambiguous, "z\nx\ny edited", update))).toBe(false);
+  test("stays quick on long runs of identical lines", () => {
+    const lines = Array.from({ length: 8000 }, () => "x");
+    const before = lines.join("\n");
+    const { value, ms } = timed(() => writeBlocker(before, `x\n${before}`, insert("x", "start"), 0));
+    expect(value).toBeNull();
+    expect(ms).toBeLessThan(500);
+    // Two edits leave a long untouched stretch between them to find in what Notion returned.
+    const runs = [...lines, "a", ...lines, "b", ...lines].join("\n");
+    const update: PageMarkdownUpdate = {
+      type: "update_content",
+      update_content: {
+        content_updates: [
+          { old_str: "a", new_str: "A" },
+          { old_str: "b", new_str: "B" },
+        ],
+      },
+    };
+    const both = timed(() => writeBlocker(runs, apply(runs, update), update, 0));
+    expect(both.value).toBeNull();
+    expect(both.ms).toBeLessThan(500);
   });
 
   test("randomized: never flags our own edit; always flags a change to any other line", () => {
@@ -271,14 +173,14 @@ describe("buildRevertPlan: someone else's edit between our read and our write", 
         [start, end] = [at, at + 1];
       }
 
-      expect(isConcurrent(buildRevertPlan(before, applyInverse(before, update), update))).toBe(false);
+      expect(writeBlocker(before, apply(before, update), update, 0)).toBeNull();
 
       const far = lines.flatMap((line, n) => ((n < start || n >= end) && line.startsWith("line ") ? [n] : []));
       if (far.length === 0) continue;
       const theirs = [...lines];
       const target = pick(far);
       theirs[target] = `${theirs[target]} by someone else`;
-      expect(isConcurrent(buildRevertPlan(before, applyInverse(theirs.join("\n"), update), update))).toBe(true);
+      expect(writeBlocker(before, apply(theirs.join("\n"), update), update, 0)).toBe("concurrent_edit");
     }
   });
 });

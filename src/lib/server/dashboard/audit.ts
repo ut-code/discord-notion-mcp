@@ -7,14 +7,13 @@ import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
 import {
   AppendContentRequestSchema,
-  ContentSnapshotSchema,
   ContentUpdateSchema,
   EditContentRequestSchema,
   UpdatePropertiesRequestSchema,
   UpdatePropertiesSnapshotSchema,
 } from "../notion/changes/audit-records";
 import type { RevertResult } from "../notion/changes/revert-reasons";
-import type { ContentHunk } from "../notion/content/content-diff";
+import { contentHunks, type ContentHunk } from "../notion/content/content-diff";
 import { renderPropertyValue } from "../notion/content/properties";
 import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
@@ -212,10 +211,13 @@ function summarySentence(row: NotionAuditRow): string {
   });
 }
 
-/** Stored hunks; failed writes have none, so the requested change is shown instead. */
-function contentHunks(row: NotionAuditRow): ContentHunk[] {
-  const snapshot = ContentSnapshotSchema.safeParse(row.snapshot);
-  if (snapshot.success) return snapshot.data.hunks;
+/**
+ * What a content write changed, from the content kept around it. Writes without it (failed ones,
+ * or a page Notion returned truncated) show the requested change instead.
+ */
+async function changedContent(deps: DashboardDeps, row: NotionAuditRow): Promise<ContentHunk[]> {
+  const content = await deps.audit.getContent(row.id);
+  if (content && content.after !== null) return contentHunks(content.before, content.after);
   if (row.operation === "append_content") {
     const content = AppendContentRequestSchema.safeParse(row.request).data?.content;
     return content ? [{ before: "", after: content }] : [];
@@ -250,11 +252,11 @@ type ChangeView =
   | { kind: "archived" }
   | { kind: "revert"; of: { id: number; href: string } | null };
 
-function changeView(row: NotionAuditRow): ChangeView {
+async function changeView(deps: DashboardDeps, row: NotionAuditRow): Promise<ChangeView> {
   switch (row.operation) {
     case "append_content":
     case "edit_content": {
-      const hunks = contentHunks(row);
+      const hunks = await changedContent(deps, row);
       const removed = hunks.reduce((sum, hunk) => sum + linesOf(hunk.before).length, 0);
       const added = hunks.reduce((sum, hunk) => sum + linesOf(hunk.after).length, 0);
       return {
@@ -339,7 +341,7 @@ export async function auditDetail(deps: DashboardDeps, idParam: string, viewer: 
     operation: AUDIT_OPERATION_LABELS[row.operation],
     badges: statusBadges(row),
     summary: summarySentence(row),
-    change: changeView(row),
+    change: await changeView(deps, row),
     details: {
       userName: row.discordDisplayName,
       username: row.discordUsername,
@@ -376,7 +378,7 @@ function revertView(deps: DashboardDeps, row: NotionAuditRow): RevertView | null
   }
 }
 
-/** `conflict` asks the page to offer a forced revert (the page changed after the write). */
+/** `conflict`: the page changed after the write, so the page explains that it has to be fixed by hand. */
 export interface RevertActionResult {
   result: ActionResult;
   conflict: boolean;
@@ -387,9 +389,8 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
   if (!actor.isAdmin) return { result: ADMIN_ONLY, conflict: false };
   const id = parseAuditId(idParam);
   if (id === null || !(await deps.audit.getAudit(id))) return null;
-  const force = formString(form, "force") === "true";
   if (formString(form, "confirm") !== "yes") {
-    return { result: { kind: "error", message: m.audit_revert_confirm_required() }, conflict: force };
+    return { result: { kind: "error", message: m.audit_revert_confirm_required() }, conflict: false };
   }
   let outcome: RevertResult;
   try {
@@ -397,14 +398,13 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
       actorDiscordUserId: actor.discordUserId,
       actorDisplayName: actor.displayName,
       actorUsername: actor.username,
-      force,
     });
   } catch (error) {
-    deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: false, error: errorMessage(error) });
+    deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, ok: false, error: errorMessage(error) });
     return { result: { kind: "error", message: m.audit_revert_failed({ error: errorMessage(error) }) }, conflict: false };
   }
   if (outcome.ok) {
-    deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, force, ok: true, revertAuditId: outcome.revertAuditId });
+    deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, ok: true, revertAuditId: outcome.revertAuditId });
     return { result: { kind: outcome.partial ? "warn" : "ok", message: revertSuccessText(outcome) }, conflict: false };
   }
   const { reason } = outcome;
@@ -412,12 +412,11 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
     event: "audit_revert",
     auditId: id,
     by: actor.discordUserId,
-    force,
     ok: false,
     error: reason.kind,
     ...(reason.kind === "failed" ? { revertAuditId: reason.revertAuditId } : {}),
   });
-  // The page explains the conflict and offers a forced revert instead of a message.
+  // The page explains the conflict instead of a message.
   if (reason.kind === "conflict") return { result: { kind: "warn", message: null }, conflict: true };
   return { result: { kind: "error", message: revertReasonText(reason) }, conflict: false };
 }

@@ -545,10 +545,10 @@ describe("read-only members", () => {
 
     const parent = h.notion.addPage({ title: "Protected root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Protected", request: {} });
-    const attempts: Array<Record<string, string>> = [{ confirm: "yes" }, { confirm: "yes", force: "true" }];
-    for (const fields of attempts) {
-      expect(await revertAudit(deps, String(created.auditId), form(fields), member)).toEqual({ result: ADMIN_ONLY, conflict: false });
-    }
+    expect(await revertAudit(deps, String(created.auditId), form({ confirm: "yes" }), member)).toEqual({
+      result: ADMIN_ONLY,
+      conflict: false,
+    });
     expect((await h.server.notionAudit.getAudit(created.auditId))!.revertedAt).toBeNull();
     expect(h.notion.pages.get(created.pageId)!.in_trash).toBeFalsy();
   });
@@ -954,7 +954,7 @@ describe("audit log", () => {
     const row = (await h.server.notionAudit.getAudit(created.auditId))!;
     expect(row.revertedBy).toBe(OWNER_ID);
     expect(h.notion.pages.get(created.pageId)!.in_trash).toBe(true);
-    expect(h.events.at(-1)).toMatchObject({ event: "audit_revert", auditId: created.auditId, ok: true, force: false });
+    expect(h.events.at(-1)).toMatchObject({ event: "audit_revert", auditId: created.auditId, ok: true });
 
     const detail = (await auditDetail(deps, id, owner))!;
     expect(detail.revert).toEqual({
@@ -974,23 +974,21 @@ describe("audit log", () => {
     expect(await revertAudit(deps, "99999", form({ confirm: "yes" }), owner)).toBeNull();
   });
 
-  test("a conflicting revert offers a forced revert", async () => {
+  test("a revert of a page edited afterwards is refused and left to be fixed by hand", async () => {
     const parent = h.notion.addPage({ title: "Conflict root", markdown: "Intro" });
     const appended = await writes.appendContent(MEMBER_ACTOR, { pageId: parent.id, content: "mine", request: {} });
     h.notion.setMarkdown(parent.id, "Intro\nmine\nlater edit");
     const id = String(appended.auditId);
 
-    expect(await revertAudit(deps, id, form({ confirm: "yes" }), owner)).toEqual({
-      result: { kind: "warn", message: null },
-      conflict: true,
-    });
-    expect(await revertAudit(deps, id, form({ force: "true" }), owner)).toMatchObject({ result: { kind: "error" }, conflict: true });
-    expect((await auditDetail(deps, id, owner))!.details.targetUrl).toBeString();
-
-    const forced = await revertAudit(deps, id, form({ confirm: "yes", force: "true" }), owner);
-    expect(forced?.result.kind).toBe("ok");
-    expect(forced?.result.message).toStartWith("後からの編集があるまま取り消しました。");
-    expect((await h.server.notionAudit.getAudit(appended.auditId))!.revertedAt).not.toBeNull();
+    const attempts: Array<Record<string, string>> = [{ confirm: "yes" }, { confirm: "yes", force: "true" }];
+    for (const fields of attempts) {
+      expect(await revertAudit(deps, id, form(fields), owner)).toEqual({ result: { kind: "warn", message: null }, conflict: true });
+    }
+    expect(h.notion.markdown.get(parent.id)).toBe("Intro\nmine\nlater edit");
+    expect((await h.server.notionAudit.getAudit(appended.auditId))!.revertedAt).toBeNull();
+    const detail = (await auditDetail(deps, id, owner))!;
+    expect(detail.details.targetUrl).toBeString();
+    expect(detail.change).toMatchObject({ kind: "diff", lines: [{ kind: "add", text: "+ mine" }] });
   });
 
   test("without Notion a revert is not offered", async () => {
@@ -1079,8 +1077,8 @@ describe("audit log", () => {
     expect(auditNoteText(note)).toBe(
       "「Count」を戻しました。「Files」（Notion にアップロードされたファイル（a.png）は API で設定し直せません）は戻せませんでした。",
     );
-    expect(auditNoteText({ kind: "revert_blocked", blocker: "no_anchor" })).toBe(
-      "書き込みは反映しましたが、自動では取り消せません: ページに文字が残っておらず、元に戻す位置を決められません。",
+    expect(auditNoteText({ kind: "revert_blocked", blocker: "concurrent_edit" })).toBe(
+      "書き込みは反映しましたが、自動では取り消せません: 同時に別の人がページを編集しており、取り消すとその編集まで消えてしまいます。",
     );
     expect(auditNoteText({ kind: "from_a_newer_version" })).toBe("この注記は、より新しいバージョンで記録されたため表示できません。");
     expect(auditNoteText(null)).toBeNull();

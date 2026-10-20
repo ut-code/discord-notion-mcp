@@ -114,7 +114,7 @@ describe("notion_revert_change", () => {
     expect(listed).toContain(`reverts #${ids.alice}`);
   });
 
-  test("a conflict is refused and points to the dashboard; the tool cannot force", async () => {
+  test("a conflict is refused, leaving the later edits, and points to the change on the dashboard", async () => {
     const parent = api.addPage({ title: "P", markdown: "Intro" });
     const appended = await writes.appendContent(actorFor(ALICE), { pageId: parent.id, content: "mine", request: {} });
     api.setMarkdown(parent.id, "Intro\nmine\nlater edit");
@@ -125,7 +125,7 @@ describe("notion_revert_change", () => {
       expect((error as Error).message).toContain("Not reverted: the page changed after the write.");
       expect((error as Error).message).toContain("content changed after audit");
       expect((error as Error).message).toContain(
-        `An admin can force the revert from the dashboard at ${PUBLIC_URL}/dashboard/audit/${appended.auditId}.`,
+        `Fix the page by hand; the change is shown at ${PUBLIC_URL}/dashboard/audit/${appended.auditId}.`,
       );
     }
     expect(api.markdown.get(parent.id)).toBe("Intro\nmine\nlater edit");
@@ -140,13 +140,13 @@ describe("notion_revert_change", () => {
     const error = await revert!
       .handler(revert!.inputSchema.parse({ audit_id: appended.auditId }) as never, { principal: principalFor(ALICE) })
       .catch((e: Error) => e);
-    expect((error as Error).message).toContain(`dashboard at /dashboard/audit/${appended.auditId}.`);
+    expect((error as Error).message).toContain(`the change is shown at /dashboard/audit/${appended.auditId}.`);
   });
 
-  test("the revert tool has no force option and says forcing is admin-UI only", () => {
+  test("the revert tool has no force option and says a changed page is fixed by hand", () => {
     const revert = tools.get("notion_revert_change")!;
     expect(Object.keys(revert.inputSchema.shape)).toEqual(["audit_id"]);
-    expect(revert.description).toContain("only an admin can force it, from the dashboard");
+    expect(revert.description).toContain("the page then has to be fixed by hand");
     expect(tools.get("notion_list_recent_changes")!.annotations?.readOnlyHint).toBe(true);
   });
 });

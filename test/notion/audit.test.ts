@@ -81,6 +81,32 @@ describe("NotionWriteService", () => {
     expect(audit.revertability((await store.get(pending!.id))!)).toEqual({ kind: "not_ok", status: "interrupted" });
   });
 
+  test("a write that ends after being marked interrupted is recorded with its content after all", async () => {
+    api.markdown.set(parent.id, "Body");
+    const write = api.updatePageMarkdown.bind(api);
+    let finish = () => {};
+    api.updatePageMarkdown = (pageId, update) => new Promise((resolve) => (finish = () => resolve(write(pageId, update))));
+    const outcome = writes.appendContent(ACTOR, { pageId: parent.id, content: "late", request: {} });
+    await Bun.sleep(10);
+    expect(await audit.markInterruptedWrites(new Date(Date.now() + 11 * 60_000))).toBe(1);
+    finish();
+    const { auditId } = await outcome;
+    expect(await store.get(auditId)).toMatchObject({ status: "ok" });
+    expect(await store.getContent(auditId)).toEqual({ before: "Body", after: "Body\nlate" });
+  });
+
+  test("warnings Notion returns that this server does not know are logged by code only", async () => {
+    const logged: unknown[] = [];
+    const logging = new NotionWriteService(api, store, (entry) => logged.push(entry));
+    const write = api.updatePageMarkdown.bind(api);
+    api.updatePageMarkdown = async (pageId, update) => ({
+      ...(await write(pageId, update)),
+      warnings: [{ code: "something_new", message: "quotes page text" }],
+    });
+    await logging.appendContent(ACTOR, { pageId: parent.id, content: "x", request: {} });
+    expect(logged).toEqual([{ event: "notion_unknown_warning", pageId: parent.id, code: "something_new" }]);
+  });
+
   test("create_page under a page: properties only, then the content (leading H1 included) is inserted at the end", async () => {
     const outcome = await writes.createPage(ACTOR, {
       parentId: parent.id,
@@ -180,7 +206,7 @@ describe("NotionWriteService", () => {
     expect(api.callsOf("createPage")).toEqual([]);
   });
 
-  test("append_content stores an inverse edit, hashes and hunks (not the whole page) and comments", async () => {
+  test("append_content keeps the content before and after apart from the row, hashes it, and comments", async () => {
     api.markdown.set(parent.id, "Intro\nMiddle");
     const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "Added line", request: { content: "Added line" } });
 
@@ -195,24 +221,41 @@ describe("NotionWriteService", () => {
       status: "ok",
       targetPageId: parent.id,
       error: null,
-      result: { changedHunks: 1 },
-      snapshot: {
-        beforeSha256: sha256("Intro\nMiddle"),
-        afterSha256: sha256("Intro\nMiddle\nAdded line"),
-        inverse: {
-          type: "update_content",
-          update_content: { content_updates: [{ old_str: "Middle\nAdded line", new_str: "Middle" }] },
-        },
-        revertBlocker: null,
-        hunks: [{ before: "", after: "Added line" }],
-      },
+      result: { missedEdits: [] },
+      snapshot: { beforeSha256: sha256("Intro\nMiddle"), afterSha256: sha256("Intro\nMiddle\nAdded line"), revertBlocker: null },
     });
-    expect(JSON.stringify(row.snapshot)).not.toContain("Intro");
+    expect(JSON.stringify(row)).not.toContain("Intro");
+    expect(await store.getContent(outcome.auditId)).toEqual({ before: "Intro\nMiddle", after: "Intro\nMiddle\nAdded line" });
     expect(api.comments.at(-1)).toMatchObject({
       pageId: parent.id,
       author: "Alice (@alice, Discord)",
       text: `🤖 MCP 経由で内容を追記しました — audit #${outcome.auditId}`,
     });
+  });
+
+  test("edits Notion found no match for are reported while the others apply, and the write stays revertible", async () => {
+    api.markdown.set(parent.id, "One\nTwo");
+    const outcome = await writes.editContent(ACTOR, {
+      pageId: parent.id,
+      edits: [
+        { old_str: "One", new_str: "1" },
+        { old_str: "Three", new_str: "3" },
+      ],
+      request: {},
+    });
+    expect(api.markdown.get(parent.id)).toBe("1\nTwo");
+    expect(outcome).toMatchObject({ missedEdits: ["No matches found for Three."], warning: null });
+    expect(await audit.revert(outcome.auditId, ADMIN)).toMatchObject({ ok: true });
+    expect(api.markdown.get(parent.id)).toBe("One\nTwo");
+  });
+
+  test("pages too large for a revert to send back are not edited", async () => {
+    api.markdown.set(parent.id, "x".repeat(450_001));
+    await expect(writes.appendContent(ACTOR, { pageId: parent.id, content: "More", request: {} })).rejects.toThrow(
+      "too large to edit revertibly",
+    );
+    expect(api.callsOf("updatePageMarkdown")).toEqual([]);
+    expect((await store.list({ limit: 10, offset: 0 })).total).toBe(0);
   });
 
   test("append_content at the start", async () => {
@@ -294,7 +337,8 @@ describe("NotionWriteService", () => {
     expect(outcome.warning).toEqual({ kind: "revert_blocked", blocker: "truncated_after_write" });
     expect(writeWarningText(outcome.warning!)).toContain("automatic revert may not be possible");
     const row = (await store.get(outcome.auditId))!;
-    expect(row).toMatchObject({ status: "ok", snapshot: { afterSha256: null, inverse: null, revertBlocker: "truncated_after_write" } });
+    expect(row).toMatchObject({ status: "ok", snapshot: { afterSha256: null, revertBlocker: "truncated_after_write" } });
+    expect(await store.getContent(outcome.auditId)).toEqual({ before: "Body", after: null });
     expect(audit.revertability(row)).toEqual({ kind: "blocked", blocker: "truncated_after_write" });
     const result = await audit.revert(outcome.auditId, ADMIN);
     expect(result).toEqual({ ok: false, reason: { kind: "blocked", blocker: "truncated_after_write" } });
@@ -314,7 +358,7 @@ describe("NotionWriteService", () => {
     const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "Odd", request: {} });
     expect(outcome.warning).toEqual({ kind: "revert_blocked", blocker: "child_object_created" });
     const row = (await store.get(outcome.auditId))!;
-    expect(row).toMatchObject({ status: "ok", snapshot: { inverse: null, revertBlocker: "child_object_created" } });
+    expect(row).toMatchObject({ status: "ok", snapshot: { revertBlocker: "child_object_created" } });
     expect(audit.revertability(row)).toEqual({ kind: "blocked", blocker: "child_object_created" });
   });
 
@@ -426,7 +470,7 @@ describe("NotionWriteService", () => {
     };
     const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
     expect(outcome.warning).toEqual({ kind: "revert_blocked", blocker: "concurrent_edit" });
-    expect((await store.get(outcome.auditId))!.snapshot).toMatchObject({ inverse: null, revertBlocker: "concurrent_edit" });
+    expect((await store.get(outcome.auditId))!.snapshot).toMatchObject({ revertBlocker: "concurrent_edit" });
     expect(audit.revertability((await store.get(outcome.auditId))!)).toEqual({ kind: "blocked", blocker: "concurrent_edit" });
   });
 
@@ -487,7 +531,7 @@ describe("NotionAuditService.revert", () => {
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "Oops", request: {} });
     const result = await audit.revert(created.auditId, ADMIN);
 
-    expect(result).toEqual({ ok: true, revertAuditId: 2, forced: false, partial: false, note: null });
+    expect(result).toEqual({ ok: true, revertAuditId: 2, partial: false, note: null });
     expect(api.pages.get(created.pageId)!.in_trash).toBe(true);
     expect(api.comments.at(-1)).toMatchObject({
       pageId: created.pageId,
@@ -503,27 +547,24 @@ describe("NotionAuditService.revert", () => {
       status: "ok",
       discordUserId: ADMIN.actorDiscordUserId,
       revertOfAuditId: created.auditId,
-      request: { auditId: created.auditId, force: false },
+      request: { auditId: created.auditId },
     });
   });
 
-  test("append_content: removes the appended content in one update_content call", async () => {
+  test("append_content: puts the previous content back in one replace_content call", async () => {
     api.markdown.set(parent.id, "keep");
     const appended = await writes.appendContent(ACTOR, { pageId: parent.id, content: "- a\n\t- a1\n- b", request: {} });
     const result = await audit.revert(appended.auditId, ADMIN);
-    expect(result).toEqual({ ok: true, revertAuditId: 2, forced: false, partial: false, note: null });
+    expect(result).toEqual({ ok: true, revertAuditId: 2, partial: false, note: null });
     expect(api.markdown.get(parent.id)).toBe("keep");
-    const reverts = api.callsOf("updatePageMarkdown").slice(1);
-    expect(reverts.length).toBe(1);
-    expect(reverts[0].update.type).toBe("update_content");
+    expect(api.callsOf("updatePageMarkdown").slice(1)).toEqual([
+      { pageId: parent.id, update: { type: "replace_content", replace_content: { new_str: "keep" } } },
+    ]);
     expect(api.comments.at(-1)!.text).toBe(`↩️ audit #${appended.auditId} を取り消しました`);
   });
 
   test("append_content into an empty page: revert empties it again", async () => {
     const appended = await writes.appendContent(ACTOR, { pageId: parent.id, content: "# Title\nBody", request: {} });
-    expect((await store.get(appended.auditId))!.snapshot).toMatchObject({
-      inverse: { update_content: { content_updates: [{ old_str: "# Title\nBody", new_str: "" }] } },
-    });
     expect((await audit.revert(appended.auditId, ADMIN)).ok).toBe(true);
     expect(api.markdown.get(parent.id)).toBe("");
   });
@@ -544,7 +585,7 @@ describe("NotionAuditService.revert", () => {
     expect(api.markdown.get(parent.id)).toBe(before);
   });
 
-  test("content revert: refuses when the content changed, force succeeds while the context still matches", async () => {
+  test("content revert: refuses when the content changed afterwards, leaving later edits alone", async () => {
     api.markdown.set(parent.id, "Intro");
     const appended = await writes.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
     api.setMarkdown(parent.id, "Intro\nmine\nsomeone else");
@@ -552,28 +593,41 @@ describe("NotionAuditService.revert", () => {
     const refused = await audit.revert(appended.auditId, ADMIN);
     expect(refused).toEqual({ ok: false, reason: { kind: "conflict", conflict: { kind: "content_changed" } } });
     expect(api.callsOf("updatePageMarkdown").length).toBe(1);
-
-    const forced = await audit.revert(appended.auditId, { ...ADMIN, force: true });
-    expect(forced).toMatchObject({ ok: true, forced: true });
-    expect(api.markdown.get(parent.id)).toBe("Intro\nsomeone else");
-    expect(await store.get(2)).toMatchObject({ request: { auditId: 1, force: true }, status: "ok" });
+    expect(api.markdown.get(parent.id)).toBe("Intro\nmine\nsomeone else");
+    expect((await store.list({ limit: 10, offset: 0 })).total).toBe(1);
   });
 
-  test("content revert: force with broken context fails cleanly and leaves the row un-reverted", async () => {
+  test("content revert: a page edited between the check and the write is left alone", async () => {
     api.markdown.set(parent.id, "Intro");
     const appended = await writes.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
-    api.setMarkdown(parent.id, "Intro\nrewritten by someone");
+    const read = api.retrievePageMarkdown.bind(api);
+    let reads = 0;
+    api.retrievePageMarkdown = async (pageId) => {
+      // The check passes; someone edits before the second, last-moment read.
+      if (++reads === 2) api.setMarkdown(pageId, "Intro\nmine\nmeanwhile");
+      return read(pageId);
+    };
+    const result = await audit.revert(appended.auditId, ADMIN);
+    expect(result).toMatchObject({ ok: false, reason: { kind: "failed", failure: { kind: "changed_meanwhile" } } });
+    expect(api.markdown.get(parent.id)).toBe("Intro\nmine\nmeanwhile");
+    expect(api.callsOf("updatePageMarkdown").length).toBe(1);
+    expect((await store.get(appended.auditId))!.revertedAt).toBeNull();
+  });
 
-    const forced = await audit.revert(appended.auditId, { ...ADMIN, force: true });
-    expect(forced).toMatchObject({
+  test("content revert: a restore Notion refuses fails cleanly and leaves the row un-reverted", async () => {
+    api.markdown.set(parent.id, "Intro");
+    const appended = await writes.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
+    api.failNext(
+      "updatePageMarkdown",
+      new NotionRequestError("This operation would delete child pages or databases.", 400, "validation_error"),
+    );
+
+    const result = await audit.revert(appended.auditId, ADMIN);
+    expect(result).toMatchObject({
       ok: false,
-      reason: {
-        kind: "failed",
-        failure: { kind: "text_gone", notionMessage: expect.stringContaining("No matches found") },
-        revertAuditId: 2,
-      },
+      reason: { kind: "failed", failure: { kind: "refused", notionMessage: expect.stringContaining("child pages") }, revertAuditId: 2 },
     });
-    expect(api.markdown.get(parent.id)).toBe("Intro\nrewritten by someone");
+    expect(api.markdown.get(parent.id)).toBe("Intro\nmine");
     expect((await store.get(appended.auditId))!.revertedAt).toBeNull();
     expect(await store.get(2)).toMatchObject({
       operation: "revert",
@@ -619,7 +673,7 @@ describe("NotionAuditService.revert", () => {
     expect(api.comments.at(-1)!.text).toBe(`↩️ audit #${archived.auditId} を取り消しました`);
   });
 
-  test("refuses when a property it set changed afterwards, even within the same minute, unless forced", async () => {
+  test("refuses when a property it set changed afterwards, even within the same minute", async () => {
     const row = addRow({ Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue });
     const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
     // Someone sets it again without the minute-truncated last_edited_time moving.
@@ -628,10 +682,6 @@ describe("NotionAuditService.revert", () => {
     const refused = await audit.revert(updated.auditId, ADMIN);
     expect(refused).toMatchObject({ ok: false, reason: { kind: "conflict", conflict: { kind: "properties_changed", names: ["Count"] } } });
     expect(api.callsOf("updatePage").length).toBe(1);
-
-    const forced = await audit.revert(updated.auditId, { ...ADMIN, force: true });
-    expect(forced).toMatchObject({ ok: true, forced: true });
-    expect(await store.get(2)).toMatchObject({ request: { auditId: 1, force: true } });
   });
 
   test("edits to other properties are no conflict for a property revert", async () => {
@@ -641,7 +691,7 @@ describe("NotionAuditService.revert", () => {
     });
     const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
     await api.updatePage({ pageId: row.id, properties: { Note: { number: 5 } } });
-    expect(await audit.revert(updated.auditId, ADMIN)).toMatchObject({ ok: true, forced: false });
+    expect(await audit.revert(updated.auditId, ADMIN)).toMatchObject({ ok: true });
     expect(api.pages.get(row.id)!.properties.Note).toMatchObject({ number: 5 });
   });
 
@@ -781,7 +831,7 @@ describe("NotionAuditService.revert", () => {
     const row = addRow({ Count: { id: "cnt", type: "number", number: 1 } as PagePropertyValue });
     const updated = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 2 } }, request: {} });
     const created = await writes.createPage(ACTOR, { parentId: parent.id, title: "A", request: {} });
-    await overwriteAuditRow(db, appended.auditId, { snapshot: { beforeSha256: "x", inverse: "not an update" } });
+    await overwriteAuditRow(db, appended.auditId, { snapshot: { beforeSha256: "x", revertBlocker: "not a blocker" } });
     await overwriteAuditRow(db, updated.auditId, { snapshot: { properties: [{ name: "Count" }] } });
     await overwriteAuditRow(db, created.auditId, { result: { url: "https://example.invalid" } });
     const writesBefore = api.calls.filter((call) => ["updatePage", "updatePageMarkdown", "createComment"].includes(call.method)).length;
