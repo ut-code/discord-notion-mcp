@@ -7,7 +7,7 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 | 権限           | ツール                                                                                                                                                                                 |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `discord:read` | `discord_list_channels` `discord_list_threads` `discord_read_messages` `discord_get_message` `discord_search_messages` `discord_find_member` `discord_list_pins` `discord_list_events` |
-| `notion:read`  | `notion_search` `notion_get_page` `notion_query_database` `notion_get_database` `notion_get_comments`                                                                                  |
+| `notion:read`  | `notion_search` `notion_get_page` `notion_get_users` `notion_query_database` `notion_get_database` `notion_get_comments`                                                               |
 | `notion:write` | `notion_create_page` `notion_append_content` `notion_edit_content` `notion_update_properties` `notion_archive_page` `notion_list_recent_changes` `notion_revert_change`                |
 
 - `notion:write`（画面では「Notion 編集」）は `notion:read` を含む。
@@ -28,7 +28,7 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 
 ### Notion
 
-1. [Integrations](https://www.notion.so/profile/integrations) で Internal integration を作成（Read / Update / Insert content、Read / Insert comments）
+1. [Integrations](https://www.notion.so/profile/integrations) で Internal integration を作成（Read / Update / Insert content、Read / Insert comments、User information without email addresses）
 2. 公開したいページの「…」→ コネクト で追加
 
 ### Coolify

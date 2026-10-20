@@ -8,7 +8,19 @@ export type { NotionToolDeps };
 export { createNotionChangeTools } from "./changes";
 
 export function createNotionTools(deps: NotionToolDeps): AnyToolDefinition[] {
-  const { search, getPage, queryDatabase, getDatabase, getComments } = createReadTools(deps);
+  const { search, getPage, getUsers, queryDatabase, getDatabase, getComments } = createReadTools(deps);
   const { createPage, appendContent, editContent, updateProperties, archivePage } = createWriteTools(deps);
-  return [search, getPage, queryDatabase, getDatabase, getComments, createPage, appendContent, editContent, updateProperties, archivePage];
+  return [
+    search,
+    getPage,
+    getUsers,
+    queryDatabase,
+    getDatabase,
+    getComments,
+    createPage,
+    appendContent,
+    editContent,
+    updateProperties,
+    archivePage,
+  ];
 }

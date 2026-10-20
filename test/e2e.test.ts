@@ -24,7 +24,14 @@ const PUBLIC_CHANNEL = "400000000000000001";
 const HIDDEN_CHANNEL = "400000000000000002";
 
 let h: Harness;
-const NOTION_READ_TOOLS = ["notion_get_comments", "notion_get_database", "notion_get_page", "notion_query_database", "notion_search"];
+const NOTION_READ_TOOLS = [
+  "notion_get_comments",
+  "notion_get_database",
+  "notion_get_page",
+  "notion_get_users",
+  "notion_query_database",
+  "notion_search",
+];
 const NOTION_WRITE_TOOLS = [
   "notion_append_content",
   "notion_archive_page",

@@ -4,7 +4,7 @@ import { notionFailure, writeMayHaveApplied, type NotionApi, type NotionPage, ty
 import { resolveParent, toToolError } from "../client/resolve";
 import type { ContentUpdate, PageMarkdownUpdate, PageParent } from "../client/types";
 import { buildRevertPlan, sha256 } from "../content/content-diff";
-import { assertNoChildObjects, stripUserMentionLabels } from "../content/enhanced-markdown";
+import { assertNoChildObjects, countChildObjects } from "../content/enhanced-markdown";
 import {
   mayBeTruncated,
   pageTitle,
@@ -80,12 +80,6 @@ const CHECK_PAGE = "Read the page with notion_get_page";
 function unconfirmedWrite(error: unknown, auditId: number, check: string): ToolError {
   const message = `Notion did not confirm the change (${notionFailure(error)}), so it may or may not have been applied (audit #${auditId}).`;
   return new ToolError(`${message} ${check} before retrying, or a retry may apply it twice.`, { logMessage: message });
-}
-
-/** Validates content written to a page and normalizes labeled user mentions. */
-function prepareContent(content: string, field: string): string {
-  assertNoChildObjects(content, field);
-  return stripUserMentionLabels(content);
 }
 
 /**
@@ -171,7 +165,8 @@ export class NotionWriteService {
     actor: Actor,
     input: { parentId: string; title: string; properties?: PropertyValues; content?: string; request: Record<string, unknown> },
   ): Promise<WriteOutcome> {
-    const content = input.content?.trim() ? prepareContent(input.content, "content") : null;
+    const content = input.content?.trim() ? input.content : null;
+    if (content) assertNoChildObjects(content, "content");
     const parent = await resolveParent(this.api, input.parentId);
     const extra = input.properties ?? {};
     let parentRef: PageParent;
@@ -237,12 +232,12 @@ export class NotionWriteService {
     input: { pageId: string; content: string; position?: "start" | "end"; request: Record<string, unknown> },
   ): Promise<ContentWriteOutcome> {
     if (!input.content.trim()) throw new ToolError("Content is empty.");
-    const content = prepareContent(input.content, "content");
+    assertNoChildObjects(input.content, "content");
     return this.writeContent(actor, {
       operation: "append_content",
       pageId: input.pageId,
       request: input.request,
-      update: { type: "insert_content", insert_content: { content, position: { type: input.position ?? "end" } } },
+      update: { type: "insert_content", insert_content: { content: input.content, position: { type: input.position ?? "end" } } },
     });
   }
 
@@ -253,9 +248,9 @@ export class NotionWriteService {
     if (input.edits.length === 0) throw new ToolError("No edits given.");
     if (input.edits.length > MAX_CONTENT_EDITS) throw new ToolError(`At most ${MAX_CONTENT_EDITS} edits per call.`);
     const updates = input.edits.map((edit, index): ContentUpdate => {
-      const oldStr = stripUserMentionLabels(edit.old_str);
-      if (!oldStr.trim()) throw new ToolError(`edits[${index}].old_str is empty.`);
-      return { old_str: oldStr, new_str: prepareContent(edit.new_str, `edits[${index}].new_str`) };
+      if (!edit.old_str.trim()) throw new ToolError(`edits[${index}].old_str is empty.`);
+      assertNoChildObjects(edit.new_str, `edits[${index}].new_str`);
+      return { old_str: edit.old_str, new_str: edit.new_str };
     });
     return this.writeContent(
       actor,
@@ -310,7 +305,14 @@ export class NotionWriteService {
     } else {
       snapshot.afterSha256 = sha256(after.markdown);
       const plan = buildRevertPlan(before.markdown, after.markdown, input.update);
-      if (plan.kind === "revertible") {
+      // assertNoChildObjects lets no unescaped tag through, so a new child means Notion read the
+      // write differently than it assumed. A revertible plan changed the page only where this write did.
+      const createdChild = countChildObjects(after.markdown) > countChildObjects(before.markdown);
+      if (plan.kind === "revertible" && createdChild) {
+        snapshot.hunks = plan.hunks;
+        snapshot.revertBlocker = "child_object_created" satisfies RevertBlocker;
+        warning = { kind: "revert_blocked", blocker: snapshot.revertBlocker };
+      } else if (plan.kind === "revertible") {
         snapshot.inverse = plan.inverse;
         snapshot.hunks = plan.hunks;
       } else if (plan.kind === "unsupported") {

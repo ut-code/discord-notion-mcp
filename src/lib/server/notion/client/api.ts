@@ -49,6 +49,13 @@ export interface PageMarkdown {
   unknownBlockIds: string[];
 }
 
+/** A workspace member, guest or bot. Emails are not read (the integration does not need them). */
+export interface NotionUser {
+  id: string;
+  name: string | null;
+  type: "person" | "bot";
+}
+
 export interface CursorQuery {
   startCursor?: string;
   pageSize: number;
@@ -107,8 +114,7 @@ export interface NotionApi {
   retrievePageMarkdown(pageId: string): Promise<PageMarkdown>;
   /** Edits page content; returns the full resulting markdown. */
   updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<PageMarkdown>;
-  /** The user's display name, or null when it has none. */
-  retrieveUser(userId: string): Promise<string | null>;
+  retrieveUser(userId: string): Promise<NotionUser>;
   retrieveDatabase(databaseId: string): Promise<NotionDatabase>;
   retrieveDataSource(dataSourceId: string): Promise<NotionDataSource>;
   queryDataSource(
@@ -209,9 +215,9 @@ export class SdkNotionApi implements NotionApi {
     return { markdown: response.markdown, truncated: response.truncated, unknownBlockIds: response.unknown_block_ids };
   }
 
-  async retrieveUser(userId: string): Promise<string | null> {
+  async retrieveUser(userId: string): Promise<NotionUser> {
     const user = await this.call(() => this.client.users.retrieve({ user_id: userId }));
-    return user.name ?? null;
+    return { id: user.id, name: user.name ?? null, type: user.type };
   }
 
   async retrieveDatabase(databaseId: string): Promise<NotionDatabase> {

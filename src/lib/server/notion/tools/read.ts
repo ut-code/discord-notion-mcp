@@ -1,16 +1,27 @@
-// Read-only Notion tools: search, get_page, query_database, get_database, get_comments.
+// Read-only Notion tools: search, get_page, get_users, query_database, get_database, get_comments.
 import { z } from "zod";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
-import { NotionRequestError, type NotionDataSource, type NotionPage, type SearchResult } from "../client/api";
-import { requireNotionId } from "../client/ids";
+import {
+  isNotionMiss,
+  notionFailure,
+  NotionRequestError,
+  type NotionDataSource,
+  type NotionPage,
+  type NotionUser,
+  type SearchResult,
+} from "../client/api";
+import { ToolError } from "../../lib/errors";
+import { parseBareNotionId, requireNotionId } from "../client/ids";
 import { dataSourceTitle, resolveDatabaseView, resolveDataSource } from "../client/resolve";
-import { labelUserMentions } from "../content/enhanced-markdown";
 import { pageTitle, renderPropertyValue, WRITABLE_PROPERTY_TYPES } from "../content/properties";
 import { plainText } from "../content/rich-text";
 import { idOrUrl, withNotionErrors, type NotionToolDeps } from "./shared";
 
 const MARKDOWN_SYNTAX =
-  'Content uses Notion-flavored Markdown: standard Markdown plus user mentions <mention-user url="user://USER_ID">Name</mention-user>, page mentions <mention-page url="PAGE_URL"/>, dates <mention-date start="2026-10-20"/>, toggles <details><summary>Title</summary> followed by tab-indented children and </details>, callouts <callout icon="💡">text</callout>, inline colors <span color="red">text</span> (block colors: {color="blue_bg"} at the end of a block line), and columns <columns><column>…</column></columns>.';
+  'Content uses Notion-flavored Markdown: standard Markdown plus user mentions <mention-user url="user://USER_ID"/>, page mentions <mention-page url="PAGE_URL"/>, dates <mention-date start="2026-10-20"/>, toggles <details><summary>Title</summary> followed by tab-indented children and </details>, callouts <callout icon="💡">text</callout>, inline colors <span color="red">text</span> (block colors: {color="blue_bg"} at the end of a block line), and columns <columns><column>…</column></columns>.';
+
+/** Users looked up per call at most, one Notion request each. */
+const MAX_USERS = 20;
 
 const COMMENT_PAGE_SIZE = 100;
 /** Comments listed per call at most, in pages of COMMENT_PAGE_SIZE. */
@@ -52,6 +63,10 @@ function propertyLines(page: NotionPage, options: { skipTitle: boolean; skipEmpt
   return lines;
 }
 
+function describeUser(user: NotionUser): string {
+  return `- user://${user.id}: ${user.name?.replace(/\s+/g, " ") ?? "(no name)"} (${user.type})`;
+}
+
 function schemaLines(dataSource: NotionDataSource): string[] {
   return Object.entries(dataSource.properties).map(([name, property]) => {
     const details: string[] = [];
@@ -82,6 +97,7 @@ function schemaLines(dataSource: NotionDataSource): string[] {
 export function createReadTools(deps: NotionToolDeps): {
   search: AnyToolDefinition;
   getPage: AnyToolDefinition;
+  getUsers: AnyToolDefinition;
   queryDatabase: AnyToolDefinition;
   getDatabase: AnyToolDefinition;
   getComments: AnyToolDefinition;
@@ -115,7 +131,7 @@ export function createReadTools(deps: NotionToolDeps): {
   const getPage = defineTool({
     name: "notion_get_page",
     title: "Get a Notion page",
-    description: `Get a page's properties and its full content. ${MARKDOWN_SYNTAX} Child pages and databases appear as <page>/<database> tags. Use the content as the source of old_str for notion_edit_content.`,
+    description: `Get a page's properties and its full content. ${MARKDOWN_SYNTAX} Child pages and databases appear as <page>/<database> tags. Look up mentioned users with notion_get_users. Use the content as the source of old_str for notion_edit_content.`,
     permission: "notion:read",
     inputSchema: z.object({ page: idOrUrl("Page") }),
     annotations: READ_ONLY_ANNOTATIONS,
@@ -123,24 +139,49 @@ export function createReadTools(deps: NotionToolDeps): {
       const pageId = requireNotionId(args.page, "page");
       const page = await api.retrievePage(pageId);
       const body = await api.retrievePageMarkdown(page.id);
-      // Unknown or inaccessible users (and Notion errors) keep the bare mention; bugs still surface.
-      const lookup = (userId: string) =>
-        api.retrieveUser(userId).catch((error: unknown) => {
-          if (error instanceof NotionRequestError) return null;
-          throw error;
-        });
-      const content = await labelUserMentions(body.markdown, lookup);
       const lines = [
         `# ${pageTitle(page)}`,
         `id: ${page.id} | url: ${page.url} | last edited: ${page.last_edited_time} | parent: ${parentLabel(page.parent)}`,
       ];
       if (page.in_trash) lines.push("(This page is in the trash.)");
       lines.push("", "## Properties", ...propertyLines(page, { skipTitle: false, skipEmpty: false, indent: "" }));
-      lines.push("", "## Content", content.trim() ? content : "(empty)");
+      lines.push("", "## Content", body.markdown.trim() ? body.markdown : "(empty)");
       if (body.truncated) {
         const unknown = body.unknownBlockIds.length > 0 ? ` Blocks not included: ${body.unknownBlockIds.join(", ")}.` : "";
         lines.push("", `(The content was truncated by Notion because the page is too large.${unknown})`);
       }
+      return lines.join("\n");
+    }),
+  });
+
+  const getUsers = defineTool({
+    name: "notion_get_users",
+    title: "Get Notion users",
+    description: `Look up workspace members, guests and bots by user id, e.g. from <mention-user url="user://USER_ID"/>. Returns each user's name and type (person or bot). Up to ${MAX_USERS} users per call. Users cannot be searched by name.`,
+    permission: "notion:read",
+    inputSchema: z.object({
+      user_ids: z.array(z.string()).min(1).max(MAX_USERS).describe('User ids, bare or as "user://USER_ID"'),
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: withNotionErrors(async (args) => {
+      const ids = [
+        ...new Set(
+          args.user_ids.map((input, index) => {
+            const id = parseBareNotionId(input.replace(/^user:\/\//, ""));
+            if (!id) throw new ToolError(`Invalid "user_ids[${index}]": expected a user id (32 hex characters, with or without dashes).`);
+            return id;
+          }),
+        ),
+      ];
+      const lines = await Promise.all(
+        ids.map((id) =>
+          api.retrieveUser(id).then(describeUser, (error: unknown) => {
+            if (isNotionMiss(error)) return `- user://${id}: not found or not accessible`;
+            if (error instanceof NotionRequestError) return `- user://${id}: lookup failed (${notionFailure(error)}); retry later`;
+            throw error;
+          }),
+        ),
+      );
       return lines.join("\n");
     }),
   });
@@ -250,5 +291,5 @@ export function createReadTools(deps: NotionToolDeps): {
     }),
   });
 
-  return { search, getPage, queryDatabase, getDatabase, getComments };
+  return { search, getPage, getUsers, queryDatabase, getDatabase, getComments };
 }

@@ -8,7 +8,7 @@ import type { PropertySkip, RevertNote } from "./audit-records";
  */
 
 /** Why a content write cannot be reverted automatically; stored in ContentSnapshot.revertBlocker. */
-export type RevertBlocker = RevertPlanBlocker | "truncated_after_write";
+export type RevertBlocker = RevertPlanBlocker | "truncated_after_write" | "child_object_created";
 
 /** Why the page may have changed since the write; reverting anyway needs `force`. */
 export type RevertConflict =

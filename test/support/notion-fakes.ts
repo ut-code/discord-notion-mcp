@@ -7,6 +7,7 @@ import {
   type NotionDatabase,
   type NotionDataSource,
   type NotionPage,
+  type NotionUser,
   type PageMarkdown,
   type Paged,
   type SearchResult,
@@ -53,7 +54,7 @@ export class FakeNotionApi implements NotionApi {
   markdown = new Map<string, string>();
   /** Pages whose markdown is reported as truncated, with the ids of the omitted blocks. */
   truncated = new Map<string, string[]>();
-  users = new Map<string, string | null>();
+  users = new Map<string, Omit<NotionUser, "id">>();
   databases = new Map<string, NotionDatabase>();
   dataSources = new Map<string, NotionDataSource>();
   comments: Array<{ id: string; pageId: string; author: string; text: string }> = [];
@@ -234,10 +235,11 @@ export class FakeNotionApi implements NotionApi {
     return this.pageMarkdown(pageId);
   }
 
-  async retrieveUser(userId: string): Promise<string | null> {
+  async retrieveUser(userId: string): Promise<NotionUser> {
     this.enter("retrieveUser", userId);
-    if (!this.users.has(userId)) throw notFound("user");
-    return this.users.get(userId) ?? null;
+    const user = this.users.get(userId);
+    if (!user) throw notFound("user");
+    return { id: userId, ...user };
   }
 
   async retrieveDatabase(databaseId: string): Promise<NotionDatabase> {

@@ -21,6 +21,11 @@ function isNotionHost(hostname: string): boolean {
   return NOTION_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
 }
 
+/** A bare Notion id (no URL), dashed and lowercased; null for anything else. */
+export function parseBareNotionId(input: string): string | null {
+  return normalizeRaw(input.trim());
+}
+
 export interface ParseIdOptions {
   /** Use the `#block-id` fragment of a URL when present (block targets). */
   allowBlockAnchor?: boolean;

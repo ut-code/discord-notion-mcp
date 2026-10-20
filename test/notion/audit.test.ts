@@ -221,12 +221,12 @@ describe("NotionWriteService", () => {
     expect(api.markdown.get(parent.id)).toBe("Top\nBody");
   });
 
-  test("edit_content sends the edits, strips mention labels and records the change", async () => {
+  test("edit_content sends the edits and records the change", async () => {
     api.markdown.set(parent.id, 'Hello <mention-user url="user://u1"/>\nSecond line');
     const outcome = await writes.editContent(ACTOR, {
       pageId: parent.id,
       edits: [
-        { old_str: 'Hello <mention-user url="user://u1">Alice</mention-user>', new_str: "Hi there" },
+        { old_str: 'Hello <mention-user url="user://u1"/>', new_str: "Hi there" },
         { old_str: "Second line", new_str: "Second line\nThird line" },
       ],
       request: {},
@@ -298,6 +298,24 @@ describe("NotionWriteService", () => {
     expect(audit.revertability(row)).toEqual({ kind: "blocked", blocker: "truncated_after_write" });
     const result = await audit.revert(outcome.auditId, ADMIN);
     expect(result).toEqual({ ok: false, reason: { kind: "blocked", blocker: "truncated_after_write" } });
+  });
+
+  test("a write that Notion turned into a new child page cannot be reverted automatically; existing ones do not count", async () => {
+    api.markdown.set(parent.id, '<page url="https://app.notion.com/p/old">Old</page>\nBody');
+    const plain = await writes.appendContent(ACTOR, { pageId: parent.id, content: "More", request: {} });
+    expect(plain.warning).toBeNull();
+
+    // Content the check let through but Notion's parser read as a page tag.
+    const original = api.updatePageMarkdown.bind(api);
+    api.updatePageMarkdown = async (pageId, update) => {
+      const after = await original(pageId, update);
+      return { ...after, markdown: `${after.markdown}\n<page url="https://app.notion.com/p/new">New</page>` };
+    };
+    const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "Odd", request: {} });
+    expect(outcome.warning).toEqual({ kind: "revert_blocked", blocker: "child_object_created" });
+    const row = (await store.get(outcome.auditId))!;
+    expect(row).toMatchObject({ status: "ok", snapshot: { inverse: null, revertBlocker: "child_object_created" } });
+    expect(audit.revertability(row)).toEqual({ kind: "blocked", blocker: "child_object_created" });
   });
 
   test("update_properties snapshots only the changed keys (fetching truncated values in full)", async () => {

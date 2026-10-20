@@ -39,6 +39,7 @@ const revertBlockerSchema = z.enum([
   "concurrent_edit",
   "unlocated_edit",
   "truncated_after_write",
+  "child_object_created",
 ]) satisfies z.ZodType<RevertBlocker>;
 
 const propertyValueSchema = z.custom<PagePropertyValue>(

@@ -42,32 +42,38 @@ beforeEach(() => {
 });
 
 describe("Notion tools", () => {
-  test("notion_get_page renders properties and the page markdown, labeling user mentions once per user", async () => {
-    const page = api.addPage({
-      title: "Spec",
-      markdown: [
-        "# Heading",
-        'Owner: <mention-user url="user://u1"/> and <mention-user url="user://u1"/>',
-        'Reviewer: <mention-user url="user://u2"/>',
-        'Ghost: <mention-user url="user://gone"/>',
-        '<callout icon="💡">Tip</callout>',
-      ].join("\n"),
-    });
-    api.users.set("u1", "Alice <A&B>");
-    api.users.set("u2", null);
-
+  test("notion_get_page renders properties and the page markdown verbatim", async () => {
+    const markdown = ["# Heading", 'Owner: <mention-user url="user://u1"/>', '<callout icon="💡">Tip</callout>'].join("\n");
+    const page = api.addPage({ title: "Spec", markdown });
     const text = await call("notion_get_page", { page: page.url });
     expect(text).toContain("# Spec");
     expect(text).toContain("- title (title): Spec");
-    expect(text).toContain("## Content\n# Heading");
-    expect(text).toContain(
-      'Owner: <mention-user url="user://u1">Alice &lt;A&amp;B&gt;</mention-user> and <mention-user url="user://u1">Alice &lt;A&amp;B&gt;</mention-user>',
-    );
-    expect(text).toContain('Reviewer: <mention-user url="user://u2"/>');
-    expect(text).toContain('Ghost: <mention-user url="user://gone"/>');
-    expect(text).toContain('<callout icon="💡">Tip</callout>');
-    expect(text).not.toContain("truncated");
-    expect(api.callsOf("retrieveUser").sort()).toEqual(["gone", "u1", "u2"]);
+    expect(text.endsWith(`## Content\n${markdown}`)).toBe(true);
+    expect(api.callsOf("retrieveUser")).toEqual([]);
+  });
+
+  test("notion_get_users names each user once, in order, and says why one could not be named", async () => {
+    const alice = "00000000-0000-4000-8000-0000000000a1";
+    const bot = "00000000-0000-4000-8000-0000000000b1";
+    const nameless = "00000000-0000-4000-8000-0000000000a2";
+    const gone = "00000000-0000-4000-8000-0000000000a3";
+    api.users.set(alice, { name: "Alice\nSmith", type: "person" });
+    api.users.set(bot, { name: "Sync", type: "bot" });
+    api.users.set(nameless, { name: null, type: "person" });
+    api.failNext("retrieveUser", new NotionRequestError("rate limited", 429, "rate_limited"));
+    const text = await call("notion_get_users", {
+      user_ids: [`user://${alice}`, alice.replace(/-/g, ""), bot, nameless, gone],
+    });
+    expect(text.split("\n")).toEqual([
+      `- user://${alice}: lookup failed (HTTP 429); retry later`,
+      `- user://${bot}: Sync (bot)`,
+      `- user://${nameless}: (no name) (person)`,
+      `- user://${gone}: not found or not accessible`,
+    ]);
+    expect(await call("notion_get_users", { user_ids: [alice] })).toBe(`- user://${alice}: Alice Smith (person)`);
+    for (const input of ["user://alice", `https://www.notion.so/page-${alice.replace(/-/g, "")}`]) {
+      await expect(call("notion_get_users", { user_ids: [input] })).rejects.toThrow('Invalid "user_ids[0]": expected a user id');
+    }
   });
 
   test("notion_get_page puts each property on one line, quickly even for long runs of spaces", async () => {

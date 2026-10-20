@@ -35,7 +35,7 @@ describe("Notion configuration", () => {
     });
     expect(server.notionEnabled).toBe(true);
     const names = server.tools.filter((tool) => tool.name.startsWith("notion_")).map((tool) => tool.name);
-    expect(names.length).toBe(12);
+    expect(names.length).toBe(13);
     expect(names).toContain("notion_append_content");
     expect(names).toContain("notion_edit_content");
     expect(names).not.toContain("notion_append_blocks");

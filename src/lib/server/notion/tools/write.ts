@@ -26,7 +26,8 @@ const propertyValues = z
 const WRITE_NOTE =
   "Every write is recorded in the audit log with your Discord identity, attributed by a comment on the page, and can be reverted (notion_revert_change, or an admin).";
 
-const NO_CHILD_OBJECTS = "Content must not contain <page>, <database> or <data-source> tags; create pages with notion_create_page.";
+const NO_CHILD_OBJECTS =
+  "Content must not contain <page>, <database> or <data-source> tags, not even in code (write \\<page for the text itself); create pages with notion_create_page.";
 
 function outcomeLines(outcome: WriteOutcome): string[] {
   const lines: string[] = [];

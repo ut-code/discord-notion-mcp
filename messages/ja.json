@@ -307,6 +307,7 @@
   "revert_blocker_truncated_after_write": "書き込み後のページが大きすぎて、変更内容を記録できませんでした",
   "revert_blocker_concurrent_edit": "同時に別の人がページを編集しており、取り消すとその編集まで消えてしまいます",
   "revert_blocker_unlocated_edit": "変更した位置をページ内で特定できず、同時に行われた別の人の編集まで消してしまう恐れがあります",
+  "revert_blocker_child_object_created": "子ページかデータベースが作られており、取り消しでは消せません（手動でゴミ箱に移してください）",
   "revert_refusal_hosted_files": "Notion にアップロードされたファイル（{files}）は API で設定し直せません",
   "revert_refusal_unsupported_type": "「{type}」型は読み取り専用か、書き込みに対応していません",
   "revert_property_name": "「{name}」",

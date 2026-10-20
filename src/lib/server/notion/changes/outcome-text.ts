@@ -40,6 +40,8 @@ function revertBlockerText(blocker: RevertBlocker): string {
       return "someone else edited the page at the same moment, and undoing the change would undo theirs too";
     case "unlocated_edit":
       return "where the change landed in the page could not be determined, so undoing it might also undo someone else's edit made at the same moment";
+    case "child_object_created":
+      return "the change created a child page or database, which a revert cannot remove; move it to the trash by hand";
     default:
       throw new Error(`Unknown revert blocker: ${blocker satisfies never}`);
   }
