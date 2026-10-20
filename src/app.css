@@ -1047,6 +1047,10 @@
 	.diff .gap {
 		color: var(--subtle);
 	}
+	/* Under the "created" line, the created page's content follows on directly. */
+	.change-body + .diff {
+		padding-top: 0;
+	}
 	.change-body {
 		padding: 16px 20px;
 		display: flex;

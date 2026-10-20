@@ -65,6 +65,8 @@ function writeWarningText(warning: WriteWarning): string {
   switch (warning.kind) {
     case "content_failed":
       return m.write_warning_content_failed({ error: warning.error });
+    case "template_pending":
+      return m.write_warning_template_pending();
     case "revert_blocked":
       return warning.blocker === "truncated_after_write"
         ? m.write_warning_revert_maybe_blocked({ reason: blockerText(warning.blocker) })
@@ -83,6 +85,7 @@ export function auditNoteText(stored: unknown): string | null {
   const note = parsed.data;
   switch (note.kind) {
     case "content_failed":
+    case "template_pending":
     case "revert_blocked":
       return writeWarningText(note);
     default:
@@ -142,6 +145,8 @@ export function revertReasonText(reason: RevertReason): string {
       return m.revert_reason_page_inaccessible();
     case "too_large":
       return m.revert_reason_too_large();
+    case "has_child_objects":
+      return m.revert_reason_has_child_objects();
     case "conflict":
       return m.revert_reason_conflict();
     case "failed":

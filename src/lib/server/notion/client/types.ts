@@ -14,6 +14,13 @@ export type RichTextRequest =
 
 export type PageParent = { type: "page_id"; page_id: string } | { type: "data_source_id"; data_source_id: string };
 
+/** A database template to fill a new page from; `timezone` resolves its @today / @now. */
+export interface PageTemplate {
+  type: "template_id";
+  template_id: string;
+  timezone: string;
+}
+
 /** One search-and-replace of Notion's update_content: old_str must match exactly once. */
 export interface ContentUpdate {
   old_str: string;

@@ -9,7 +9,9 @@ import {
   type NotionPage,
 } from "../client/api";
 import { resolveParent, toToolError } from "../client/resolve";
-import type { ContentUpdate, PageMarkdownUpdate, PageParent } from "../client/types";
+import { requireNotionId } from "../client/ids";
+import type { ContentUpdate, PageMarkdownUpdate, PageParent, PageTemplate } from "../client/types";
+import { JST_TIME_ZONE } from "../../lib/jst-day";
 import { sha256, writeBlocker } from "../content/content-diff";
 import { assertNoChildObjects, countChildObjects } from "../content/enhanced-markdown";
 import {
@@ -72,6 +74,15 @@ export const MAX_CONTENT_EDITS = 20;
  */
 const MAX_RESTORE_BYTES = 450_000;
 
+/**
+ * Notion fills in a template after creating the page (4–5 s when checked live). Its body is
+ * awaited, within bounds, before the write is recorded, so the recorded edit time includes it and
+ * a later revert does not take the template for someone's edit. Two reads in a row must agree, so
+ * the body has to show by the next to last check.
+ */
+const TEMPLATE_CHECKS = 10;
+const TEMPLATE_CHECK_INTERVAL_MS = 1_000;
+
 /** The size of `markdown` as the replace_content request carries it (JSON-escaped). */
 const restoreBytes = (markdown: string) => Buffer.byteLength(JSON.stringify(markdown));
 
@@ -107,7 +118,38 @@ export class NotionWriteService {
     private readonly api: NotionApi,
     private readonly audit: NotionAuditStore,
     private readonly reportError: ErrorSink = logError,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   ) {}
+
+  /** Whether a template has a body to wait for; one that cannot be read is assumed to have one. */
+  private async templateHasBody(templateId: string): Promise<boolean> {
+    const body = await this.api.retrievePageMarkdown(templateId).catch(() => null);
+    return body === null || body.markdown.trim() !== "";
+  }
+
+  /**
+   * The body of a page made from a template once Notion has filled it in, null when it has not in
+   * time. Notion signals no end, so the body counts as filled in once two reads in a row agree.
+   */
+  private async awaitTemplate(pageId: string): Promise<string | null> {
+    let previous: string | null = null;
+    for (let check = 0; check < TEMPLATE_CHECKS; check++) {
+      await this.sleep(TEMPLATE_CHECK_INTERVAL_MS);
+      const body = await this.api.retrievePageMarkdown(pageId).catch(() => null);
+      const markdown = body?.markdown.trim() ? body.markdown : null;
+      if (markdown !== null && markdown === previous) return markdown;
+      previous = markdown;
+    }
+    return null;
+  }
+
+  /** Notion takes any page as a template (checked live), so the id must be one of the database's. */
+  private async assertTemplateOf(dataSourceId: string, templateId: string): Promise<void> {
+    const { templates, more } = await this.api.listTemplates(dataSourceId);
+    if (templates.some((template) => template.id === templateId)) return;
+    const listed = more ? "the first 100 templates" : "the templates";
+    throw new ToolError(`"template_id" is not one of ${listed} of this database: pick one from notion_get_database.`);
+  }
 
   private actorColumns(actor: Actor) {
     return {
@@ -150,7 +192,7 @@ export class NotionWriteService {
       snapshot?: Record<string, unknown>;
       warning: WriteWarning | null;
       fallbackLastEdited: string | null;
-      /** The page content around a content write. */
+      /** The page content around a content write, or the content of a created page (before is ""). */
       content?: AuditContent;
     },
   ): Promise<WriteOutcome> {
@@ -179,20 +221,35 @@ export class NotionWriteService {
   }
 
   /**
-   * Creates the page from properties only, then inserts the content at its end: a
-   * leading "# H1" in markdown passed to page creation would be consumed as the title.
+   * Creates the page from properties only, then inserts the content at its end: a leading
+   * "# H1" in markdown passed to page creation would be consumed as the title. A database row
+   * can come from a template instead, which Notion fills in. The new page's content is kept
+   * to show what was created.
    */
   async createPage(
     actor: Actor,
-    input: { parentId: string; title: string; properties?: PropertyValues; content?: string; request: Record<string, unknown> },
+    input: {
+      parentId: string;
+      title: string;
+      properties?: PropertyValues;
+      content?: string;
+      /** A template of the database to fill the row from (its @today / @now in Japan time). */
+      templateId?: string;
+      request: Record<string, unknown>;
+    },
   ): Promise<WriteOutcome> {
     const content = input.content?.trim() ? input.content : null;
     if (content) assertNoChildObjects(content, "content");
+    if (input.templateId && content) {
+      throw new ToolError("A template fills in the page body itself: leave out content, or add it once the template has been applied.");
+    }
+    const templateId = input.templateId ? requireNotionId(input.templateId, "template_id") : null;
     const parent = await resolveParent(this.api, input.parentId);
     const extra = input.properties ?? {};
     let parentRef: PageParent;
     let properties: Record<string, unknown>;
     if (parent.kind === "page") {
+      if (templateId) throw new ToolError("Templates belong to databases: use a database or data source as the parent.");
       const unsupported = Object.keys(extra).filter((key) => key !== "title");
       if (unsupported.length > 0) {
         throw new ToolError(`Pages under a page only have a title; remove properties: ${unsupported.join(", ")}.`);
@@ -210,7 +267,13 @@ export class NotionWriteService {
       if (titleName in extra) throw new ToolError(`Set the title with "title", not via properties["${titleName}"].`);
       parentRef = { type: "data_source_id", data_source_id: parent.dataSource.id };
       properties = { ...extra, [titleName]: { title: literalRichText(input.title) } };
+      if (templateId) await this.assertTemplateOf(parent.dataSource.id, templateId);
     }
+
+    const template: PageTemplate | undefined = templateId
+      ? { type: "template_id", template_id: templateId, timezone: JST_TIME_ZONE }
+      : undefined;
+    const awaitBody = templateId !== null && (await this.templateHasBody(templateId));
 
     const parentId = parentRef.type === "page_id" ? parentRef.page_id : parentRef.data_source_id;
     const snapshot = toAuditJson(CreatePageSnapshotSchema, { parent: { type: parentRef.type, id: parentId } });
@@ -225,18 +288,25 @@ export class NotionWriteService {
 
     let page: NotionPage;
     try {
-      page = await this.api.createPage({ parent: parentRef, properties });
+      page = await this.api.createPage({ parent: parentRef, properties, template });
     } catch (error) {
       return this.fail(row, error, `Look for a page titled ${JSON.stringify(input.title)} under the parent with notion_search`);
     }
 
     let warning: WriteWarning | null = null;
+    // What the new page holds, to show what was created; null when nothing is known to be in it.
+    let body: string | null = null;
+    if (awaitBody) {
+      body = await this.awaitTemplate(page.id);
+      if (body === null) warning = { kind: "template_pending" };
+    }
     if (content) {
       try {
-        await this.api.updatePageMarkdown(page.id, {
+        const written = await this.api.updatePageMarkdown(page.id, {
           type: "insert_content",
           insert_content: { content, position: { type: "end" } },
         });
+        body = written.truncated ? null : written.markdown;
       } catch (error) {
         warning = { kind: "content_failed", error: errorMessage(toToolError(error)) };
       }
@@ -245,6 +315,7 @@ export class NotionWriteService {
       result: toAuditJson(CreatePageResultSchema, { pageId: page.id, url: page.url }),
       warning,
       fallbackLastEdited: page.last_edited_time,
+      content: body === null ? undefined : { before: "", after: body },
     });
   }
 

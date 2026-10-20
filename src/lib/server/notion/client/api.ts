@@ -20,7 +20,7 @@ import {
 } from "@notionhq/client";
 import { isRecord } from "../../../guards";
 import { createLimiter, type Limiter } from "../../lib/limiter";
-import type { PageMarkdownUpdate, PageParent, RichTextRequest } from "./types";
+import type { PageMarkdownUpdate, PageParent, PageTemplate, RichTextRequest } from "./types";
 
 /**
  * Notion API version this server targets. Since 2025-09-03 databases contain one or
@@ -137,6 +137,12 @@ export function writeMayHaveApplied(error: unknown): boolean {
   return error.status >= 500;
 }
 
+export interface DataSourceTemplate {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
 /** Every Notion HTTP operation the tools, write service and revert need. */
 export interface NotionApi {
   search(query: { query: string; filter?: "page" | "data_source" } & CursorQuery): Promise<Paged<SearchResult>>;
@@ -152,8 +158,11 @@ export interface NotionApi {
   queryDataSource(
     query: { dataSourceId: string; filter?: Record<string, unknown>; sorts?: Array<Record<string, unknown>> } & CursorQuery,
   ): Promise<Paged<NotionPage>>;
+  /** The first 100 templates of a data source. */
+  listTemplates(dataSourceId: string): Promise<{ templates: DataSourceTemplate[]; more: boolean }>;
   listComments(blockId: string, query: CursorQuery): Promise<Paged<NotionComment>>;
-  createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage>;
+  /** With a template the page comes back blank; Notion fills in the template shortly after. */
+  createPage(params: { parent: PageParent; properties: Record<string, unknown>; template?: PageTemplate }): Promise<NotionPage>;
   updatePage(params: { pageId: string; properties?: Record<string, unknown>; inTrash?: boolean }): Promise<NotionPage>;
   /** `displayName` is shown as the comment's author. */
   createComment(params: { pageId: string; richText: RichTextRequest[]; displayName: string }): Promise<{ id: string }>;
@@ -341,12 +350,21 @@ export class SdkNotionApi implements NotionApi {
     return { results: response.results.filter(isFullComment), nextCursor: response.next_cursor };
   }
 
-  async createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage> {
+  async listTemplates(dataSourceId: string): Promise<{ templates: DataSourceTemplate[]; more: boolean }> {
+    const response = await this.call(() => this.client.dataSources.listTemplates({ data_source_id: dataSourceId, page_size: 100 }), "read");
+    return {
+      templates: response.templates.map((template) => ({ id: template.id, name: template.name, isDefault: template.is_default })),
+      more: response.has_more,
+    };
+  }
+
+  async createPage(params: { parent: PageParent; properties: Record<string, unknown>; template?: PageTemplate }): Promise<NotionPage> {
     const page = await this.call(
       () =>
         this.client.pages.create({
           parent: params.parent,
           properties: sdkRequest<CreatePageParameters["properties"]>(params.properties),
+          template: params.template,
         }),
       "write",
     );

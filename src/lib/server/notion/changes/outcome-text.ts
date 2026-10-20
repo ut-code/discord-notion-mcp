@@ -19,6 +19,8 @@ export function writeWarningText(warning: WriteWarning): string {
   switch (warning.kind) {
     case "content_failed":
       return `Page created, but adding its content failed: ${warning.error}`;
+    case "template_pending":
+      return "Page created, but Notion had not finished filling in the template; a revert may report the page as edited since.";
     case "revert_blocked":
       return warning.blocker === "truncated_after_write"
         ? `The change was applied, but automatic revert may not be possible: ${revertBlockerText(warning.blocker)}.`
@@ -131,6 +133,8 @@ export function revertReasonText(id: number, reason: RevertReason): string {
       return "The page is no longer accessible to the integration.";
     case "too_large":
       return `The page is now too large to revert audit #${id} automatically.`;
+    case "has_child_objects":
+      return `The page audit #${id} created now holds child pages or databases, whose own later edits cannot be checked, so it is not moved to the trash automatically; if it should go, move it to the trash with notion_archive_page or in Notion.`;
     case "conflict":
       return revertConflictText(id, reason.conflict);
     case "failed":

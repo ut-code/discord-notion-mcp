@@ -86,7 +86,8 @@ export type NewNotionAuditRow = typeof notionAudit.$inferInsert;
 
 /**
  * Page markdown around a successful append_content / edit_content, gzip-compressed: a revert puts
- * `before` back, and both show what changed. Apart from notion_audit so listing rows loads no pages.
+ * `before` back, and both show what changed. For create_page, `after` is the new page's content
+ * (`before` is empty), shown only. Apart from notion_audit so listing rows loads no pages.
  */
 export const notionAuditContent = sqliteTable("notion_audit_content", {
   auditId: integer("audit_id")

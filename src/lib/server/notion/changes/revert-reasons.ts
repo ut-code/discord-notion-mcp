@@ -43,6 +43,8 @@ export type RevertReason =
   | { kind: "blocked"; blocker: RevertBlocker }
   | { kind: "page_inaccessible" }
   | { kind: "too_large" }
+  /** A created page that now holds child pages or databases, whose own edits do not show on it. */
+  | { kind: "has_child_objects" }
   | { kind: "conflict"; conflict: RevertConflict }
   | { kind: "failed"; failure: RevertFailure; revertAuditId: number };
 

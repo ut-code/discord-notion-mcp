@@ -291,6 +291,7 @@
   "revert_reason_unrecognized_snapshot": "記録の形式を読み取れないため、自動では取り消せません。",
   "revert_reason_blocked": "自動では取り消せない変更です: {reason}。",
   "revert_reason_page_inaccessible": "ページにアクセスできません（削除されたか、連携が外れています）。",
+  "revert_reason_has_child_objects": "このページには子ページかデータベースが含まれており、その中の後からの編集を確かめられないため、自動では取り消しません。不要なら、Notion の画面か AI の notion_archive_page でゴミ箱に移してください。",
   "revert_reason_too_large": "ページが大きくなりすぎたため、自動では取り消せません。",
   "revert_reason_conflict": "この変更の後にページが編集されています。",
   "revert_reason_failed": "取り消せませんでした: {reason}",
@@ -313,6 +314,7 @@
   "revert_note_already_restored": "ページはすでにゴミ箱から戻されていました。",
   "revert_note_properties_partial": "{restored}を戻しました。{skipped}は戻せませんでした。",
   "write_warning_content_failed": "ページは作成しましたが、本文の追加に失敗しました: {error}",
+  "write_warning_template_pending": "テンプレートの反映を待たずに記録したため、取り消すときに「作成後に編集された」と表示されることがあります。",
   "write_warning_revert_blocked": "書き込みは反映しましたが、自動では取り消せません: {reason}。",
   "write_warning_revert_maybe_blocked": "書き込みは反映しましたが、自動では取り消せない可能性があります: {reason}。"
 }

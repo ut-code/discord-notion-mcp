@@ -37,7 +37,12 @@ beforeEach(() => {
   const database = openDatabase(":memory:");
   runAppMigrations(database.db);
   api = new FakeNotionApi();
-  const writes = new NotionWriteService(api, new NotionAuditStore(database.db));
+  const writes = new NotionWriteService(
+    api,
+    new NotionAuditStore(database.db),
+    () => {},
+    async () => {},
+  );
   tools = new Map(createNotionTools({ api, writes }).map((tool) => [tool.name, tool]));
 });
 
@@ -155,7 +160,20 @@ describe("Notion tools", () => {
       },
     });
 
+    api.templates.set(ds.id, [
+      { id: "11111111-1111-4111-8111-111111111111", name: "Weekly", isDefault: true },
+      { id: "22222222-2222-4222-8222-222222222222", name: "", isDefault: false },
+    ]);
     const schema = await call("notion_get_database", { database: db.id });
+    expect(schema).toContain("Templates (template_id of notion_create_page):");
+    expect(schema).toContain("- Weekly (id 11111111-1111-4111-8111-111111111111) — default");
+    expect(schema).toContain("- Untitled (id 22222222-2222-4222-8222-222222222222)");
+    api.failNext("listTemplates", new NotionRequestError("Insufficient permissions.", 403, "restricted_resource"));
+    expect(await call("notion_get_database", { database: db.id })).toContain("Templates: (could not be listed)");
+    const listTemplates = api.listTemplates.bind(api);
+    api.listTemplates = async (id) => ({ ...(await listTemplates(id)), more: true });
+    expect(await call("notion_get_database", { database: db.id })).toContain("- (more templates exist; only the first 100 are listed)");
+    api.listTemplates = listTemplates;
     expect(schema).toContain('Database "Tasks DB"');
     expect(schema).toContain("- Status (status, id st): options: Todo, Done | groups: Complete [Done]");
     expect(schema).toContain("- Created (created_time, id ct): read-only");
@@ -164,6 +182,48 @@ describe("Notion tools", () => {
     expect(rows).toContain('Data source "Tasks"');
     expect(rows).toContain("- Write docs (id");
     expect(rows).toContain("  - Status (status): Done");
+  });
+
+  test("notion_create_page fills a database row from a template in Japan time, waiting for its body", async () => {
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const weekly = api.addPage({ title: "Weekly", markdown: "## Agenda" });
+    api.templates.set(ds.id, [{ id: weekly.id, name: "Weekly", isDefault: true }]);
+
+    const text = await call("notion_create_page", { parent: ds.id, title: "Week 42", template_id: weekly.id });
+    expect(text).not.toContain("Warning");
+    const created = api.callsOf("createPage")[0];
+    expect(created).toMatchObject({ template: { type: "template_id", template_id: weekly.id, timezone: "Asia/Tokyo" } });
+    expect(api.markdown.get([...api.pages.keys()].at(-1)!)).toBe("## Agenda");
+
+    // A body that never arrives is reported.
+    api.templateDelayReads = Number.POSITIVE_INFINITY;
+    expect(await call("notion_create_page", { parent: ds.id, title: "Week 43", template_id: weekly.id })).toContain(
+      "Notion had not finished filling in the template",
+    );
+  });
+
+  test("notion_create_page refuses a template with content, under a page, or that is not an id", async () => {
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const template = api.addPage({ title: "Weekly", markdown: "## Agenda" });
+    await expect(call("notion_create_page", { parent: ds.id, title: "x", template_id: template.id, content: "body" })).rejects.toThrow(
+      "A template fills in the page body itself",
+    );
+    const page = api.addPage({ title: "Parent" });
+    await expect(call("notion_create_page", { parent: page.id, title: "x", template_id: template.id })).rejects.toThrow(
+      "Templates belong to databases",
+    );
+    await expect(call("notion_create_page", { parent: ds.id, title: "x", template_id: "default" })).rejects.toThrow(
+      'Invalid "template_id"',
+    );
+    expect(api.callsOf("createPage")).toHaveLength(0);
   });
 
   test("notion_append_content attributes the change with the member's display name", async () => {

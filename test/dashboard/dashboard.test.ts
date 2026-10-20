@@ -991,6 +991,20 @@ describe("audit log", () => {
     expect(detail.change).toMatchObject({ kind: "diff", lines: [{ kind: "add", text: "+ mine" }] });
   });
 
+  test("a created page shows what it was created with", async () => {
+    const parent = h.notion.addPage({ title: "Created root" });
+    const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Notes", content: "# Notes\n- one", request: {} });
+    expect((await auditDetail(deps, String(created.auditId), owner))!.change).toEqual({
+      kind: "created",
+      title: "Notes",
+      targetUrl: expect.any(String),
+      lines: [
+        { kind: "add", text: "+ # Notes" },
+        { kind: "add", text: "+ - one" },
+      ],
+    });
+  });
+
   test("without Notion a revert is not offered", async () => {
     const parent = h.notion.addPage({ title: "Disabled root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Kept", request: {} });

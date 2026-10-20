@@ -12,6 +12,7 @@ import {
   type PageMarkdown,
 } from "../client/api";
 import { sha256 } from "../content/content-diff";
+import { countChildObjects } from "../content/enhanced-markdown";
 import { mayBeTruncated, samePropertyValue, toWritablePropertyValue, valueFromPropertyItems } from "../content/properties";
 import { postComment, retractComment, revertComment, type AttributionComment } from "./attribution";
 import {
@@ -166,7 +167,7 @@ export class NotionAuditService {
     return this.store.get(id);
   }
 
-  /** The page content around a successful content write; null for other rows. */
+  /** The page content around a successful content write, or the content of a created page; null for other rows. */
   getContent(id: number): Promise<AuditContent | null> {
     return this.store.getContent(id);
   }
@@ -229,6 +230,19 @@ export class NotionAuditService {
     }
     // Later edits are someone else's: they are left for a person to sort out by hand.
     if (conflict) return { ok: false, reason: { kind: "conflict", conflict } };
+    // Edits inside child pages and databases (e.g. rows added to an inline database a template
+    // brought) do not change the page's own edit time, so trashing it could take them along.
+    if (record.operation === "create_page" && !current.in_trash) {
+      let body: PageMarkdown;
+      try {
+        body = await api.retrievePageMarkdown(current.id);
+      } catch (error) {
+        if (isNotionMiss(error)) return { ok: false, reason: { kind: "page_inaccessible" } };
+        throw error;
+      }
+      if (body.truncated) return { ok: false, reason: { kind: "too_large" } };
+      if (countChildObjects(body.markdown) > 0) return { ok: false, reason: { kind: "has_child_objects" } };
+    }
 
     // The content a content revert puts back; null when the write changed nothing.
     let restore: string | null = null;

@@ -70,6 +70,11 @@
             {#if change.targetUrl}<ExternalLink href={change.targetUrl}>{change.title}</ExternalLink>{:else}<span>{change.title}</span>{/if}
           </span>
         </div>
+        {#if change.lines.length > 0}
+          <div class="diff">
+            {#each change.lines as line, index (index)}<span class={line.kind}>{line.text}</span>{/each}
+          </div>
+        {/if}
       {:else if change.kind === "archived"}
         <div class="change-body">{m.audit_change_archived()}</div>
       {:else}

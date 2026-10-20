@@ -3,6 +3,7 @@ import {
   NO_MATCH_WARNING,
   NotionRequestError,
   type CursorQuery,
+  type DataSourceTemplate,
   type EditedPageMarkdown,
   type NotionApi,
   type NotionComment,
@@ -14,7 +15,7 @@ import {
   type Paged,
   type SearchResult,
 } from "../../src/lib/server/notion/client/api";
-import type { PageMarkdownUpdate, PageParent, RichTextRequest } from "../../src/lib/server/notion/client/types";
+import type { PageMarkdownUpdate, PageParent, PageTemplate, RichTextRequest } from "../../src/lib/server/notion/client/types";
 import { countChildObjects } from "../../src/lib/server/notion/content/enhanced-markdown";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 
@@ -59,6 +60,16 @@ export class FakeNotionApi implements NotionApi {
   users = new Map<string, Omit<NotionUser, "id">>();
   databases = new Map<string, NotionDatabase>();
   dataSources = new Map<string, NotionDataSource>();
+  /** Templates per data source id; each template is a page whose markdown is its body. */
+  templates = new Map<string, DataSourceTemplate[]>();
+  /**
+   * Reads of a page made from a template before Notion has filled it in (it does so shortly
+   * after creating the page); Infinity for a template that never arrives.
+   */
+  templateDelayReads = 2;
+  /** Fills a template in over this many reads, line by line in equal parts, as a large one may arrive. */
+  templateFillReads = 1;
+  private readonly pendingTemplates = new Map<string, { body: string; reads: number }>();
   comments: Array<{ id: string; pageId: string; author: string; text: string }> = [];
   private commentSeq = 0;
   listedComments = new Map<string, NotionComment[]>();
@@ -187,8 +198,20 @@ export class FakeNotionApi implements NotionApi {
     return { results: matches.slice(0, query.pageSize), nextCursor: null };
   }
 
+  /** Fills in a page's template once enough reads of the page have passed. */
+  private readPage(pageId: string): void {
+    const pending = this.pendingTemplates.get(pageId);
+    if (!pending || ++pending.reads < this.templateDelayReads) return;
+    const lines = pending.body.split("\n");
+    const step = pending.reads - this.templateDelayReads + 1;
+    const filled = Math.min(lines.length, Math.ceil((lines.length * step) / this.templateFillReads));
+    this.setMarkdown(pageId, lines.slice(0, filled).join("\n"));
+    if (filled === lines.length) this.pendingTemplates.delete(pageId);
+  }
+
   async retrievePage(pageId: string): Promise<NotionPage> {
     this.enter("retrievePage", pageId);
+    this.readPage(pageId);
     const page = this.pages.get(pageId);
     if (!page) throw notFound("page");
     return structuredClone(page);
@@ -208,6 +231,7 @@ export class FakeNotionApi implements NotionApi {
   async retrievePageMarkdown(pageId: string): Promise<PageMarkdown> {
     this.enter("retrievePageMarkdown", pageId);
     if (!this.pages.has(pageId)) throw notFound("page");
+    this.readPage(pageId);
     return this.pageMarkdown(pageId);
   }
 
@@ -309,7 +333,12 @@ export class FakeNotionApi implements NotionApi {
     return { results: all.slice(start, end), nextCursor: end < all.length ? String(end) : null };
   }
 
-  async createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage> {
+  async listTemplates(dataSourceId: string): Promise<{ templates: DataSourceTemplate[]; more: boolean }> {
+    this.enter("listTemplates", dataSourceId);
+    return { templates: this.templates.get(dataSourceId) ?? [], more: false };
+  }
+
+  async createPage(params: { parent: PageParent; properties: Record<string, unknown>; template?: PageTemplate }): Promise<NotionPage> {
     this.enter("createPage", params);
     const titleEntry = Object.entries(params.properties).find(([, value]) => "title" in (value as object));
     const title = titleEntry
@@ -325,6 +354,8 @@ export class FakeNotionApi implements NotionApi {
       properties: { [titleEntry?.[0] ?? "title"]: titleValue(title) },
     });
     page.last_edited_time = this.tick();
+    const body = params.template ? this.markdown.get(params.template.template_id) : undefined;
+    if (body) this.pendingTemplates.set(page.id, { body, reads: 0 });
     return structuredClone(page);
   }
 

@@ -48,13 +48,14 @@ export function createWriteTools(deps: NotionToolDeps): {
   const createPage = defineTool({
     name: "notion_create_page",
     title: "Create a Notion page",
-    description: `Create a page under a page, or a row in a database / data source, with optional content (Notion-flavored Markdown, see notion_get_page; a leading "# Heading" stays in the body, the title is set separately). ${NO_CHILD_OBJECTS} ${WRITE_NOTE}`,
+    description: `Create a page under a page, or a row in a database / data source, with optional content (Notion-flavored Markdown, see notion_get_page; a leading "# Heading" stays in the body, the title is set separately). A database row can be made from one of its templates instead (template_id, listed by notion_get_database); Notion fills in the template's content, which this tool waits for, and content cannot be given with it. ${NO_CHILD_OBJECTS} ${WRITE_NOTE}`,
     permission: "notion:write",
     inputSchema: z.object({
       parent: idOrUrl("Parent page, database or data source"),
       title: z.string().min(1).max(2000).describe("Page title"),
       properties: propertyValues.optional().describe("Only for database parents: other property values keyed by property name"),
       content: z.string().max(200_000).optional().describe("Page content as Notion-flavored Markdown"),
+      template_id: z.string().optional().describe("Only for database parents: a template id from notion_get_database to fill the row from"),
     }),
     annotations: WRITE,
     handler: withNotionErrors(async (args, principal) => {
@@ -63,6 +64,7 @@ export function createWriteTools(deps: NotionToolDeps): {
         title: args.title,
         properties: args.properties,
         content: args.content,
+        templateId: args.template_id,
         request: args,
       });
       return [

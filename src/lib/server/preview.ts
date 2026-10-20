@@ -268,10 +268,11 @@ export async function startPreview(): Promise<Runtime> {
   });
 
   const tools = new Map(
-    createNotionTools({ api: notion, writes: new NotionWriteService(notion, new NotionAuditStore(database.db)) }).map((tool) => [
-      tool.name,
-      tool,
-    ]),
+    // Templates are filled in by the fake a couple of reads after creation, so no real waiting.
+    createNotionTools({
+      api: notion,
+      writes: new NotionWriteService(notion, new NotionAuditStore(database.db), undefined, () => Promise.resolve()),
+    }).map((tool) => [tool.name, tool]),
   );
   const run = async (name: string, args: Record<string, unknown>, who: MemberInfo): Promise<string> => {
     const tool = tools.get(name);
@@ -318,6 +319,15 @@ export async function startPreview(): Promise<Runtime> {
   const draft = notion.addPage({ title: "下書き", markdown: "下書き" });
   await run("notion_append_content", { page: draft.id, content: "- 追記した行" }, suzuki);
   notion.setMarkdown(draft.id, `${notion.markdown.get(draft.id) ?? ""}\n- 後からの編集`);
+  // A database row made from a template, which Notion fills in.
+  const minutes = notion.addDataSource({
+    title: "議事録",
+    databaseId: "00000000-0000-4000-8000-0000000000d1",
+    properties: { 名前: { id: "title", name: "名前", type: "title", title: {} } },
+  });
+  const template = notion.addPage({ title: "定例テンプレート", markdown: "## 議題\n- \n## 決定事項\n- " });
+  notion.templates.set(minutes.id, [{ id: template.id, name: "定例テンプレート", isDefault: true }]);
+  await run("notion_create_page", { parent: minutes.id, title: "10/26 定例", template_id: template.id }, tanaka);
   seedToolCalls(server.toolCalls);
 
   const sessionCookie = async (discordUserId: string): Promise<string | null> => {

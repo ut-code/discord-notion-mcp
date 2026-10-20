@@ -5,6 +5,9 @@ import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 // Japan has no daylight saving time, so a fixed +9 h offset is exact; it also works in SQLite,
 // which has no time zone data.
 
+/** The community's time zone: dashboard dates and the @today / @now of Notion templates. */
+export const JST_TIME_ZONE = "Asia/Tokyo";
+
 const DAY_MS = 24 * 60 * 60_000;
 const JST_OFFSET_MS = 9 * 60 * 60_000;
 

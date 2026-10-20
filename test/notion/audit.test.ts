@@ -107,6 +107,159 @@ describe("NotionWriteService", () => {
     expect(logged).toEqual([{ event: "notion_unknown_warning", pageId: parent.id, code: "something_new" }]);
   });
 
+  test("a row made from a template waits for its body, keeps it, and reverts without it counting as a later edit", async () => {
+    const sleeps: number[] = [];
+    const waiting = new NotionWriteService(
+      api,
+      store,
+      () => {},
+      async (ms) => void sleeps.push(ms),
+    );
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const template = api.addPage({ title: "Weekly", markdown: "## Agenda" });
+    api.templates.set(ds.id, [{ id: template.id, name: "Weekly", isDefault: true }]);
+    const outcome = await waiting.createPage(ACTOR, { parentId: ds.id, title: "Week", templateId: template.id, request: {} });
+    // Filled in on the second read, and taken as done once the third read agrees.
+    expect(sleeps).toEqual([1_000, 1_000, 1_000]);
+    expect(outcome.warning).toBeNull();
+    expect(await store.getContent(outcome.auditId)).toEqual({ before: "", after: "## Agenda" });
+    expect(await audit.revert(outcome.auditId, ADMIN)).toMatchObject({ ok: true });
+  });
+
+  test("a template without a body is not waited for, and one that never arrives is recorded as pending", async () => {
+    const sleeps: number[] = [];
+    const waiting = new NotionWriteService(
+      api,
+      store,
+      () => {},
+      async (ms) => void sleeps.push(ms),
+    );
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const bare = api.addPage({ title: "Bare" });
+    const weekly = api.addPage({ title: "Weekly", markdown: "## Agenda" });
+    api.templates.set(ds.id, [
+      { id: bare.id, name: "Bare", isDefault: false },
+      { id: weekly.id, name: "Weekly", isDefault: true },
+    ]);
+    const plain = await waiting.createPage(ACTOR, { parentId: ds.id, title: "A", templateId: bare.id, request: {} });
+    expect(sleeps).toEqual([]);
+    expect(plain.warning).toBeNull();
+    expect(await store.getContent(plain.auditId)).toBeNull();
+
+    api.templateDelayReads = Number.POSITIVE_INFINITY;
+    const pending = await waiting.createPage(ACTOR, { parentId: ds.id, title: "B", templateId: weekly.id, request: {} });
+    expect(sleeps).toHaveLength(10);
+    expect(pending.warning).toEqual({ kind: "template_pending" });
+    expect((await store.get(pending.auditId))!.note).toEqual({ kind: "template_pending" });
+
+    // As the warning says: when the template arrives later, the revert sees it as a later edit.
+    api.setMarkdown(pending.pageId, "## Agenda");
+    expect(await audit.revert(pending.auditId, ADMIN)).toMatchObject({
+      ok: false,
+      reason: { kind: "conflict", conflict: { kind: "edited_after" } },
+    });
+  });
+
+  test("a template that arrives over several reads is recorded once complete", async () => {
+    const quick = new NotionWriteService(
+      api,
+      store,
+      () => {},
+      () => Promise.resolve(),
+    );
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const template = api.addPage({ title: "Weekly", markdown: "## Agenda\n- a\n## Notes\n- b" });
+    api.templates.set(ds.id, [{ id: template.id, name: "Weekly", isDefault: true }]);
+    api.templateFillReads = 2;
+    const outcome = await quick.createPage(ACTOR, { parentId: ds.id, title: "Week", templateId: template.id, request: {} });
+    expect(outcome.warning).toBeNull();
+    expect(await store.getContent(outcome.auditId)).toEqual({ before: "", after: "## Agenda\n- a\n## Notes\n- b" });
+  });
+
+  test("a template that cannot be read is waited for as if it had a body", async () => {
+    const sleeps: number[] = [];
+    const waiting = new NotionWriteService(
+      api,
+      store,
+      () => {},
+      async (ms) => void sleeps.push(ms),
+    );
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const template = api.addPage({ title: "Weekly", markdown: "## Agenda" });
+    api.templates.set(ds.id, [{ id: template.id, name: "Weekly", isDefault: true }]);
+    api.failNext("retrievePageMarkdown", new NotionRequestError("service unavailable", 503, "service_unavailable"));
+    const outcome = await waiting.createPage(ACTOR, { parentId: ds.id, title: "Week", templateId: template.id, request: {} });
+    expect(sleeps).toEqual([1_000, 1_000, 1_000]);
+    expect(await store.getContent(outcome.auditId)).toEqual({ before: "", after: "## Agenda" });
+  });
+
+  test("templates beyond the first 100 cannot be checked and are refused, saying so", async () => {
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    api.templates.set(ds.id, [{ id: "11111111-1111-4111-8111-111111111111", name: "First", isDefault: true }]);
+    const listTemplates = api.listTemplates.bind(api);
+    api.listTemplates = async (id) => ({ ...(await listTemplates(id)), more: true });
+    const later = api.addPage({ title: "Template 101", markdown: "## x" });
+    await expect(writes.createPage(ACTOR, { parentId: ds.id, title: "x", templateId: later.id, request: {} })).rejects.toThrow(
+      '"template_id" is not one of the first 100 templates of this database',
+    );
+  });
+
+  test("a template of another database, or any other page, is refused before anything is created", async () => {
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const elsewhere = api.addPage({ title: "Other template", markdown: "## Other" });
+    await expect(writes.createPage(ACTOR, { parentId: ds.id, title: "x", templateId: elsewhere.id, request: {} })).rejects.toThrow(
+      '"template_id" is not one of the templates of this database',
+    );
+    expect(api.callsOf("createPage")).toEqual([]);
+    expect((await store.list({ limit: 10, offset: 0 })).total).toBe(0);
+  });
+
+  test("a created page that now holds a child page or database is not trashed by a revert", async () => {
+    const quick = new NotionWriteService(
+      api,
+      store,
+      () => {},
+      () => Promise.resolve(),
+    );
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    // A template with an inline database: the new row gets its own copy, whose rows edit nothing on the page itself.
+    const template = api.addPage({ title: "Log", markdown: '<database url="https://app.notion.com/p/1" inline="true"></database>' });
+    api.templates.set(ds.id, [{ id: template.id, name: "Log", isDefault: true }]);
+    const outcome = await quick.createPage(ACTOR, { parentId: ds.id, title: "Week", templateId: template.id, request: {} });
+    const refused = await audit.revert(outcome.auditId, ADMIN);
+    expect(refused).toEqual({ ok: false, reason: { kind: "has_child_objects" } });
+    if (!refused.ok) expect(revertReasonText(outcome.auditId, refused.reason)).toContain("move it to the trash with notion_archive_page");
+    expect(api.pages.get(outcome.pageId)!.in_trash).toBe(false);
+  });
+
   test("create_page under a page: properties only, then the content (leading H1 included) is inserted at the end", async () => {
     const outcome = await writes.createPage(ACTOR, {
       parentId: parent.id,
@@ -127,6 +280,7 @@ describe("NotionWriteService", () => {
       },
     ]);
     expect(api.markdown.get(outcome.pageId)).toBe("# Hi\n\n- a\n- b");
+    expect(await store.getContent(outcome.auditId)).toEqual({ before: "", after: "# Hi\n\n- a\n- b" });
     const order = api.calls.map((c) => c.method).filter((m) => ["createPage", "updatePageMarkdown", "createComment"].includes(m));
     expect(order).toEqual(["createPage", "updatePageMarkdown", "createComment"]);
 

@@ -230,11 +230,30 @@ export function createReadTools(deps: NotionToolDeps): {
     }),
   });
 
+  /** The templates for notion_create_page's template_id; a Notion refusal leaves them out rather than failing the schema. */
+  const templateLines = async (dataSourceId: string): Promise<string[]> => {
+    let listed: Awaited<ReturnType<typeof api.listTemplates>>;
+    try {
+      listed = await api.listTemplates(dataSourceId);
+    } catch (error) {
+      if (error instanceof NotionRequestError) return ["Templates: (could not be listed)"];
+      throw error;
+    }
+    if (listed.templates.length === 0) return [];
+    return [
+      "Templates (template_id of notion_create_page):",
+      ...listed.templates.map(
+        (template) => `- ${template.name || "Untitled"} (id ${template.id})${template.isDefault ? " — default" : ""}`,
+      ),
+      ...(listed.more ? ["- (more templates exist; only the first 100 are listed)"] : []),
+    ];
+  };
+
   const getDatabase = defineTool({
     name: "notion_get_database",
     title: "Get a Notion database schema",
     description:
-      "Get a database's data sources and their schema (property names, types, select/status options). Use it before creating rows or updating properties.",
+      "Get a database's data sources, their schema (property names, types, select/status options) and their templates. Use it before creating rows or updating properties.",
     permission: "notion:read",
     inputSchema: z.object({ database: idOrUrl("Database or data source") }),
     annotations: READ_ONLY_ANNOTATIONS,
@@ -248,15 +267,17 @@ export function createReadTools(deps: NotionToolDeps): {
           `Data sources (${view.dataSources.length}):`,
         );
       }
-      for (const dataSource of view.dataSources) {
+      const templates = await Promise.all(view.dataSources.map((dataSource) => templateLines(dataSource.id)));
+      view.dataSources.forEach((dataSource, index) => {
         lines.push(
           "",
           `## Data source "${dataSourceTitle(dataSource)}" (id ${dataSource.id})`,
           `parent: ${parentLabel(dataSource.parent)}`,
           "Properties:",
           ...schemaLines(dataSource),
+          ...(templates[index] ?? []),
         );
-      }
+      });
       return lines.join("\n").trim();
     }),
   });

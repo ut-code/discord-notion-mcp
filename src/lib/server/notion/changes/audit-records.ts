@@ -88,6 +88,8 @@ export type PropertySkip = z.infer<typeof PropertySkipSchema>;
 /** A successful write that needs a word of caution. */
 const WriteWarningSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("content_failed"), error: z.string() }),
+  /** Notion had not filled in the template when the write was recorded. */
+  z.object({ kind: z.literal("template_pending") }),
   z.object({ kind: z.literal("revert_blocked"), blocker: revertBlockerSchema }),
 ]);
 export type WriteWarning = z.infer<typeof WriteWarningSchema>;

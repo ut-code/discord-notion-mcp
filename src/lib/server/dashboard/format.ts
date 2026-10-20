@@ -3,6 +3,7 @@ import type { NotionAuditOperation } from "../db/schema";
 import { isRecord } from "../../guards";
 import { formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
+import { JST_TIME_ZONE } from "../lib/jst-day";
 
 export const PERMISSION_LABELS: Record<Permission, string> = {
   "discord:read": m.permission_discord_read(),
@@ -43,7 +44,7 @@ export function isAuditStatusFilter(value: string | undefined): value is AuditSt
 
 /** A moment as Japan's wall-clock time. */
 function jst(date: Date): Temporal.ZonedDateTime {
-  return date.toTemporalInstant().toZonedDateTimeISO("Asia/Tokyo");
+  return date.toTemporalInstant().toZonedDateTimeISO(JST_TIME_ZONE);
 }
 
 const pad2 = (value: number): string => String(value).padStart(2, "0");

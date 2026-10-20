@@ -248,7 +248,8 @@ export function diffLines(hunks: readonly ContentHunk[]): DiffLine[] {
 type ChangeView =
   | { kind: "diff"; meta: string | null; lines: DiffLine[] }
   | { kind: "properties"; meta: string | null; entries: Array<{ name: string; before: string; after: string }> }
-  | { kind: "created"; title: string; targetUrl: string | null }
+  /** `lines`: the new page's content, from its text or its template. */
+  | { kind: "created"; title: string; targetUrl: string | null; lines: DiffLine[] }
   | { kind: "archived" }
   | { kind: "revert"; of: { id: number; href: string } | null };
 
@@ -282,8 +283,11 @@ async function changeView(deps: DashboardDeps, row: NotionAuditRow): Promise<Cha
         entries,
       };
     }
-    case "create_page":
-      return { kind: "created", title: row.targetTitle, targetUrl: row.targetUrl };
+    case "create_page": {
+      const content = await deps.audit.getContent(row.id);
+      const lines = content?.after ? diffLines(contentHunks("", content.after)) : [];
+      return { kind: "created", title: row.targetTitle, targetUrl: row.targetUrl, lines };
+    }
     case "archive_page":
       return { kind: "archived" };
     case "revert":
