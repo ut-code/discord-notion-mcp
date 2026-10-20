@@ -34,7 +34,7 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 ### Coolify
 
 1. このリポジトリを Git リモートに push し、Coolify で Application（Build Pack: Dockerfile）として追加
-2. Port `3000`、Domain を設定
+2. Port `3000`、Domain を設定（Port Mappings は空のまま。サーバーに公開するとプロキシを経ずに届き、送信元 IP を偽ってレート制限を回避できる）
 3. Persistent Storage: `/data`
 4. 環境変数を設定してデプロイ
 
