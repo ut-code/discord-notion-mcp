@@ -30,7 +30,10 @@ export function toToolError(error: unknown): unknown {
       logMessage: `Notion rejected the request (${error.status} ${error.code})`,
     });
   }
-  if (error.status === 429) return new ToolError("Notion rate limit reached; please retry in a moment.");
+  if (error.status === 429) {
+    const wait = error.retryAfterMs === undefined ? "in a moment" : `in about ${Math.ceil(error.retryAfterMs / 1000)} s`;
+    return new ToolError(`Notion rate limit reached; retry ${wait}.`);
+  }
   if (isNotionUnavailable(error)) return new ToolError(`Notion is not responding (${notionFailure(error)}); please retry in a moment.`);
   return error;
 }

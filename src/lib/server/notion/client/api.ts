@@ -1,4 +1,5 @@
 import {
+  APIErrorCode,
   Client,
   ClientErrorCode,
   isFullComment,
@@ -17,6 +18,7 @@ import {
   type CreateCommentParameters,
   type UpdatePageParameters,
 } from "@notionhq/client";
+import { isRecord } from "../../../guards";
 import { createLimiter, type Limiter } from "../../lib/limiter";
 import type { PageMarkdownUpdate, PageParent, RichTextRequest } from "./types";
 
@@ -28,6 +30,15 @@ import type { PageMarkdownUpdate, PageParent, RichTextRequest } from "./types";
 const NOTION_API_VERSION = "2026-03-11";
 
 const MAX_CONCURRENT_REQUESTS = 3;
+
+/** Reads that Notion failed on its side are retried after 1 s, 2 s and 4 s. */
+const MAX_RETRIES = 3;
+const INITIAL_RETRY_DELAY_MS = 1000;
+/**
+ * A rate limit is waited out once when Notion asks for at most this long, as the official
+ * Notion MCP does; a longer one fails at once so the caller can say when to retry.
+ */
+const MAX_RATE_LIMIT_WAIT_MS = 2000;
 
 export type NotionPage = PageObjectResponse;
 export type NotionDatabase = DatabaseObjectResponse;
@@ -68,6 +79,8 @@ export class NotionRequestError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
+    /** For a rate limit (429): how long Notion asked to wait, when it said. */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
   }
@@ -81,6 +94,13 @@ export function isNotionMiss(error: unknown): boolean {
 // NotionRequestError keeps the SDK's codes as plain strings.
 const REQUEST_TIMEOUT: string = ClientErrorCode.RequestTimeout;
 const INVALID_PATH_PARAMETER: string = ClientErrorCode.InvalidPathParameter;
+const RATE_LIMITED: string = APIErrorCode.RateLimited;
+/** Notion failed on its side; a read is safe to repeat, a write may already have been applied. */
+const SERVER_FAILURES: ReadonlySet<string> = new Set([
+  APIErrorCode.InternalServerError,
+  APIErrorCode.ServiceUnavailable,
+  APIErrorCode.ServiceOverload,
+]);
 
 /** Notion failed on its side or did not answer in time: the same request may succeed later. */
 export function isNotionUnavailable(error: unknown): boolean {
@@ -130,9 +150,38 @@ export interface NotionApi {
 }
 
 function translateError(error: unknown): unknown {
-  if (isHTTPResponseError(error)) return new NotionRequestError(error.message, error.status, error.code);
+  if (isHTTPResponseError(error)) return new NotionRequestError(error.message, error.status, error.code, retryAfterMs(error.headers));
   if (isNotionClientError(error)) return new NotionRequestError(error.message, 0, error.code);
   return error;
+}
+
+/** Retry-After in milliseconds (delta-seconds or an HTTP date), when the response has a valid one. */
+function retryAfterMs(headers: unknown): number | undefined {
+  const value =
+    headers instanceof Headers
+      ? headers.get("retry-after")
+      : isRecord(headers)
+        ? Object.entries(headers).find(([name]) => name.toLowerCase() === "retry-after")?.[1]
+        : undefined;
+  if (typeof value !== "string") return undefined;
+  if (/^\d+$/.test(value.trim())) return Number(value.trim()) * 1000;
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? undefined : Math.max(0, date - Date.now());
+}
+
+/**
+ * How long to wait before repeating a request that failed with `error`, or null when it
+ * must not be repeated. A rate limit (429) means Notion did nothing, so any request may
+ * be repeated; after a server failure only reads are, since a write may have been applied.
+ */
+function retryDelayMs(error: unknown, kind: "read" | "write", attempt: number): number | null {
+  if (!isHTTPResponseError(error)) return null;
+  const code: string = error.code;
+  if (code === RATE_LIMITED) {
+    const wait = retryAfterMs(error.headers);
+    return attempt === 0 && wait !== undefined && wait <= MAX_RATE_LIMIT_WAIT_MS ? wait : null;
+  }
+  return kind === "read" && SERVER_FAILURES.has(code) ? INITIAL_RETRY_DELAY_MS * 2 ** attempt : null;
 }
 
 function expectFull<R, T extends R>(value: R, guard: (value: R) => value is T, what: string): T {
@@ -150,43 +199,51 @@ function sdkRequest<T>(value: unknown): T {
 }
 
 /**
- * NotionApi over the official SDK. The SDK already retries 429 (honoring Retry-After)
- * and 529 for every method, and 500/503 for idempotent ones; this class adds a
- * concurrency cap shared by all callers.
+ * NotionApi over the official SDK, with a concurrency cap shared by all callers. Retries are
+ * done here, not by the SDK: it repeats 429 and 529 for every method, and repeating a write
+ * Notion may have applied could apply it twice, or record it as failed when it was not.
  */
 export class SdkNotionApi implements NotionApi {
   private readonly client: Client;
   private readonly limit: Limiter;
+  private readonly sleep: (ms: number) => Promise<void>;
 
-  constructor(token: string, options: { client?: Client; maxConcurrent?: number } = {}) {
-    this.client =
-      options.client ?? new Client({ auth: token, notionVersion: NOTION_API_VERSION, retry: { maxRetries: 3, maxRetryDelayMs: 30_000 } });
+  constructor(token: string, options: { client?: Client; maxConcurrent?: number; sleep?: (ms: number) => Promise<void> } = {}) {
+    this.client = options.client ?? new Client({ auth: token, notionVersion: NOTION_API_VERSION, retry: false });
     this.limit = createLimiter(options.maxConcurrent ?? MAX_CONCURRENT_REQUESTS);
+    this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
-  private async call<T>(task: () => Promise<T>): Promise<T> {
-    try {
-      return await this.limit(task);
-    } catch (error) {
-      throw translateError(error);
+  /** Runs `task` in a limiter slot, waiting between retries without holding one. */
+  private async call<T>(task: () => Promise<T>, kind: "read" | "write"): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.limit(task);
+      } catch (error) {
+        const delayMs = attempt < MAX_RETRIES ? retryDelayMs(error, kind, attempt) : null;
+        if (delayMs === null) throw translateError(error);
+        await this.sleep(delayMs);
+      }
     }
   }
 
   async search(query: { query: string; filter?: "page" | "data_source" } & CursorQuery): Promise<Paged<SearchResult>> {
-    const response = await this.call(() =>
-      this.client.search({
-        query: query.query,
-        page_size: query.pageSize,
-        start_cursor: query.startCursor,
-        filter: query.filter ? { property: "object", value: query.filter } : undefined,
-      }),
+    const response = await this.call(
+      () =>
+        this.client.search({
+          query: query.query,
+          page_size: query.pageSize,
+          start_cursor: query.startCursor,
+          filter: query.filter ? { property: "object", value: query.filter } : undefined,
+        }),
+      "read",
     );
     const results = response.results.filter((item): item is SearchResult => isFullPage(item) || isFullDataSource(item));
     return { results, nextCursor: response.next_cursor };
   }
 
   async retrievePage(pageId: string): Promise<NotionPage> {
-    const page = await this.call(() => this.client.pages.retrieve({ page_id: pageId }));
+    const page = await this.call(() => this.client.pages.retrieve({ page_id: pageId }), "read");
     return expectFull(page, isFullPage, "page");
   }
 
@@ -194,8 +251,9 @@ export class SdkNotionApi implements NotionApi {
     const items: PropertyItemObjectResponse[] = [];
     let cursor: string | undefined;
     for (let guard = 0; guard < 100; guard++) {
-      const response = await this.call(() =>
-        this.client.pages.properties.retrieve({ page_id: pageId, property_id: propertyId, start_cursor: cursor, page_size: 100 }),
+      const response = await this.call(
+        () => this.client.pages.properties.retrieve({ page_id: pageId, property_id: propertyId, start_cursor: cursor, page_size: 100 }),
+        "read",
       );
       if (response.object !== "list") return [response];
       items.push(...response.results);
@@ -206,86 +264,95 @@ export class SdkNotionApi implements NotionApi {
   }
 
   async retrievePageMarkdown(pageId: string): Promise<PageMarkdown> {
-    const response = await this.call(() => this.client.pages.retrieveMarkdown({ page_id: pageId }));
+    const response = await this.call(() => this.client.pages.retrieveMarkdown({ page_id: pageId }), "read");
     return { markdown: response.markdown, truncated: response.truncated, unknownBlockIds: response.unknown_block_ids };
   }
 
   async updatePageMarkdown(pageId: string, update: PageMarkdownUpdate): Promise<PageMarkdown> {
-    const response = await this.call(() => this.client.pages.updateMarkdown({ page_id: pageId, ...update }));
+    const response = await this.call(() => this.client.pages.updateMarkdown({ page_id: pageId, ...update }), "write");
     return { markdown: response.markdown, truncated: response.truncated, unknownBlockIds: response.unknown_block_ids };
   }
 
   async retrieveUser(userId: string): Promise<NotionUser> {
-    const user = await this.call(() => this.client.users.retrieve({ user_id: userId }));
+    const user = await this.call(() => this.client.users.retrieve({ user_id: userId }), "read");
     return { id: user.id, name: user.name ?? null, type: user.type };
   }
 
   async retrieveDatabase(databaseId: string): Promise<NotionDatabase> {
-    const database = await this.call(() => this.client.databases.retrieve({ database_id: databaseId }));
+    const database = await this.call(() => this.client.databases.retrieve({ database_id: databaseId }), "read");
     return expectFull(database, isFullDatabase, "database");
   }
 
   async retrieveDataSource(dataSourceId: string): Promise<NotionDataSource> {
-    const dataSource = await this.call(() => this.client.dataSources.retrieve({ data_source_id: dataSourceId }));
+    const dataSource = await this.call(() => this.client.dataSources.retrieve({ data_source_id: dataSourceId }), "read");
     return expectFull(dataSource, isFullDataSource, "data source");
   }
 
   async queryDataSource(
     query: { dataSourceId: string; filter?: Record<string, unknown>; sorts?: Array<Record<string, unknown>> } & CursorQuery,
   ): Promise<Paged<NotionPage>> {
-    const response = await this.call(() =>
-      this.client.dataSources.query({
-        data_source_id: query.dataSourceId,
-        filter: sdkRequest<QueryDataSourceParameters["filter"]>(query.filter),
-        sorts: sdkRequest<QueryDataSourceParameters["sorts"]>(query.sorts),
-        page_size: query.pageSize,
-        start_cursor: query.startCursor,
-        result_type: "page",
-      }),
+    const response = await this.call(
+      () =>
+        this.client.dataSources.query({
+          data_source_id: query.dataSourceId,
+          filter: sdkRequest<QueryDataSourceParameters["filter"]>(query.filter),
+          sorts: sdkRequest<QueryDataSourceParameters["sorts"]>(query.sorts),
+          page_size: query.pageSize,
+          start_cursor: query.startCursor,
+          result_type: "page",
+        }),
+      "read",
     );
     return { results: response.results.filter(isFullPage), nextCursor: response.next_cursor };
   }
 
   async listComments(blockId: string, query: CursorQuery): Promise<Paged<NotionComment>> {
-    const response = await this.call(() =>
-      this.client.comments.list({ block_id: blockId, start_cursor: query.startCursor, page_size: query.pageSize }),
+    const response = await this.call(
+      () => this.client.comments.list({ block_id: blockId, start_cursor: query.startCursor, page_size: query.pageSize }),
+      "read",
     );
     return { results: response.results.filter(isFullComment), nextCursor: response.next_cursor };
   }
 
   async createPage(params: { parent: PageParent; properties: Record<string, unknown> }): Promise<NotionPage> {
-    const page = await this.call(() =>
-      this.client.pages.create({
-        parent: params.parent,
-        properties: sdkRequest<CreatePageParameters["properties"]>(params.properties),
-      }),
+    const page = await this.call(
+      () =>
+        this.client.pages.create({
+          parent: params.parent,
+          properties: sdkRequest<CreatePageParameters["properties"]>(params.properties),
+        }),
+      "write",
     );
     return expectFull(page, isFullPage, "page");
   }
 
   async updatePage(params: { pageId: string; properties?: Record<string, unknown>; inTrash?: boolean }): Promise<NotionPage> {
-    const page = await this.call(() =>
-      this.client.pages.update({
-        page_id: params.pageId,
-        properties: sdkRequest<UpdatePageParameters["properties"]>(params.properties),
-        in_trash: params.inTrash,
-      }),
+    const page = await this.call(
+      () =>
+        this.client.pages.update({
+          page_id: params.pageId,
+          properties: sdkRequest<UpdatePageParameters["properties"]>(params.properties),
+          in_trash: params.inTrash,
+        }),
+      "write",
     );
     return expectFull(page, isFullPage, "page");
   }
 
   async createComment(params: { pageId: string; richText: RichTextRequest[]; displayName: string }): Promise<{ id: string }> {
-    const comment = await this.call(() =>
-      this.client.comments.create({
-        parent: { page_id: params.pageId },
-        rich_text: sdkRequest<Extract<CreateCommentParameters, { rich_text: unknown }>["rich_text"]>(params.richText),
-        display_name: { type: "custom", custom: { name: params.displayName } },
-      }),
+    const comment = await this.call(
+      () =>
+        this.client.comments.create({
+          parent: { page_id: params.pageId },
+          rich_text: sdkRequest<Extract<CreateCommentParameters, { rich_text: unknown }>["rich_text"]>(params.richText),
+          display_name: { type: "custom", custom: { name: params.displayName } },
+        }),
+      "write",
     );
     return { id: comment.id };
   }
 
   async deleteComment(commentId: string): Promise<void> {
-    await this.call(() => this.client.comments.delete({ comment_id: commentId }));
+    await this.call(() => this.client.comments.delete({ comment_id: commentId }), "write");
   }
 }
