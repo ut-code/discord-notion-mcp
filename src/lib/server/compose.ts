@@ -75,6 +75,9 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   const reportError = options.logError ?? logError;
 
   const discord = options.discordApi ?? new RestDiscordApi(config.discord.botToken, config.discord.guildId);
+  // A separate client, so a long rate limit fails tool calls at once without failing sign-in.
+  const discordForTools =
+    options.discordApi ?? new RestDiscordApi(config.discord.botToken, config.discord.guildId, { failFastOnRateLimit: true });
   const directory = new CachedGuildDirectory(discord);
   const grants = new GrantStore(database.db);
   const resolver = new PermissionResolver(directory, grants);
@@ -88,15 +91,15 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
 
   const auth = await createAuth({ config, sqlite: database.sqlite, isGuildMember, logError: reportError });
 
-  const channels = new ChannelDirectory(discord);
+  const channels = new ChannelDirectory(discordForTools);
   const notion = options.notionApi ?? (config.notion ? new SdkNotionApi(config.notion.token) : null);
   const auditStore = new NotionAuditStore(database.db);
   const notionAudit = new NotionAuditService(auditStore, notion, reportError);
   startInterruptedWriteSweep({ audit: notionAudit, log: reportEvent, logError: reportError });
   const tools: AnyToolDefinition[] = [
     ...createDiscordTools({
-      api: discord,
-      access: new ChannelAccess(discord, channels, config.discord.guildId),
+      api: discordForTools,
+      access: new ChannelAccess(discordForTools, channels, config.discord.guildId),
       channels,
       guildId: config.discord.guildId,
     }),

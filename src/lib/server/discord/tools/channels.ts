@@ -7,7 +7,7 @@ import { snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
 import { NotAccessibleError } from "../access";
 import type { GuildChannel } from "../api";
-import { canViewChannel } from "../permissions";
+import { canReadMessages, canViewChannel } from "../permissions";
 import { byPosition, describeThread, LISTED_CHANNEL_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
 /** Also accepts the archive timestamps Discord returns, e.g. "2026-10-01T12:34:56.789000+00:00". */
@@ -93,7 +93,8 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
       }
 
       const parent = await deps.channels.find(args.channel_id);
-      if (!parent || !canViewChannel(deps.access.permissionsFor(parent, viewer))) throw new NotAccessibleError();
+      const permissions = parent ? deps.access.permissionsFor(parent, viewer) : 0n;
+      if (!parent || !canViewChannel(permissions)) throw new NotAccessibleError();
 
       const before = parseArchiveTimestamp(args.before);
 
@@ -101,11 +102,15 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
         active.filter((thread) => thread.parent_id === parent.id),
         viewer,
       );
-      const archived = await deps.api.fetchArchivedPublicThreads(parent.id, { before, limit: args.limit });
-      const archivedVisible = await deps.access.filterVisibleThreads(archived.threads, viewer);
-
       const lines = [`Threads in #${parent.name} (id ${parent.id})`, "", `Active (${activeVisible.length}):`];
       lines.push(...(activeVisible.length ? activeVisible.map((t) => describeThread(t, parentNames)) : ["  (none)"]));
+      // Discord lists archived threads only to those who can read the channel's history.
+      if (!canReadMessages(permissions)) {
+        lines.push("", "Archived public: not listed (you cannot read this channel's message history).");
+        return lines.join("\n");
+      }
+      const archived = await deps.api.fetchArchivedPublicThreads(parent.id, { before, limit: args.limit });
+      const archivedVisible = await deps.access.filterVisibleThreads(archived.threads, viewer);
       lines.push("", `Archived public (${archivedVisible.length}):`);
       lines.push(...(archivedVisible.length ? archivedVisible.map((t) => describeThread(t, parentNames)) : ["  (none)"]));
       const oldest = archived.threads.at(-1)?.thread_metadata?.archive_timestamp;

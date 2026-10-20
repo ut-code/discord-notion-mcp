@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { APIMessage, APIThreadChannel } from "discord-api-types/v10";
+import {
+  GuildScheduledEventEntityType,
+  GuildScheduledEventStatus,
+  type APIGuildScheduledEvent,
+  type APIMessage,
+  type APIThreadChannel,
+} from "discord-api-types/v10";
 import { ChannelAccess, ChannelDirectory } from "../../src/lib/server/discord/access";
 import type { MessageSearchResponse } from "../../src/lib/server/discord/api";
 import { ADMINISTRATOR, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
@@ -14,6 +20,7 @@ const ROLE_STAFF = "200000000000000001";
 const ROLE_ADMIN = "200000000000000002";
 const PUBLIC = "400000000000000001";
 const STAFF = "400000000000000002";
+const NO_HISTORY = "400000000000000003";
 const PUBLIC_THREAD = "500000000000000001";
 const PRIVATE_THREAD = "500000000000000002";
 const STAFF_THREAD = "500000000000000003";
@@ -22,6 +29,7 @@ let api: FakeDiscordApi;
 let tool: AnyToolDefinition;
 let findMember: AnyToolDefinition;
 let listThreads: AnyToolDefinition;
+let listEvents: AnyToolDefinition;
 let slept: number[];
 
 function principal(roles: string[] = []): Principal {
@@ -81,6 +89,7 @@ beforeEach(() => {
   tool = tools.find((t) => t.name === "discord_search_messages")!;
   findMember = tools.find((t) => t.name === "discord_find_member")!;
   listThreads = tools.find((t) => t.name === "discord_list_threads")!;
+  listEvents = tools.find((t) => t.name === "discord_list_events")!;
 });
 
 describe("discord_list_threads", () => {
@@ -103,6 +112,43 @@ describe("discord_list_threads", () => {
       );
     }
     expect(api.archivedQueries).toEqual([]);
+  });
+
+  test("archived threads are listed only to viewers who can read the channel's history, as in Discord", async () => {
+    api.channels.push(textChannel(NO_HISTORY, "announcements", [{ id: GUILD_ID, type: 0, deny: READ_MESSAGE_HISTORY }]));
+    const text = await list({ channel_id: NO_HISTORY });
+    expect(text).toContain("Archived public: not listed (you cannot read this channel's message history).");
+    expect(api.archivedQueries).toEqual([]);
+  });
+});
+
+describe("discord_list_events", () => {
+  function event(id: string, name: string, start: string, location: { channelId: string } | { external: string }): APIGuildScheduledEvent {
+    const base = { id, guild_id: GUILD_ID, name, scheduled_start_time: start, status: GuildScheduledEventStatus.Scheduled };
+
+    return ("channelId" in location
+      ? { ...base, channel_id: location.channelId, entity_type: GuildScheduledEventEntityType.Voice }
+      : {
+          ...base,
+          channel_id: null,
+          entity_type: GuildScheduledEventEntityType.External,
+          entity_metadata: { location: location.external },
+        }) as unknown as APIGuildScheduledEvent;
+  }
+
+  test("lists events in viewable channels and external ones by start time, hiding the rest", async () => {
+    api.events = [
+      event("600000000000000001", "Later", "2026-10-21T10:00:00+00:00", { channelId: PUBLIC }),
+      event("600000000000000002", "Staff only", "2026-10-20T09:00:00+00:00", { channelId: STAFF }),
+      event("600000000000000003", "Meetup", "2026-10-20T10:00:00+00:00", { external: "Tokyo" }),
+    ];
+    const result = await listEvents.handler({}, { principal: principal() });
+    const text = typeof result === "string" ? result : JSON.stringify(result);
+    expect(text).not.toContain("Staff only");
+    expect(text.indexOf("Meetup")).toBeLessThan(text.indexOf("Later"));
+    expect(text).toContain("location: Tokyo");
+    expect(text).toContain("location: #public");
+    expect((await listEvents.handler({}, { principal: principal([ROLE_STAFF]) })) as string).toContain("Staff only");
   });
 });
 
@@ -135,6 +181,11 @@ describe("discord_find_member", () => {
   test("an exact id fetches that member", async () => {
     expect(await find({ query: "300000000000000011" })).toContain("@tanabe");
     expect(await find({ query: "300000000000000099" })).toContain("No members match");
+  });
+
+  test("a name of digits only that is no member's id is still searched as a name", async () => {
+    api.members.set("300000000000000012", { ...makeMember("300000000000000012"), username: "12345678901234567890" });
+    expect(await find({ query: "12345678901234567" })).toContain("@12345678901234567890");
   });
 });
 

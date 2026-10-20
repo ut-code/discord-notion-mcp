@@ -19,13 +19,9 @@ export function createMemberTools(deps: DiscordToolDeps): { findMember: AnyToolD
     }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withDiscordErrors(async (args, principal) => {
-      let members: MemberInfo[];
-      if (isSnowflake(args.query)) {
-        const member = await deps.api.fetchMember(args.query);
-        members = member ? [member] : [];
-      } else {
-        members = await deps.api.searchMembers(args.query, args.limit);
-      }
+      // A name of digits only looks like an id, so a miss by id still searches by name.
+      const byId = isSnowflake(args.query) ? await deps.api.fetchMember(args.query) : null;
+      const members: MemberInfo[] = byId ? [byId] : await deps.api.searchMembers(args.query, args.limit);
       if (members.length === 0) return `No members match "${args.query}".`;
 
       const guild = principal.access.guild;

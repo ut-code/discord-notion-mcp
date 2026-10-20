@@ -1,5 +1,5 @@
 // Shared types, constants and helpers used by the Discord tool modules.
-import { DiscordAPIError, HTTPError } from "@discordjs/rest";
+import { DiscordAPIError, HTTPError, RateLimitError } from "@discordjs/rest";
 import { ChannelType, GuildScheduledEventStatus, MessageSearchHasType, type APIThreadChannel } from "discord-api-types/v10";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
@@ -59,8 +59,9 @@ export function viewerOf(principal: Principal): Viewer {
 
 /**
  * Maps Discord API errors to tool errors: "not found / forbidden" to the uniform not-accessible
- * one, and outages (5xx or a timeout, after @discordjs/rest's own retries) to "retry later",
- * which is safe because every Discord tool only reads.
+ * one, a rate limit too long to wait out to when to retry, and outages (5xx or a timeout,
+ * after @discordjs/rest's own retries) to "retry later", which is safe because every Discord
+ * tool only reads.
  */
 export function withDiscordErrors<A>(handler: (args: A, principal: Principal) => Promise<ToolResult>) {
   return async (args: A, ctx: { principal: Principal }): Promise<ToolResult> => {
@@ -74,6 +75,9 @@ export function withDiscordErrors<A>(handler: (args: A, principal: Principal) =>
         throw new ToolError(`Discord rejected the request: ${error.message}`, {
           logMessage: `Discord rejected the request (400 ${String(error.code)})`,
         });
+      }
+      if (error instanceof RateLimitError) {
+        throw new ToolError(`Discord rate limit reached; retry in about ${Math.ceil(error.retryAfter / 1000)} s.`);
       }
       const outage =
         error instanceof HTTPError ? `HTTP ${error.status}` : error instanceof Error && error.name === "AbortError" ? "timed out" : null;

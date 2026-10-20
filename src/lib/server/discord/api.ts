@@ -1,4 +1,4 @@
-import { DiscordAPIError, makeURLSearchParams, REST, type RequestData, type RouteLike } from "@discordjs/rest";
+import { DiscordAPIError, makeURLSearchParams, REST, type RateLimitData, type RequestData, type RouteLike } from "@discordjs/rest";
 import {
   Routes,
   type APIGuild,
@@ -19,6 +19,17 @@ import {
 import type { GuildDirectory } from "./directory";
 import { guildIconUrl, memberAvatarUrl, userAvatarUrl } from "./avatar";
 import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "./types";
+
+/**
+ * For tools, a rate limit is waited out when it lasts at most this long, as for Notion; a
+ * longer one fails at once so the AI is told when to retry instead of hanging.
+ */
+const MAX_RATE_LIMIT_WAIT_MS = 2000;
+
+/** Whether @discordjs/rest throws a RateLimitError at once instead of queueing the request. */
+export function exceedsRateLimitWait(limit: Pick<RateLimitData, "retryAfter">): boolean {
+  return limit.retryAfter > MAX_RATE_LIMIT_WAIT_MS;
+}
 
 /** A non-thread guild channel as returned by GET /guilds/{id}/channels. */
 export type GuildChannel = APIGuildChannel & { position?: number; topic?: string | null };
@@ -87,11 +98,17 @@ function toMemberInfo(member: APIGuildMember, guildId: string, userId = member.u
 export class RestDiscordApi implements DiscordApi {
   private readonly rest: REST;
 
+  /**
+   * `failFastOnRateLimit` is for tools. Sign-in, consent and the dashboard leave it off and
+   * wait out any rate limit, since a person is waiting for them to go through.
+   */
   constructor(
     botToken: string,
     private readonly guildId: string,
+    options: { failFastOnRateLimit?: boolean } = {},
   ) {
-    this.rest = new REST({ version: "10" }).setToken(botToken);
+    const rejectOnRateLimit = options.failFastOnRateLimit ? exceedsRateLimitWait : null;
+    this.rest = new REST({ version: "10", rejectOnRateLimit }).setToken(botToken);
   }
 
   /** `rest.get` resolves to `unknown`; discord-api-types is the contract for the response of each route. */
