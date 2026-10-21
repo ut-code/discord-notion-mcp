@@ -111,9 +111,17 @@ describe("usage statistics", () => {
       { id: U1, name: "Mina", avatarUrl: null, calls: 3, failureRate: "33.3%", lastUsed: "10/12 10:00" },
     ]);
     expect(data.tools.slice(0, 2)).toEqual([
-      { tool: "notion_search", calls: 2, failureRate: "0.0%", avgDuration: "200 ms" },
-      { tool: "discord_read_messages", calls: 1, failureRate: "100.0%", avgDuration: "50 ms" },
+      { tool: "notion_search", href: "/dashboard/tools#notion_search", calls: 2, failureRate: "0.0%", avgDuration: "200 ms" },
+      {
+        tool: "discord_read_messages",
+        href: "/dashboard/tools#discord_read_messages",
+        calls: 1,
+        failureRate: "100.0%",
+        avgDuration: "50 ms",
+      },
     ]);
+    // A tool no longer served has no entry on the tools page to link to.
+    expect(data.tools.find((row) => row.tool === "tool_a")?.href).toBeNull();
 
     const month = await statsPage(deps, new URLSearchParams(), reader, NOW);
     expect(month.range).toBe(30);

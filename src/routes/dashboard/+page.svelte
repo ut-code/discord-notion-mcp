@@ -5,7 +5,6 @@
   import * as Table from "#lib/components/ui/table/index.js";
   import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
-  import { toolPath } from "#lib/paths.js";
   import StackedBars from "./stacked-bars.svelte";
   import type { PageProps } from "./$types";
 
@@ -102,9 +101,13 @@
           <Table.Body>
             {#each data.tools as row (row.tool)}
               <Table.Row>
-                <Table.Cell class="primary"
-                  ><a class="mono scroll-x text-foreground hover:underline" href={toolPath(row.tool)}>{row.tool}</a></Table.Cell
-                >
+                <Table.Cell class="primary">
+                  {#if row.href}
+                    <a class="mono scroll-x text-foreground hover:underline" href={row.href}>{row.tool}</a>
+                  {:else}
+                    <span class="mono scroll-x text-foreground">{row.tool}</span>
+                  {/if}
+                </Table.Cell>
                 <Table.Cell class="num">{formatNumber(row.calls)}</Table.Cell>
                 <Table.Cell class="num">{row.failureRate}</Table.Cell>
                 <Table.Cell class="num secondary">{row.avgDuration}</Table.Cell>

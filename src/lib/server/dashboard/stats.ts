@@ -1,7 +1,7 @@
 import { formatNumber } from "../../locale";
 import { isOneOf } from "../../one-of";
 import { m } from "../../paraglide/messages.js";
-import { DASHBOARD_PATH } from "../../paths";
+import { DASHBOARD_PATH, toolPath } from "../../paths";
 import type { Permission } from "../permissions/permissions";
 import { TOOL_CALL_RETENTION_DAYS } from "../usage/tool-calls";
 import { jstDay, jstDayStart } from "../lib/jst-day";
@@ -52,6 +52,8 @@ interface StatsUserRow {
 
 interface StatsToolRow {
   tool: string;
+  /** Its entry on the tools page; null for a tool no longer served, which has none. */
+  href: string | null;
   calls: number;
   failureRate: string;
   avgDuration: string;
@@ -159,6 +161,7 @@ export async function statsPage(
     }),
     tools: byTool.map((row) => ({
       tool: row.tool,
+      href: permissions.has(row.tool) ? toolPath(row.tool) : null,
       calls: row.calls,
       failureRate: formatRate(row.failures, row.calls),
       avgDuration: formatDuration(row.avgDurationMs),
