@@ -130,7 +130,7 @@ describe("NotionWriteService", () => {
     expect(await audit.revert(outcome.auditId, ADMIN)).toMatchObject({ ok: true });
   });
 
-  test("a template body read back truncated is not kept as what the page holds", async () => {
+  test("a created page read back truncated is not kept as what it holds, and its revert is flagged", async () => {
     const existing = new Set(api.pages.keys());
     // The new page renders truncated from the first read on.
     const waiting = new NotionWriteService(
@@ -149,9 +149,17 @@ describe("NotionWriteService", () => {
     const template = api.addPage({ title: "Weekly", markdown: "## Agenda" });
     existing.add(ds.id).add(template.id);
     api.templates.set(ds.id, [{ id: template.id, name: "Weekly", isDefault: true }]);
+    const truncated: WriteWarning = { kind: "revert_blocked", blocker: "truncated_after_write" };
     const outcome = await waiting.createPage(ACTOR, { parentId: ds.id, title: "Week", templateId: template.id, request: {} });
-    expect(outcome.warning).toBeNull();
+    expect(outcome.warning).toEqual(truncated);
     expect(await store.getContent(outcome.auditId)).toBeNull();
+
+    const write = api.updatePageMarkdown.bind(api);
+    api.updatePageMarkdown = async (pageId, update) => ({ ...(await write(pageId, update)), truncated: true });
+    const written = await writes.createPage(ACTOR, { parentId: parent.id, title: "Long", content: "Body", request: {} });
+    expect(written.warning).toEqual(truncated);
+    expect((await store.get(written.auditId))!.note).toEqual(truncated);
+    expect(await store.getContent(written.auditId)).toBeNull();
   });
 
   test("a template without a body is not waited for, and one that never arrives is recorded as pending", async () => {

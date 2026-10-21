@@ -33,7 +33,7 @@ export function writeWarningText(warning: WriteWarning): string {
 function revertBlockerText(blocker: RevertBlocker): string {
   switch (blocker) {
     case "truncated_after_write":
-      return "Notion returned truncated content after the write, so the change could not be captured";
+      return "the page was too large for Notion to return whole after the write";
     case "concurrent_edit":
       return "someone else edited the page at the same moment, and undoing the change would undo theirs too";
     case "unlocated_edit":

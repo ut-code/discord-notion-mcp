@@ -300,7 +300,7 @@
   "revert_failure_nothing_restorable": "戻せるプロパティがありません: {skipped}",
   "revert_failure_superseded": "取り消しは実行されましたが、その間に中断扱いになり、別の取り消しが始まっていました。ページを確認してください。",
   "revert_failure_unconfirmed": "Notion から完了の応答がなく（{detail}）、取り消しが反映されたか分かりません。ページを確認してから、もう一度取り消してください。",
-  "revert_blocker_truncated_after_write": "書き込み後のページが大きすぎて、変更内容を記録できませんでした",
+  "revert_blocker_truncated_after_write": "書き込み後のページが大きすぎて、Notion から全体を読み取れませんでした",
   "revert_blocker_concurrent_edit": "同時に別の人がページを編集しており、取り消すとその編集まで消えてしまいます",
   "revert_blocker_unlocated_edit": "変更した位置をページ内で特定できず、同時に行われた別の人の編集まで消してしまう恐れがあります",
   "revert_blocker_child_object_created": "子ページかデータベースが作られており、取り消しでは消せません（手動でゴミ箱に移してください）",

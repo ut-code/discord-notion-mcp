@@ -84,6 +84,12 @@ const MAX_RESTORE_BYTES = 450_000;
 const TEMPLATE_CHECKS = 10;
 const TEMPLATE_CHECK_INTERVAL_MS = 1_000;
 
+/**
+ * A created page Notion returned truncated: a revert reads the whole page first (child pages must
+ * not go to the trash with it), so one too large to read may not be revertible.
+ */
+const TRUNCATED_AFTER_CREATE: WriteWarning = { kind: "revert_blocked", blocker: "truncated_after_write" };
+
 /** The size of `markdown` as the replace_content request carries it (JSON-escaped). */
 const restoreBytes = (markdown: string) => Buffer.byteLength(JSON.stringify(markdown));
 
@@ -300,7 +306,8 @@ export class NotionWriteService {
     if (awaitBody) {
       const filled = await this.awaitTemplate(page.id);
       if (filled === null) warning = { kind: "template_pending" };
-      else body = filled.truncated ? null : filled.markdown;
+      else if (filled.truncated) warning = TRUNCATED_AFTER_CREATE;
+      else body = filled.markdown;
     }
     if (content) {
       try {
@@ -308,7 +315,8 @@ export class NotionWriteService {
           type: "insert_content",
           insert_content: { content, position: { type: "end" } },
         });
-        body = written.truncated ? null : written.markdown;
+        if (written.truncated) warning = TRUNCATED_AFTER_CREATE;
+        else body = written.markdown;
       } catch (error) {
         warning = { kind: "content_failed", error: errorMessage(toToolError(error)) };
       }
