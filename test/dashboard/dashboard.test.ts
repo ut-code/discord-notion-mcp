@@ -281,6 +281,9 @@ describe("grants", () => {
     expect((await createGrant(deps, form({ permission: "notion:read", subject: `team:${MEMBER}` }), owner)).message).toBe(
       "対象の種類が不正です。",
     );
+    expect((await createGrant(deps, form({ permission: "notion:read", subject: `user:${READER}:x` }), owner)).message).toContain(
+      "Discord の ID（15〜22 桁の数字）ではありません",
+    );
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD });
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
   });

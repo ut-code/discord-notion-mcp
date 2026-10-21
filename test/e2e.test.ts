@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { version as packageVersion } from "../package.json";
 import { consentPage } from "../src/lib/server/dashboard/session";
 import { toolCall } from "../src/lib/server/db/schema";
 import { NO_PERMISSIONS_INSTRUCTIONS } from "../src/lib/server/mcp/server";
@@ -124,7 +125,7 @@ describe("OAuth + MCP end to end", () => {
       method: "initialize",
       params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "e2e", version: "0" } },
     });
-    expect(init.json.result.serverInfo.name).toBe("discord-notion-mcp");
+    expect(init.json.result.serverInfo).toMatchObject({ name: "discord-notion-mcp", version: packageVersion });
     expect(init.json.result.instructions).toBeUndefined();
 
     const list = await mcpCall(accessToken, { jsonrpc: "2.0", id: 3, method: "tools/list", params: {} });

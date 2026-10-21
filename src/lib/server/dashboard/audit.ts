@@ -26,7 +26,7 @@ import {
   isAuditStatusFilter,
   renderRequestedPropertyValue,
 } from "./format";
-import { auditNoteText, revertReasonText, revertSuccessText } from "./outcome-text";
+import { auditNoteText, revertReasonMessage, revertSuccessMessage } from "./outcome-text";
 import { formString, pageLinks, pageParam, userFilterParam, type ActionResult, type Option } from "./shared";
 
 const AUDIT_PAGE_SIZE = 50;
@@ -372,7 +372,7 @@ function revertView(deps: DashboardDeps, row: NotionAuditRow): RevertView | null
     case "not_ok":
       return null;
     default:
-      return { state: "unavailable", reason: revertReasonText(reason) };
+      return { state: "unavailable", reason: revertReasonMessage(reason) };
   }
 }
 
@@ -403,7 +403,7 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
   }
   if (outcome.ok) {
     deps.log({ event: "audit_revert", auditId: id, by: actor.discordUserId, ok: true, revertAuditId: outcome.revertAuditId });
-    return { result: { kind: outcome.partial ? "warn" : "ok", message: revertSuccessText(outcome) }, conflict: false };
+    return { result: { kind: outcome.partial ? "warn" : "ok", message: revertSuccessMessage(outcome) }, conflict: false };
   }
   const { reason } = outcome;
   deps.log({
@@ -416,5 +416,5 @@ export async function revertAudit(deps: DashboardDeps, idParam: string, form: Fo
   });
   // The page explains the conflict instead of a message.
   if (reason.kind === "conflict") return { result: { kind: "warn", message: null }, conflict: true };
-  return { result: { kind: "error", message: revertReasonText(reason) }, conflict: false };
+  return { result: { kind: "error", message: revertReasonMessage(reason) }, conflict: false };
 }

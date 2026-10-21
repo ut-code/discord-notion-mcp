@@ -1,11 +1,12 @@
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
+import { name, version } from "../../../../package.json";
 import type { ToolCallErrorKind } from "../db/schema";
 import { errorMessage, ToolError } from "../lib/errors";
 import { logError, logEvent, type ErrorSink, type ToolCallLogEntry } from "../lib/log";
 import type { RateLimitDecision } from "../lib/rate-limit";
 import { toolsForPermissions, type AnyToolArgs, type AnyToolDefinition, type Principal, type ToolResult } from "./registry";
 
-const SERVER_INFO = { name: "discord-notion-mcp", version: "0.1.0" } as const;
+const SERVER_INFO = { name, version };
 
 /** Sent as the server instructions when the caller may use no tool at all. */
 export const NO_PERMISSIONS_INSTRUCTIONS =

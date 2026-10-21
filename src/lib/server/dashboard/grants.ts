@@ -279,10 +279,21 @@ function memberOption(guild: GuildInfo, grants: readonly GrantRow[], user: UserS
   };
 }
 
+type ParsedSubject = { ok: true; type: SubjectType; id: string } | { ok: false; message: string };
+
+/** A grant subject from its type and Discord id, or why they do not name one. */
+function parseSubject(type: string, id: string): ParsedSubject {
+  if (!type && !id) return { ok: false, message: m.grants_choose_subject() };
+  if (type !== "role" && type !== "user") return { ok: false, message: m.grants_invalid_subject_type() };
+  if (!id) return { ok: false, message: m.grants_choose_subject() };
+  if (!isSnowflake(id)) return { ok: false, message: m.grants_invalid_snowflake({ id }) };
+  return { ok: true, type, id };
+}
+
 /** `role:<id>` or `user:<id>`, as the grant form sends it. */
-function parseSubjectKey(value: string): { type: SubjectType; id: string } | null {
-  const [type, id] = value.split(":", 2);
-  return (type === "role" || type === "user") && id && isSnowflake(id) ? { type, id } : null;
+function parseSubjectKey(value: string): ParsedSubject {
+  const colon = value.indexOf(":");
+  return colon === -1 ? parseSubject(value, "") : parseSubject(value.slice(0, colon), value.slice(colon + 1));
 }
 
 export type MemberSearchResult = { status: 200; body: { members: SubjectOption[] } } | { status: 400 | 403 | 502; body: { error: string } };
@@ -305,7 +316,8 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
   const filterParam = params.get("filter") ?? "";
   const filter = isPermission(filterParam) ? filterParam : null;
   const query = params.get("q")?.trim().slice(0, MAX_QUERY_LENGTH) ?? "";
-  const selected = parseSubjectKey(params.get("subject") ?? "");
+  const subject = parseSubjectKey(params.get("subject") ?? "");
+  const selected = subject.ok ? { type: subject.type, id: subject.id } : null;
   const selectedUserId = selected?.type === "user" ? selected.id : null;
 
   const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
@@ -379,14 +391,10 @@ type ParsedGrantForm = { ok: true; form: GrantForm } | { ok: false; message: str
 async function parseGrantForm(deps: DashboardDeps, body: FormData): Promise<ParsedGrantForm> {
   const permission = formString(body, "permission");
   if (!isPermission(permission)) return { ok: false, message: m.grants_unknown_permission() };
-  const subject = formString(body, "subject");
-  const [subjectType = "", subjectId = ""] = subject
-    ? subject.split(":", 2)
-    : [formString(body, "subjectType"), formString(body, "subjectId")];
-  if (!subjectType && !subjectId) return { ok: false, message: m.grants_choose_subject() };
-  if (subjectType !== "role" && subjectType !== "user") return { ok: false, message: m.grants_invalid_subject_type() };
-  if (!subjectId) return { ok: false, message: m.grants_choose_subject() };
-  if (!isSnowflake(subjectId)) return { ok: false, message: m.grants_invalid_snowflake({ id: subjectId }) };
+  const key = formString(body, "subject");
+  const subject = key ? parseSubjectKey(key) : parseSubject(formString(body, "subjectType"), formString(body, "subjectId"));
+  if (!subject.ok) return { ok: false, message: subject.message };
+  const { type: subjectType, id: subjectId } = subject;
   if (subjectType === "user") {
     const user = await deps.subjects.resolveUser(subjectId);
     const label = user.displayName ? m.grants_subject_user_named({ name: user.displayName }) : m.grants_subject_user_id({ id: subjectId });

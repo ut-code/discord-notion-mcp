@@ -112,7 +112,7 @@ function failureText(failure: RevertFailure): string {
   }
 }
 
-export function revertReasonText(reason: RevertReason): string {
+export function revertReasonMessage(reason: RevertReason): string {
   switch (reason.kind) {
     case "not_found":
       return m.audit_not_found();
@@ -156,7 +156,7 @@ export function revertReasonText(reason: RevertReason): string {
   }
 }
 
-export function revertSuccessText(result: { partial: boolean; note: RevertNote | null }): string {
+export function revertSuccessMessage(result: { partial: boolean; note: RevertNote | null }): string {
   const head = result.partial ? m.revert_success_partial() : m.revert_success();
   return result.note ? `${head}${noteText(result.note)}` : head;
 }
