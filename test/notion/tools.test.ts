@@ -126,6 +126,14 @@ describe("Notion tools", () => {
     expect(text).toContain("(More comments exist; only the first 300 are shown.)");
     expect(api.callsOf("listComments")).toHaveLength(3);
 
+    // Notion may return fewer comments than asked for; the last page asks only for what is left.
+    const list = api.listComments.bind(api);
+    api.listComments = async (blockId, query) => list(blockId, { ...query, pageSize: Math.min(query.pageSize, 90) });
+    const short = await call("notion_get_comments", { target: PAGE_ID });
+    expect(short.split("\n")[0]).toBe("300 comment(s):");
+    expect(short).toContain("(More comments exist; only the first 300 are shown.)");
+    api.listComments = list;
+
     api.listedComments.set(PAGE_ID, [comment(0)]);
     expect(await call("notion_get_comments", { target: PAGE_ID })).not.toContain("More comments exist");
   });

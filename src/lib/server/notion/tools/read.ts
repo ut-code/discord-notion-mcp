@@ -295,7 +295,8 @@ export function createReadTools(deps: NotionToolDeps): {
       let cursor: string | undefined;
       let more = false;
       while (comments.length < MAX_COMMENTS) {
-        const result = await api.listComments(blockId, { startCursor: cursor, pageSize: COMMENT_PAGE_SIZE });
+        const pageSize = Math.min(COMMENT_PAGE_SIZE, MAX_COMMENTS - comments.length);
+        const result = await api.listComments(blockId, { startCursor: cursor, pageSize });
         comments.push(...result.results);
         cursor = result.nextCursor ?? undefined;
         more = cursor !== undefined;
