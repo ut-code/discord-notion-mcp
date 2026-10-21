@@ -24,7 +24,7 @@ import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-stor
 import type { RevertNote } from "../../src/lib/server/notion/changes/audit-records";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { overwriteAuditRow } from "../support/audit-rows";
-import { FakeDiscordApi, makeGuild, makeMember, OWNER_ID } from "../support/fakes";
+import { FakeDiscordApi, makeGuild, makeMember, OWNER_ID } from "../../src/lib/server/fakes/discord";
 import {
   authorize,
   issueTokens,

@@ -5,7 +5,7 @@ import { PermissionResolver } from "../../src/lib/server/permissions/resolver";
 import { openDatabase, runAppMigrations } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
 import { ADMINISTRATOR, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
-import { FakeClock, FakeDiscordApi, GUILD_ID, OWNER_ID, makeGuild, makeMember } from "../support/fakes";
+import { FakeClock, FakeDiscordApi, GUILD_ID, OWNER_ID, makeGuild, makeMember } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const ROLE_MOD = "200000000000000001";

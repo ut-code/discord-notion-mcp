@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { fetchHistory } from "../../src/lib/server/discord/history";
-import { FakeDiscordApi, message } from "../support/fakes";
+import { FakeDiscordApi, message } from "../../src/lib/server/fakes/discord";
 
 const CHANNEL = "400000000000000001";
 

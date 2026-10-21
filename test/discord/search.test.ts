@@ -13,7 +13,7 @@ import { searchReadableMessages } from "../../src/lib/server/discord/search";
 import { createDiscordTools } from "../../src/lib/server/discord/tools";
 import { dateToSnowflake } from "../../src/lib/server/lib/snowflake";
 import type { AnyToolDefinition, Principal } from "../../src/lib/server/mcp/registry";
-import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel, thread } from "../support/fakes";
+import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel, thread } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const ROLE_STAFF = "200000000000000001";

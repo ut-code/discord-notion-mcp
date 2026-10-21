@@ -5,10 +5,10 @@ import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-stor
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 import { createNotionTools } from "../../src/lib/server/notion/tools";
-import { makeGuild, makeMember } from "../support/fakes";
+import { makeGuild, makeMember } from "../../src/lib/server/fakes/discord";
 import type { NotionComment } from "../../src/lib/server/notion/client/api";
 import { NotionRequestError } from "../../src/lib/server/notion/client/api";
-import { FakeNotionApi, titleValue } from "../support/notion-fakes";
+import { FakeNotionApi, titleValue } from "../../src/lib/server/fakes/notion";
 
 const USER = "300000000000000001";
 const principal: Principal = {

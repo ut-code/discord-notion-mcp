@@ -5,16 +5,9 @@ import type {
   APIThreadChannel,
   RESTGetAPIGuildMessagesSearchQuery,
 } from "discord-api-types/v10";
-import type {
-  ArchivedThreadsPage,
-  DiscordApi,
-  GuildChannel,
-  MessageQuery,
-  MessageSearchResponse,
-  PinsPage,
-} from "../../src/lib/server/discord/api";
-import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "../../src/lib/server/discord/types";
-import { compareSnowflakes } from "../../src/lib/server/lib/snowflake";
+import type { ArchivedThreadsPage, DiscordApi, GuildChannel, MessageQuery, MessageSearchResponse, PinsPage } from "../discord/api";
+import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "../discord/types";
+import { compareSnowflakes } from "../lib/snowflake";
 
 export const GUILD_ID = "100000000000000000";
 export const OWNER_ID = "100000000000000001";

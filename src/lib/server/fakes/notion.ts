@@ -14,10 +14,10 @@ import {
   type PageMarkdown,
   type Paged,
   type SearchResult,
-} from "../../src/lib/server/notion/client/api";
-import type { PageMarkdownUpdate, PageParent, PageTemplate, RichTextRequest } from "../../src/lib/server/notion/client/types";
-import { countChildObjects } from "../../src/lib/server/notion/content/enhanced-markdown";
-import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
+} from "../notion/client/api";
+import type { PageMarkdownUpdate, PageParent, PageTemplate, RichTextRequest } from "../notion/client/types";
+import { countChildObjects } from "../notion/content/enhanced-markdown";
+import type { PagePropertyValue } from "../notion/content/properties";
 
 export function rt(
   text: string,

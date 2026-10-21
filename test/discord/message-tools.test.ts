@@ -4,7 +4,7 @@ import { ChannelAccess, ChannelDirectory } from "../../src/lib/server/discord/ac
 import { READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
 import { createDiscordTools } from "../../src/lib/server/discord/tools";
 import type { AnyToolDefinition, Principal } from "../../src/lib/server/mcp/registry";
-import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel } from "../support/fakes";
+import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const CHANNEL = "400000000000000001";

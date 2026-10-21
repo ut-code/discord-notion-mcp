@@ -4,7 +4,7 @@ import { toolCall } from "../src/lib/server/db/schema";
 import { NO_PERMISSIONS_INSTRUCTIONS } from "../src/lib/server/mcp/server";
 import { toolListing } from "../src/lib/server/mcp/tool-listing";
 import { extractSignedOAuthQuery } from "../src/lib/server/dashboard/oauth-query";
-import { GUILD_ID, makeGuild, makeMember, message, textChannel } from "./support/fakes";
+import { GUILD_ID, makeGuild, makeMember, message, textChannel } from "../src/lib/server/fakes/discord";
 import {
   authorize,
   exchangeCode,

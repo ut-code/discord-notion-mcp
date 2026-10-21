@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { deleteUnusedClients, startClientCleanup, UNUSED_CLIENT_TTL_MS } from "../../src/lib/server/auth/client-cleanup";
 import type { AppDatabase } from "../../src/lib/server/db/client";
 import type { ErrorEntry, EventEntry } from "../../src/lib/server/lib/log";
-import { FakeDiscordApi, makeMember } from "../support/fakes";
+import { FakeDiscordApi, makeMember } from "../../src/lib/server/fakes/discord";
 import { issueTokens, registerClient, signIn, startHarness, type Harness } from "../support/harness";
 
 const DAY_MS = 24 * 60 * 60_000;

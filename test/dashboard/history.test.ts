@@ -5,7 +5,7 @@ import { openDatabase, runAppMigrations } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
 import type { Permission } from "../../src/lib/server/permissions/permissions";
 import { ToolCallStore } from "../../src/lib/server/usage/tool-calls";
-import { FakeDiscordApi, makeMember } from "../support/fakes";
+import { FakeDiscordApi, makeMember } from "../../src/lib/server/fakes/discord";
 
 const U1 = "300000000000000001";
 const U2 = "300000000000000002";

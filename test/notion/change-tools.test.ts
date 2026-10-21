@@ -7,8 +7,8 @@ import { NotionAuditService } from "../../src/lib/server/notion/changes/audit-se
 import { NotionAuditStore } from "../../src/lib/server/notion/changes/audit-store";
 import { NotionWriteService } from "../../src/lib/server/notion/changes/write-service";
 import { createNotionChangeTools } from "../../src/lib/server/notion/tools/changes";
-import { makeGuild, makeMember } from "../support/fakes";
-import { FakeNotionApi } from "../support/notion-fakes";
+import { makeGuild, makeMember } from "../../src/lib/server/fakes/discord";
+import { FakeNotionApi } from "../../src/lib/server/fakes/notion";
 
 const ALICE = "300000000000000001";
 const BOB = "300000000000000002";

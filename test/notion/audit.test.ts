@@ -13,7 +13,7 @@ import { NotionWriteService } from "../../src/lib/server/notion/changes/write-se
 import { sha256 } from "../../src/lib/server/notion/content/content-diff";
 import type { PagePropertyValue } from "../../src/lib/server/notion/content/properties";
 import { insertAuditRow, overwriteAuditRow } from "../support/audit-rows";
-import { FakeNotionApi, titleValue } from "../support/notion-fakes";
+import { FakeNotionApi, titleValue } from "../../src/lib/server/fakes/notion";
 
 const ACTOR: Actor = { discordUserId: "300000000000000001", displayName: "Alice", username: "alice" };
 const ADMIN = { actorDiscordUserId: "300000000000000009", actorDisplayName: "Admin" };

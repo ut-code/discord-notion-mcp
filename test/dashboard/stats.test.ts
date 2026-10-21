@@ -8,7 +8,7 @@ import { ToolCallStore } from "../../src/lib/server/usage/tool-calls";
 import { jstDay } from "../../src/lib/server/lib/jst-day";
 import { UsageStats } from "../../src/lib/server/usage/usage-stats";
 import { insertAuditRow } from "../support/audit-rows";
-import { FakeDiscordApi, makeMember } from "../support/fakes";
+import { FakeDiscordApi, makeMember } from "../../src/lib/server/fakes/discord";
 
 const U1 = "300000000000000001";
 const U2 = "300000000000000002";

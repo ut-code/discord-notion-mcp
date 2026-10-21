@@ -9,7 +9,7 @@ import { defineTool, type Principal } from "../../src/lib/server/mcp/registry";
 import { runTool, TOOL_CRASH_ERROR, TOOL_RESULT_ERROR, type McpServerDeps } from "../../src/lib/server/mcp/server";
 import type { Permission } from "../../src/lib/server/permissions/permissions";
 import { startToolCallRetention, TOOL_CALL_RETENTION_MS, ToolCallStore } from "../../src/lib/server/usage/tool-calls";
-import { FakeClock, makeGuild, makeMember } from "../support/fakes";
+import { FakeClock, makeGuild, makeMember } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const DAY_MS = 24 * 60 * 60_000;

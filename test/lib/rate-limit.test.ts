@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { TokenBucketLimiter } from "../../src/lib/server/lib/rate-limit";
-import { makeMember, OWNER_ID } from "../support/fakes";
+import { makeMember, OWNER_ID } from "../../src/lib/server/fakes/discord";
 import { issueTokens, mcpCall, registerClient, signIn, startHarness, type Harness } from "../support/harness";
 
 describe("TokenBucketLimiter", () => {

@@ -77,4 +77,16 @@ export default defineConfig(
       "@typescript-eslint/no-non-null-assertion": "error",
     },
   },
+  {
+    // In-memory Discord and Notion APIs for tests and the UI preview: they build partial API
+    // objects, implement async interfaces without awaiting anything, and hand tests the recorded
+    // call arguments untyped.
+    files: ["src/lib/server/fakes/**"],
+    rules: {
+      "@typescript-eslint/consistent-type-assertions": "off",
+      "@typescript-eslint/no-non-null-assertion": "off",
+      "@typescript-eslint/require-await": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+    },
+  },
 );

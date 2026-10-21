@@ -7,7 +7,7 @@ import {
   type PagePropertyValue,
 } from "../../src/lib/server/notion/content/properties";
 import { literalRichText, splitText } from "../../src/lib/server/notion/content/rich-text";
-import { rt } from "../support/notion-fakes";
+import { rt } from "../../src/lib/server/fakes/notion";
 
 const v = (value: Record<string, unknown>) => ({ id: "pid", ...value }) as unknown as PagePropertyValue;
 

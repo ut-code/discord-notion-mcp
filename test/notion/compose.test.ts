@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { composeServer } from "../../src/lib/server/compose";
 import { loadConfig } from "../../src/lib/server/config";
 import { openDatabase } from "../../src/lib/server/db/client";
-import { FakeDiscordApi, GUILD_ID } from "../support/fakes";
+import { FakeDiscordApi, GUILD_ID } from "../../src/lib/server/fakes/discord";
 
 const ENV = {
   PUBLIC_URL: "http://localhost:3917",

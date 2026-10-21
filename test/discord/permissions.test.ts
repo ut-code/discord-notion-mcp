@@ -11,7 +11,7 @@ import {
   computeChannelPermissions,
 } from "../../src/lib/server/discord/permissions";
 import type { PermissionOverwrite } from "../../src/lib/server/discord/types";
-import { GUILD_ID, OWNER_ID, makeGuild, makeMember } from "../support/fakes";
+import { GUILD_ID, OWNER_ID, makeGuild, makeMember } from "../../src/lib/server/fakes/discord";
 
 const READ = VIEW_CHANNEL | READ_MESSAGE_HISTORY;
 const ROLE_A = "200000000000000001";

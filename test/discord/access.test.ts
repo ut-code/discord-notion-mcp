@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { ChannelAccess, ChannelDirectory, DISCORD_NOT_ACCESSIBLE_MESSAGE } from "../../src/lib/server/discord/access";
 import { MANAGE_THREADS, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
-import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, textChannel, thread } from "../support/fakes";
+import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, textChannel, thread } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const ROLE_STAFF = "200000000000000001";

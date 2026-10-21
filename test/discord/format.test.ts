@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { FormattableMessage } from "../../src/lib/server/discord/format";
 import { formatMessage, formatTimestamp, resolveMarkup } from "../../src/lib/server/discord/format";
-import { GUILD_ID } from "../support/fakes";
+import { GUILD_ID } from "../../src/lib/server/fakes/discord";
 
 const CHANNEL = "200000000000000010";
 

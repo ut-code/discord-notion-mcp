@@ -1,8 +1,8 @@
 // Local UI preview backed by fake Discord/Notion APIs and an in-memory database.
-// Loaded only by the dev server with PREVIEW=1 (`bun run preview`); production builds drop it.
+// Loaded only by the dev server with PREVIEW=1 (`bun run preview`); production builds never load it.
 import { makeSignature } from "better-auth/crypto";
-import { FakeDiscordApi, GUILD_ID, makeGuild, OWNER_ID, textChannel } from "../../../test/support/fakes";
-import { FakeNotionApi } from "../../../test/support/notion-fakes";
+import { FakeDiscordApi, GUILD_ID, makeGuild, OWNER_ID, textChannel } from "./fakes/discord";
+import { FakeNotionApi } from "./fakes/notion";
 import { composeServer } from "./compose";
 import { loadConfig } from "./config";
 import { openDatabase } from "./db/client";

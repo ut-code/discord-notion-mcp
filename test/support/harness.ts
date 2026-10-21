@@ -5,8 +5,8 @@ import { loadConfig } from "../../src/lib/server/config";
 import { openDatabase } from "../../src/lib/server/db/client";
 import type { ErrorEntry, EventEntry, ToolCallLogEntry } from "../../src/lib/server/lib/log";
 import { extractSignedOAuthQuery } from "../../src/lib/server/dashboard/oauth-query";
-import { FakeDiscordApi, GUILD_ID } from "./fakes";
-import { FakeNotionApi } from "./notion-fakes";
+import { FakeDiscordApi, GUILD_ID } from "../../src/lib/server/fakes/discord";
+import { FakeNotionApi } from "../../src/lib/server/fakes/notion";
 
 const SECRET = "e2e-secret-e2e-secret-e2e-secret-e2e";
 export const REDIRECT_URI = "http://localhost:33418/callback";

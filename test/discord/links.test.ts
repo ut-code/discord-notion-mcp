@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseMessageLink } from "../../src/lib/server/discord/links";
-import { GUILD_ID } from "../support/fakes";
+import { GUILD_ID } from "../../src/lib/server/fakes/discord";
 
 const CHANNEL = "200000000000000010";
 const MESSAGE = "200000000000000020";
