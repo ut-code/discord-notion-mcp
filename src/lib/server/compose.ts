@@ -67,6 +67,8 @@ export interface AppServer {
   toolCalls: ToolCallStore;
   /** Unexpected request failures. */
   logError: ErrorSink;
+  /** Stops the periodic tasks (sweeps and cleanups); the server otherwise runs until the process exits. */
+  stop: () => void;
 }
 
 /** Wires every component together and runs both migration sets. */
@@ -97,7 +99,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
   const notion = options.notionApi ?? (config.notion ? new SdkNotionApi(config.notion.token) : null);
   const auditStore = new NotionAuditStore(database.db);
   const notionAudit = new NotionAuditService(auditStore, notion, reportError);
-  startInterruptedWriteSweep({ audit: notionAudit, log: reportEvent, logError: reportError });
+  const stopTasks = [startInterruptedWriteSweep({ audit: notionAudit, log: reportEvent, logError: reportError })];
   const tools: AnyToolDefinition[] = [
     ...createDiscordTools({
       api: discordForTools,
@@ -115,8 +117,10 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
 
   const revocation = new TokenRevocationService(database.db);
   const toolCalls = new ToolCallStore(database.db);
-  startToolCallRetention({ store: toolCalls, log: reportEvent, logError: reportError });
-  startClientCleanup({ db: database.db, log: reportEvent, logError: reportError });
+  stopTasks.push(
+    startToolCallRetention({ store: toolCalls, log: reportEvent, logError: reportError }),
+    startClientCleanup({ db: database.db, log: reportEvent, logError: reportError }),
+  );
   const subjects = new SubjectResolver(directory, discord, reportError);
   const dashboard: DashboardDeps = {
     auth,
@@ -172,5 +176,8 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     revocation,
     toolCalls,
     logError: reportError,
+    stop: () => {
+      for (const stopTask of stopTasks) stopTask();
+    },
   };
 }

@@ -16,15 +16,10 @@ import {
   type RESTGetAPIGuildMessagesSearchQuery,
   type RESTGetAPIGuildMessagesSearchResult,
 } from "discord-api-types/v10";
+import { MAX_RATE_LIMIT_WAIT_MS } from "../lib/upstream-rate-limit";
 import type { GuildDirectory } from "./directory";
 import { guildIconUrl, memberAvatarUrl, userAvatarUrl } from "./avatar";
 import type { GuildInfo, ListedMember, MemberInfo, UserInfo } from "./types";
-
-/**
- * For tools, a rate limit is waited out when it lasts at most this long, as for Notion; a
- * longer one fails at once so the AI is told when to retry instead of hanging.
- */
-const MAX_RATE_LIMIT_WAIT_MS = 2000;
 
 /** Whether @discordjs/rest throws a RateLimitError at once instead of queueing the request. */
 export function exceedsRateLimitWait(limit: Pick<RateLimitData, "retryAfter">): boolean {

@@ -309,13 +309,13 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
   const selectedUserId = selected?.type === "user" ? selected.id : null;
 
   const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
-  const [users, roster, search] = await Promise.all([
-    deps.subjects.resolveUsers([...userIds, guild.ownerId, ...(selectedUserId ? [selectedUserId] : [])]),
+  const [users, owner, roster, search] = await Promise.all([
+    deps.subjects.resolveUsers([...userIds, ...(selectedUserId ? [selectedUserId] : [])]),
+    deps.subjects.resolveUser(guild.ownerId),
     listMembers(deps),
     query ? searchMembers(deps, query) : Promise.resolve({ members: [], error: null }),
   ]);
 
-  const owner = users.get(guild.ownerId) ?? (await deps.subjects.resolveUser(guild.ownerId));
   const allRows = buildGrantRows(guild, grants, users, owner);
   const visible = filter ? allRows.filter((row) => row.permission === filter) : allRows;
   const rows = visible.map((row) => tableRow(guild, row));

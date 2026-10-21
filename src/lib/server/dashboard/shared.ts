@@ -1,5 +1,6 @@
 import { formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
+import { isSnowflake } from "../lib/snowflake";
 
 export interface Option {
   value: string;
@@ -13,6 +14,16 @@ export interface ActionResult {
   message: string | null;
   /** HTTP status of a failed action; 400 when unset. */
   status?: 403;
+}
+
+/**
+ * The `user` filter of a history list, which only admins may set: a Discord id, or the error to
+ * show when the value is not one.
+ */
+export function userFilterParam(params: URLSearchParams, isAdmin: boolean): { user: string | undefined; error: string | null } {
+  const value = isAdmin ? params.get("user")?.trim() : undefined;
+  if (!value) return { user: undefined, error: null };
+  return isSnowflake(value) ? { user: value, error: null } : { user: undefined, error: m.filter_invalid_user() };
 }
 
 export function pageParam(value: string | null | undefined): number {

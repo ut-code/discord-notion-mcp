@@ -4,7 +4,6 @@ import { m } from "../../paraglide/messages.js";
 import { dashboardAuditPath } from "../../paths";
 import { NOTION_AUDIT_OPERATIONS, type NotionAuditOperation, type NotionAuditRow } from "../db/schema";
 import { errorMessage } from "../lib/errors";
-import { isSnowflake } from "../lib/snowflake";
 import {
   AppendContentRequestSchema,
   ContentUpdateSchema,
@@ -28,7 +27,7 @@ import {
   renderRequestedPropertyValue,
 } from "./format";
 import { auditNoteText, revertReasonText, revertSuccessText } from "./outcome-text";
-import { formString, pageLinks, pageParam, type ActionResult, type Option } from "./shared";
+import { formString, pageLinks, pageParam, userFilterParam, type ActionResult, type Option } from "./shared";
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -119,13 +118,8 @@ export interface AuditListData {
 type AuditViewer = Pick<Viewer, "isAdmin" | "discordUserId" | "permissions">;
 
 export async function auditList(deps: DashboardDeps, params: URLSearchParams, viewer: AuditViewer): Promise<AuditListData> {
-  const filters: AuditFilters = {};
-  let error: string | null = null;
-  const user = viewer.isAdmin ? params.get("user")?.trim() : undefined;
-  if (user) {
-    if (isSnowflake(user)) filters.user = user;
-    else error = m.filter_invalid_user();
-  }
+  const { user, error } = userFilterParam(params, viewer.isAdmin);
+  const filters: AuditFilters = user ? { user } : {};
   const operation = params.get("operation");
   if (isAuditOperation(operation)) filters.operation = operation;
   const status = params.get("status") ?? undefined;

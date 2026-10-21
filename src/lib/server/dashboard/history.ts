@@ -2,14 +2,13 @@ import { compareNames, formatNumber } from "../../locale";
 import { m } from "../../paraglide/messages.js";
 import { AUDIT_PATH, CALLS_PATH, toolPath } from "../../paths";
 import type { NotionAuditOperation, ToolCallRow } from "../db/schema";
-import { isSnowflake } from "../lib/snowflake";
 import type { Permission } from "../permissions/permissions";
 import { CALL_RESULTS, TOOL_CALL_RETENTION_DAYS, type CallResult } from "../usage/tool-calls";
 import type { Viewer } from "./access";
 import type { DashboardDeps } from "./deps";
 import type { BadgeView } from "./badges";
 import { formatDuration, formatShortJst, PERMISSION_LABELS, type AuditStatusFilter } from "./format";
-import { pageLinks, pageParam, type Option } from "./shared";
+import { pageLinks, pageParam, userFilterParam, type Option } from "./shared";
 
 /*
  * History, in the permission groups used everywhere else: the calls of the read tools
@@ -146,13 +145,7 @@ export async function callsPage(
   const permission = isCallPermission(requested) && allowed.includes(requested) ? requested : allowed[0];
   if (!permission) return null;
 
-  let error: string | null = null;
-  let user: string | undefined;
-  const userParam = viewer.isAdmin ? params.get("user")?.trim() : undefined;
-  if (userParam) {
-    if (isSnowflake(userParam)) user = userParam;
-    else error = m.filter_invalid_user();
-  }
+  const { user, error } = userFilterParam(params, viewer.isAdmin);
   const statusParam = params.get("status");
   const status = isCallResult(statusParam) ? statusParam : undefined;
 

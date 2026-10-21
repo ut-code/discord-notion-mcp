@@ -65,7 +65,20 @@ export async function startHarness(options: HarnessOptions = {}): Promise<Harnes
     toolRateLimit: options.toolRateLimit,
   });
   handler = server.http;
-  return { base, resource: config.mcpResource, server, discord, notion, toolLogs, events, errors, stop: () => listener.stop(true) };
+  return {
+    base,
+    resource: config.mcpResource,
+    server,
+    discord,
+    notion,
+    toolLogs,
+    events,
+    errors,
+    stop: () => {
+      server.stop();
+      return listener.stop(true);
+    },
+  };
 }
 
 /** Creates a browser session for an existing Better Auth user and returns its cookie. */

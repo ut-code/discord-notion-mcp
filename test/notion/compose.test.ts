@@ -26,6 +26,7 @@ describe("Notion configuration", () => {
     expect(server.tools.some((tool) => tool.name.startsWith("notion_"))).toBe(false);
     expect(await server.notionAudit.listAudit()).toEqual({ rows: [], total: 0 });
     expect(await server.notionAudit.revert(1, { actorDiscordUserId: "1", actorDisplayName: "a" })).toMatchObject({ ok: false });
+    server.stop();
   });
 
   test("with a token the Notion tools are registered", async () => {
@@ -39,5 +40,6 @@ describe("Notion configuration", () => {
     expect(names).toContain("notion_append_content");
     expect(names).toContain("notion_edit_content");
     expect(names).not.toContain("notion_append_blocks");
+    server.stop();
   });
 });

@@ -20,6 +20,7 @@ import {
 } from "@notionhq/client";
 import { isRecord } from "../../../guards";
 import { createLimiter, type Limiter } from "../../lib/limiter";
+import { MAX_RATE_LIMIT_WAIT_MS } from "../../lib/upstream-rate-limit";
 import type { PageMarkdownUpdate, PageParent, PageTemplate, RichTextRequest } from "./types";
 
 /**
@@ -34,11 +35,6 @@ const MAX_CONCURRENT_REQUESTS = 3;
 /** Reads that Notion failed on its side are retried after 1 s, 2 s and 4 s. */
 const MAX_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 1000;
-/**
- * A rate limit is waited out once when Notion asks for at most this long, as the official
- * Notion MCP does; a longer one fails at once so the caller can say when to retry.
- */
-const MAX_RATE_LIMIT_WAIT_MS = 2000;
 
 export type NotionPage = PageObjectResponse;
 export type NotionDatabase = DatabaseObjectResponse;
