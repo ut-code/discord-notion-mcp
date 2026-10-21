@@ -18,8 +18,8 @@ const USERS_PATH = `${DASHBOARD_PATH}/users`;
 /**
  * A search matches resolved names (Discord display name, @username), so it loads and
  * resolves the newest logins up to this many and filters them in memory. Older logins
- * are never matched, and the reported total counts only the scanned ones. Each scanned
- * login costs a cached member lookup.
+ * are never matched, and the reported total counts only the scanned ones. Names and roles
+ * come from the member list, so scanning costs no lookup per login.
  */
 export const USER_SEARCH_SCAN_LIMIT = 1000;
 
@@ -136,20 +136,33 @@ function userTableRow(
 }
 
 export async function usersPage(
-  deps: Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError" | "tools">,
+  deps: Pick<DashboardDeps, "directory" | "members" | "grants" | "users" | "resolver" | "usage" | "logError" | "tools">,
   params: URLSearchParams,
   viewer: Viewer,
 ): Promise<UsersPageData> {
   const query = params.get("q")?.trim() ?? "";
   const page = pageParam(params.get("page"));
   const offset = (page - 1) * USERS_PAGE_SIZE;
-  const [guild, grants] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants()]);
+  const [guild, grants, roster] = await Promise.all([
+    deps.directory.fetchGuild(),
+    deps.grants.listGrants(),
+    deps.members.roster().catch((error: unknown) => {
+      deps.logError({ event: "admin_lookup_failed", lookup: "member_list", error: errorMessage(error) });
+      return null;
+    }),
+  ]);
+  // Members come with their roles from the list; anyone not on it (who left, joined since, or
+  // is past what a large guild lists) is looked up one by one.
+  const accessOf = (discordUserId: string) => {
+    const listed = roster?.byId.get(discordUserId)?.member;
+    return listed ? deps.resolver.accessOf(discordUserId, guild, listed) : deps.resolver.resolve(discordUserId);
+  };
   const limit = createLimiter(4);
   const toRow = (user: LoginUser) =>
     limit(async (): Promise<UserRowView> => {
       if (!user.discordUserId) return buildUserRow(user, null, guild, grants);
       try {
-        return buildUserRow(user, await deps.resolver.resolve(user.discordUserId), guild, grants);
+        return buildUserRow(user, await accessOf(user.discordUserId), guild, grants);
       } catch (error) {
         deps.logError({
           event: "access_resolution_failed",

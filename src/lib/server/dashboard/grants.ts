@@ -234,7 +234,7 @@ async function loadMembers(
 
 const listMembers = (deps: DashboardDeps) => loadMembers(deps, async () => (await deps.members.roster()).members, "member_list");
 const searchMembers = (deps: DashboardDeps, query: string) =>
-  loadMembers(deps, () => deps.members.search(query, MEMBER_SEARCH_LIMIT), "member_search");
+  loadMembers(deps, () => deps.subjects.search(query, MEMBER_SEARCH_LIMIT), "member_search");
 
 function grantState(
   guild: GuildInfo,

@@ -27,6 +27,11 @@ export class PermissionResolver {
 
   async resolve(discordUserId: string): Promise<EffectiveAccess> {
     const [guild, member] = await Promise.all([this.directory.fetchGuild(), this.directory.fetchMember(discordUserId)]);
+    return this.accessOf(discordUserId, guild, member);
+  }
+
+  /** `resolve` for a member already looked up (null: not a member), e.g. from the member list. */
+  async accessOf(discordUserId: string, guild: GuildInfo, member: MemberInfo | null): Promise<EffectiveAccess> {
     if (!member) {
       return { isMember: false, discordUserId, guild, permissions: new Set(), isAdmin: false };
     }

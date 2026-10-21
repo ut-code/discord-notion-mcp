@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { rangeParam, statsPage } from "../../src/lib/server/dashboard/stats";
 import type { Permission } from "../../src/lib/server/permissions/permissions";
+import { MemberRoster } from "../../src/lib/server/dashboard/member-roster";
 import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
 import { openDatabase, runAppMigrations, type DatabaseHandle } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
@@ -28,7 +29,7 @@ function depsFor(database: DatabaseHandle) {
   discord.members.set(U1, { ...makeMember(U1), nick: "Mina" });
   return {
     usage: new UsageStats(database.db),
-    subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, () => {}),
+    subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, new MemberRoster(discord), () => {}),
     tools: (
       [
         ["discord_read_messages", "discord:read"],

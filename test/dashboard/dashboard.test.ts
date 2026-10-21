@@ -5,6 +5,9 @@ import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
 import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
 import { requireAdminViewer } from "../../src/lib/server/dashboard/guard";
 import { MemberRoster } from "../../src/lib/server/dashboard/member-roster";
+import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
+import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
+import { PermissionResolver } from "../../src/lib/server/permissions/resolver";
 import {
   consentPage,
   metadataHost,
@@ -442,7 +445,9 @@ describe("grants", () => {
     expect((await memberSearchResult(deps, ` ${"x".repeat(100)} `, owner)).status).toBe(200);
 
     let searched = false;
-    const spied = { ...deps, members: { ...deps.members, search: async () => ((searched = true), []) } };
+    const subjects: SubjectResolver = Object.create(deps.subjects);
+    subjects.search = async () => ((searched = true), []);
+    const spied = { ...deps, subjects };
     expect(await memberSearchResult(spied, "mi", await memberViewer())).toEqual({
       status: 403,
       body: { error: "この操作は管理者だけが行えます。" },
@@ -470,19 +475,21 @@ describe("grants", () => {
       return listMembers(limit, after);
     };
     let now = 0;
-    const roster = new MemberRoster(discord, deps.subjects, () => now);
+    const roster = new MemberRoster(discord, () => now);
+    const subjects = new SubjectResolver(new CachedGuildDirectory(discord), discord, roster, () => {});
 
     const [first] = await Promise.all([roster.roster(), roster.roster()]);
     expect(first).toMatchObject({ complete: true });
     expect(first.members).toHaveLength(1001);
     expect(first.members.some((member) => member.username === "a-bot")).toBe(false);
     expect(pages).toEqual([undefined, "400000000000000999"]);
-    await roster.search("member0", 5);
+    await subjects.search("member0", 5);
+    await subjects.resolveUsers(["400000000000000001", "400000000000000002"]);
     expect(pages).toHaveLength(2);
 
     now = 60_000;
     failing = true;
-    const failingDeps = { ...deps, members: roster, logError: () => {} };
+    const failingDeps = { ...deps, members: roster, subjects, logError: () => {} };
     expect(await memberSearchResult(failingDeps, "member", owner)).toEqual({
       status: 502,
       body: { error: "メンバー検索に失敗しました。しばらくしてから再試行してください。" },
@@ -495,13 +502,42 @@ describe("grants", () => {
     expect((await memberSearchResult(failingDeps, "member01000", owner)).body).toMatchObject({ members: [{ id: "400000000000001000" }] });
   });
 
+  test("names and avatars of several users come from the member list; without it they are looked up one by one", async () => {
+    const discord = new FakeDiscordApi();
+    for (const member of listedMembers(3)) discord.members.set(member.userId, member);
+    const LEFT = "499999999999999997";
+    discord.users.set(LEFT, { id: LEFT, username: "left", globalName: "Left", avatarUrl: null });
+    const subjects = new SubjectResolver(new CachedGuildDirectory(discord), discord, new MemberRoster(discord), () => {});
+    const BOT = "499999999999999996";
+    discord.members.set(BOT, { ...makeMember(BOT), username: "a-bot" });
+    discord.bots.add(BOT);
+    const users = await subjects.resolveUsers(["400000000000000001", BOT, LEFT]);
+    expect(users.get("400000000000000001")).toMatchObject({ username: "member00001" });
+    // Bots are not offered in the grant form, but are still members.
+    expect(users.get(BOT)?.member).not.toBeNull();
+    // Only someone not on the list (here: who left) is looked up by themselves.
+    expect(users.get(LEFT)).toMatchObject({ displayName: "Left", member: null });
+    await subjects.memberAvatars(["400000000000000002", LEFT]);
+    expect(discord.calls.member).toBe(1);
+
+    const unlisted = new SubjectResolver(
+      new CachedGuildDirectory(discord),
+      discord,
+      { roster: () => Promise.reject(new Error("down")) },
+      () => {},
+    );
+    expect((await unlisted.resolveUsers(["400000000000000001"])).get("400000000000000001")).toMatchObject({ username: "member00001" });
+    expect(discord.calls.member).toBe(2);
+  });
+
   test("a guild too large to list is searched by name prefix on Discord as well", async () => {
     const discord = new FakeDiscordApi();
     for (const member of listedMembers(10_001)) discord.members.set(member.userId, member);
-    const roster = new MemberRoster(discord, deps.subjects);
+    const roster = new MemberRoster(discord);
+    const subjects = new SubjectResolver(new CachedGuildDirectory(discord), discord, roster, () => {});
     expect(await roster.roster()).toMatchObject({ complete: false });
     expect((await roster.roster()).members).toHaveLength(10_000);
-    expect((await roster.search("member10000", 5)).map((member) => member.id)).toEqual(["400000000000010000"]);
+    expect((await subjects.search("member10000", 5)).map((member) => member.id)).toEqual(["400000000000010000"]);
   });
 });
 
@@ -804,11 +840,12 @@ describe("user search scan cap", () => {
           return logins.slice(query.offset, query.offset + query.limit);
         },
       },
+      members: { roster: async () => ({ members: [], byId: new Map(), complete: true }) },
       resolver: { resolve: async () => Promise.reject(new Error("unlinked logins are not resolved")) },
       usage: { lastUsed: () => new Map() },
       logError: () => {},
       tools: [],
-    } as unknown as Pick<DashboardDeps, "directory" | "grants" | "users" | "resolver" | "usage" | "logError" | "tools">;
+    } as unknown as Parameters<typeof usersPage>[0];
 
     const found = await usersPage(fakeDeps, params("q=needle"), owner);
     expect(queries).toEqual([{ limit: USER_SEARCH_SCAN_LIMIT, offset: 0 }]);
@@ -819,7 +856,60 @@ describe("user search scan cap", () => {
     expect(all.total).toBe(USER_SEARCH_SCAN_LIMIT - 1);
     expect(all.nextHref).toBe("/dashboard/users?q=user&page=2");
   });
+
+  test("names and roles come from the member list; logins are looked up one by one only without it", async () => {
+    const discord = new FakeDiscordApi();
+    const ids = Array.from({ length: 30 }, (_, index) => String(400000000000000000n + BigInt(index)));
+    for (const id of ids) discord.members.set(id, { ...makeMember(id), username: `listed-${id.slice(-2)}` });
+    const LEFT = "499999999999999998";
+    discord.users.set(LEFT, { id: LEFT, username: "left", globalName: null, avatarUrl: null });
+    let lists = 0;
+    let failing = false;
+    const listMembers = discord.listMembers.bind(discord);
+    discord.listMembers = async (limit, after) => {
+      lists++;
+      if (failing) throw new Error("discord down");
+      return listMembers(limit, after);
+    };
+    const directory = new CachedGuildDirectory(discord);
+    const logins: LoginUser[] = [...ids, LEFT].map((id, index) => ({
+      userId: `login-${index}`,
+      name: `login ${index}`,
+      discordUserId: id,
+      lastLoginAt: null,
+      revokedAt: null,
+    }));
+    const pageDeps = {
+      directory,
+      members: new MemberRoster(discord),
+      grants: { listGrants: async () => [] },
+      users: { count: async () => logins.length, list: async () => logins },
+      resolver: new PermissionResolver(directory, { permissionsFor: async () => new Set() }),
+      usage: { lastUsed: () => new Map() },
+      logError: () => {},
+      tools: [],
+    } as unknown as Parameters<typeof usersPage>[0];
+
+    const found = await usersPage(pageDeps, params("q=listed-07"), owner);
+    expect(found.rows.map((row) => row.username)).toEqual(["listed-07"]);
+    // Only the login not on the list (who left) is looked up by itself.
+    expect(await userRowIn(usersPage(pageDeps, params(), owner), "login-30")).toMatchObject({ roles: { text: "サーバー未参加" } });
+    expect({ lists, members: discord.calls.member }).toEqual({ lists: 1, members: 1 });
+
+    // Without the list (here: a fresh one that fails), every linked login is looked up by itself.
+    failing = true;
+    const unlisted = { ...pageDeps, members: new MemberRoster(discord), directory: new CachedGuildDirectory(discord) };
+    const resolver = new PermissionResolver(unlisted.directory, { permissionsFor: async () => new Set() });
+    const before = discord.calls.member;
+    const page = await usersPage({ ...unlisted, resolver }, params("q=listed-07"), owner);
+    expect(page.rows.map((row) => row.username)).toEqual(["listed-07"]);
+    expect(discord.calls.member - before).toBe(logins.length);
+  });
 });
+
+async function userRowIn(data: Promise<{ rows: UserTableRow[] }>, userId: string): Promise<UserTableRow | undefined> {
+  return (await data).rows.find((row) => row.userId === userId);
+}
 
 describe("token revocation", () => {
   test("revoking rejects earlier tokens immediately; a new login works", async () => {

@@ -19,12 +19,12 @@ export interface DashboardDeps {
   /** Shown on the connection page for registering MCP clients. */
   mcpUrl: string;
   identity: Pick<DiscordIdentityStore, "discordUserIdForUser">;
-  resolver: Pick<PermissionResolver, "resolve">;
+  resolver: Pick<PermissionResolver, "resolve" | "accessOf">;
   /** Cached guild/member lookups. */
   directory: GuildDirectory;
   subjects: SubjectResolver;
-  /** The guild's members for the grant form (briefly cached). */
-  members: Pick<MemberRoster, "roster" | "search">;
+  /** The guild's members (briefly cached): the grant form, and the users page's names and roles. */
+  members: Pick<MemberRoster, "roster">;
   grants: GrantStore;
   users: LoginUserStore;
   audit: NotionAuditService;

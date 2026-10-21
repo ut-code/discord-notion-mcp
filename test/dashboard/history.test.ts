@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { callsPage, historyHref, historyTabs } from "../../src/lib/server/dashboard/history";
+import { MemberRoster } from "../../src/lib/server/dashboard/member-roster";
 import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
 import { openDatabase, runAppMigrations } from "../../src/lib/server/db/client";
 import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
@@ -49,7 +50,7 @@ beforeAll(() => {
       ["notion_create_page", "notion:write"],
     ] satisfies Array<[string, Permission]>
   ).map(([name, permission]) => ({ name, title: name, description: "", inputSchema: {}, permission }));
-  deps = { calls, tools, subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, () => {}) };
+  deps = { calls, tools, subjects: new SubjectResolver(new CachedGuildDirectory(discord), discord, new MemberRoster(discord), () => {}) };
 });
 
 const member = (permissions: Permission[]) => ({ isAdmin: false, discordUserId: U1, permissions });
