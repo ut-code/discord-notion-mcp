@@ -81,6 +81,17 @@ async function adminFor(discordUserId: string): Promise<Viewer> {
   return viewer;
 }
 
+/** MEMBER as a non-admin viewer: the dashboard needs a tool permission, granted just to open it. */
+async function memberViewer(): Promise<Viewer> {
+  const grant = { permission: "discord:read", subjectType: "user", subjectId: MEMBER } as const;
+  await h.server.grants.createGrant(grant);
+  try {
+    return await viewerFor(MEMBER);
+  } finally {
+    await h.server.grants.removeGrant(grant);
+  }
+}
+
 async function userRow(userId: string, query = "", viewer: Viewer = owner): Promise<UserTableRow> {
   const row = (await usersPage(deps, params(query), viewer)).rows.find((candidate) => candidate.userId === userId);
   if (!row) throw new Error(`no row for ${userId}`);
@@ -135,11 +146,16 @@ describe("dashboard access control", () => {
     expect(signInRedirect(new URL("http://x/dashboard/grants?/create"), "POST")).toBe("/sign-in?next=%2Fdashboard");
   });
 
-  test("non-admin members are read-only viewers; non-members are denied with 403", async () => {
-    const member = await viewerFor(MEMBER);
+  test("non-admin members with a tool permission are read-only viewers; others are denied with 403", async () => {
+    const member = await memberViewer();
     expect(member).toMatchObject({ discordUserId: MEMBER, roleLabel: "メンバー", isAdmin: false, canViewAudit: false });
     const outsider = await gate((await signIn(h, OUTSIDER)).cookie);
     expect(outsider).toEqual({ kind: "denied", status: 403, ...NOT_MEMBER });
+    expect(await gate((await signIn(h, NEWCOMER)).cookie)).toMatchObject({
+      kind: "denied",
+      status: 403,
+      message: expect.stringContaining("いずれかの権限が必要です"),
+    });
   });
 
   test("the write history needs notion:write (or admin); notion:read alone is not enough", async () => {
@@ -427,7 +443,7 @@ describe("grants", () => {
 
     let searched = false;
     const spied = { ...deps, members: { ...deps.members, search: async () => ((searched = true), []) } };
-    expect(await memberSearchResult(spied, "mi", await viewerFor(MEMBER))).toEqual({
+    expect(await memberSearchResult(spied, "mi", await memberViewer())).toEqual({
       status: 403,
       body: { error: "この操作は管理者だけが行えます。" },
     });
@@ -496,12 +512,12 @@ describe("read-only members", () => {
       url: new URL("http://x/dashboard/grants"),
       request: new Request("http://x/dashboard/grants"),
     });
-    await expect(requireAdminViewer(guardEvent(await viewerFor(MEMBER)))).rejects.toMatchObject({ status: 403 });
+    await expect(requireAdminViewer(guardEvent(await memberViewer()))).rejects.toMatchObject({ status: 403 });
     expect(await requireAdminViewer(guardEvent(owner))).toBe(owner);
   });
 
   test("the users page hides grant links and revocation; members get a history link on their own row only", async () => {
-    const member = { ...(await viewerFor(MEMBER)), permissions: [] };
+    const member = { ...(await memberViewer()), permissions: [] };
     const memberLogin = await signIn(h, MEMBER);
     const data = await usersPage(deps, params(), member);
     expect(data.canRevoke).toBe(false);
@@ -518,13 +534,13 @@ describe("read-only members", () => {
   test("audit details offer no revert to non-admins", async () => {
     const parent = h.notion.addPage({ title: "Read-only root" });
     const created = await writes.createPage(MEMBER_ACTOR, { parentId: parent.id, title: "Viewed", request: {} });
-    const reader = { ...(await viewerFor(MEMBER)), canViewAudit: true };
+    const reader = { ...(await memberViewer()), canViewAudit: true };
     expect((await auditDetail(deps, String(created.auditId), reader))?.revert).toBeNull();
     expect((await auditDetail(deps, String(created.auditId), owner))?.revert).toEqual({ state: "ready" });
   });
 
   test("every mutation is refused with 403 and changes nothing", async () => {
-    const member = { ...(await viewerFor(MEMBER)), canViewAudit: true };
+    const member = { ...(await memberViewer()), canViewAudit: true };
     const before = await h.server.grants.listGrants();
     expect(ADMIN_ONLY).toEqual({ kind: "error", message: "この操作は管理者だけが行えます。", status: 403 });
 

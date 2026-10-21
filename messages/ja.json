@@ -21,6 +21,7 @@
   "access_not_member": "Discord サーバーのメンバーであることを確認できませんでした。参加してから、MCP クライアントで接続し直してください。",
   "access_unavailable_title": "一時的に確認できません",
   "access_unavailable": "Discord サーバーのメンバーシップを確認できませんでした。しばらくしてから再読み込みしてください。",
+  "access_no_permission": "ダッシュボードを開くには、Discord 閲覧・Notion 閲覧・Notion 編集のいずれかの権限が必要です。サーバーの管理者に付与を依頼してください。",
   "access_admin_only_action": "この操作は管理者だけが行えます。",
   "access_admin_only_page": "このページは管理者だけが開けます。",
   "access_audit_requires_notion_write": "書き込み履歴を見るには Notion 編集の権限が必要です。",

@@ -29,7 +29,7 @@ export interface Viewer {
 export type ViewerGate =
   { kind: "signed-out" } | { kind: "denied"; status: 403 | 503; title: string; message: string } | { kind: "viewer"; viewer: Viewer };
 
-/** Every dashboard page requires a guild member's browser session. */
+/** Every dashboard page requires the browser session of a guild member with a tool permission. */
 export async function checkViewer(deps: DashboardDeps, headers: Headers): Promise<ViewerGate> {
   const session = await deps.auth.api.getSession({ headers });
   if (!session) return { kind: "signed-out" };
@@ -45,6 +45,10 @@ export async function checkViewer(deps: DashboardDeps, headers: Headers): Promis
     return { kind: "denied", status: 503, title: m.access_unavailable_title(), message: m.access_unavailable() };
   }
   if (!access.isMember) return { kind: "denied", status: 403, ...NOT_MEMBER };
+  // The dashboard shows who uses the tools and with which permissions: members without any see none of it.
+  if (access.permissions.size === 0) {
+    return { kind: "denied", status: 403, title: m.access_denied_title(), message: m.access_no_permission() };
+  }
   return {
     kind: "viewer",
     viewer: {
