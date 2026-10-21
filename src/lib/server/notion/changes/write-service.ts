@@ -7,6 +7,7 @@ import {
   type EditedPageMarkdown,
   type NotionApi,
   type NotionPage,
+  type PageMarkdown,
 } from "../client/api";
 import { resolveParent, toToolError } from "../client/resolve";
 import { requireNotionId } from "../client/ids";
@@ -131,13 +132,13 @@ export class NotionWriteService {
    * The body of a page made from a template once Notion has filled it in, null when it has not in
    * time. Notion signals no end, so the body counts as filled in once two reads in a row agree.
    */
-  private async awaitTemplate(pageId: string): Promise<string | null> {
+  private async awaitTemplate(pageId: string): Promise<PageMarkdown | null> {
     let previous: string | null = null;
     for (let check = 0; check < TEMPLATE_CHECKS; check++) {
       await this.sleep(TEMPLATE_CHECK_INTERVAL_MS);
       const body = await this.api.retrievePageMarkdown(pageId).catch(() => null);
       const markdown = body?.markdown.trim() ? body.markdown : null;
-      if (markdown !== null && markdown === previous) return markdown;
+      if (body && markdown !== null && markdown === previous) return body;
       previous = markdown;
     }
     return null;
@@ -297,8 +298,9 @@ export class NotionWriteService {
     // What the new page holds, to show what was created; null when nothing is known to be in it.
     let body: string | null = null;
     if (awaitBody) {
-      body = await this.awaitTemplate(page.id);
-      if (body === null) warning = { kind: "template_pending" };
+      const filled = await this.awaitTemplate(page.id);
+      if (filled === null) warning = { kind: "template_pending" };
+      else body = filled.truncated ? null : filled.markdown;
     }
     if (content) {
       try {

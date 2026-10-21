@@ -130,6 +130,30 @@ describe("NotionWriteService", () => {
     expect(await audit.revert(outcome.auditId, ADMIN)).toMatchObject({ ok: true });
   });
 
+  test("a template body read back truncated is not kept as what the page holds", async () => {
+    const existing = new Set(api.pages.keys());
+    // The new page renders truncated from the first read on.
+    const waiting = new NotionWriteService(
+      api,
+      store,
+      () => {},
+      async () => {
+        for (const id of api.pages.keys()) if (!existing.has(id)) api.truncated.set(id, ["omitted"]);
+      },
+    );
+    const ds = api.addDataSource({
+      title: "Tasks",
+      databaseId: "db",
+      properties: { Name: { id: "title", name: "Name", type: "title", title: {} } },
+    });
+    const template = api.addPage({ title: "Weekly", markdown: "## Agenda" });
+    existing.add(ds.id).add(template.id);
+    api.templates.set(ds.id, [{ id: template.id, name: "Weekly", isDefault: true }]);
+    const outcome = await waiting.createPage(ACTOR, { parentId: ds.id, title: "Week", templateId: template.id, request: {} });
+    expect(outcome.warning).toBeNull();
+    expect(await store.getContent(outcome.auditId)).toBeNull();
+  });
+
   test("a template without a body is not waited for, and one that never arrives is recorded as pending", async () => {
     const sleeps: number[] = [];
     const waiting = new NotionWriteService(
