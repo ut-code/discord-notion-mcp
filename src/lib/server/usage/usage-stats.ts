@@ -3,9 +3,9 @@ import type { AppDatabase } from "../db/client";
 import { notionAudit, toolCall } from "../db/schema";
 import { jstDaySql } from "../lib/jst-day";
 
-/** How many rows of the group meet the condition. */
-const countWhere = (condition: SQL) => sql<number>`coalesce(sum(case when ${condition} then 1 else 0 end), 0)`;
-const failures = countWhere(sql`${toolCall.ok} = 0`);
+/** How many rows of the group meet all the conditions. */
+const countWhere = (...conditions: [SQL, ...SQL[]]) => sql<number>`coalesce(sum(case when ${and(...conditions)} then 1 else 0 end), 0)`;
+const failures = countWhere(eq(toolCall.ok, false));
 /**
  * Calls that ran. Rate-limited ones were refused before reaching the tool: they are counted
  * apart (rateLimited) and left out of calls, failures, durations and last use.
@@ -76,10 +76,10 @@ export class UsageStats {
   notionTotals(since: Date): { writes: number; reverts: number; failures: number } {
     const [row] = this.db
       .select({
-        writes: countWhere(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} != 'revert'`),
-        reverts: countWhere(sql`${notionAudit.status} = 'ok' and ${notionAudit.operation} = 'revert'`),
+        writes: countWhere(eq(notionAudit.status, "ok"), ne(notionAudit.operation, "revert")),
+        reverts: countWhere(eq(notionAudit.status, "ok"), eq(notionAudit.operation, "revert")),
         // Interrupted writes may or may not have been applied: they need a look like failures do.
-        failures: countWhere(sql`${notionAudit.status} in ('failed', 'interrupted')`),
+        failures: countWhere(inArray(notionAudit.status, ["failed", "interrupted"])),
       })
       .from(notionAudit)
       .where(gte(notionAudit.createdAt, since))

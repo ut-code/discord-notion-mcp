@@ -1,7 +1,8 @@
 import { gunzipSync, gzipSync } from "node:zlib";
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, max, ne, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, max, ne, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../../db/client";
 import {
+  isActiveRevert,
   notionAudit,
   notionAuditContent,
   type NewNotionAuditRow,
@@ -56,9 +57,6 @@ export type RevertMark = Pick<NewNotionAuditRow, "revertedBy" | "revertNote">;
 
 /** Still open: pending, or interrupted while the write may have gone on. */
 const stillOpen = (id: number) => and(eq(notionAudit.id, id), inArray(notionAudit.status, ["pending", "interrupted"]));
-
-/** The partial unique index on revert_of_audit_id: reverts that are pending or done. */
-const activeRevert = sql`${notionAudit.status} in ('pending', 'ok')`;
 
 /** The unique index on active reverts rejected an insert; other constraint errors are real failures. */
 function isActiveRevertConflict(error: unknown): boolean {
@@ -145,7 +143,7 @@ export class NotionAuditStore {
       const other = tx
         .select({ id: notionAudit.id })
         .from(notionAudit)
-        .where(and(eq(notionAudit.revertOfAuditId, originalId), ne(notionAudit.id, revertId), activeRevert))
+        .where(and(eq(notionAudit.revertOfAuditId, originalId), ne(notionAudit.id, revertId), isActiveRevert(notionAudit.status)))
         .get();
       if (other) return false;
       const ended = tx.update(notionAudit).set(outcome).where(stillOpen(revertId)).returning({ id: notionAudit.id }).all();

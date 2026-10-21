@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { blob, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob, index, integer, sqliteTable, text, uniqueIndex, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { PERMISSIONS, SUBJECT_TYPES } from "../permissions/permissions";
 
 export const grants = sqliteTable(
@@ -36,6 +36,16 @@ export type NotionAuditOperation = (typeof NOTION_AUDIT_OPERATIONS)[number];
  */
 export const NOTION_AUDIT_STATUSES = ["pending", "ok", "failed", "interrupted"] as const;
 export type NotionAuditStatus = (typeof NOTION_AUDIT_STATUSES)[number];
+
+const ACTIVE_REVERT_STATUSES = ["pending", "ok"] as const satisfies readonly NotionAuditStatus[];
+
+/**
+ * A revert that is pending or done: the condition of the one-revert index. The statuses are
+ * written into the SQL, not bound: drizzle-kit writes bound parameters into an index as `?`,
+ * and SQLite uses a partial index only for a query that repeats its condition as literals.
+ */
+export const isActiveRevert = (status: SQLiteColumn) =>
+  sql`${status} in ${sql.raw(`(${ACTIVE_REVERT_STATUSES.map((value) => `'${value}'`).join(", ")})`)}`;
 
 export const notionAudit = sqliteTable(
   "notion_audit",
@@ -75,9 +85,7 @@ export const notionAudit = sqliteTable(
     index("notion_audit_created_at_idx").on(table.createdAt),
     index("notion_audit_discord_user_idx").on(table.discordUserId),
     // At most one revert of a row is pending or done; failed and interrupted attempts do not count.
-    uniqueIndex("notion_audit_one_revert_idx")
-      .on(table.revertOfAuditId)
-      .where(sql`${table.status} in ('pending', 'ok')`),
+    uniqueIndex("notion_audit_one_revert_idx").on(table.revertOfAuditId).where(isActiveRevert(table.status)),
   ],
 );
 
