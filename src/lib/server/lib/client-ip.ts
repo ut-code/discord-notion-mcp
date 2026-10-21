@@ -1,6 +1,8 @@
 /**
  * Internal header carrying the resolved client IP to Better Auth (rate limiting,
- * session tracking). Any client-supplied value is always replaced or removed.
+ * session tracking). Requests handed to Better Auth's handler (http.ts) always carry
+ * the server's value; the pages' direct API calls (getSession, signOut, getOAuthClientPublic)
+ * keep the browser's headers, which is harmless as those neither rate-limit nor create sessions.
  */
 export const CLIENT_IP_HEADER = "x-resolved-client-ip";
 

@@ -40,18 +40,18 @@ Discord ログインで使う、Discord / Notion 用のリモート MCP サー�
 
 ## 環境変数
 
-| 名前                    | 必須 | 内容                              |
-| ----------------------- | ---- | --------------------------------- |
-| `PUBLIC_URL`            | ✓    | `https://<domain>`                |
-| `BETTER_AUTH_SECRET`    | ✓    | `openssl rand -base64 32`         |
-| `DISCORD_CLIENT_ID`     | ✓    |                                   |
-| `DISCORD_CLIENT_SECRET` | ✓    |                                   |
-| `DISCORD_BOT_TOKEN`     | ✓    |                                   |
-| `DISCORD_GUILD_ID`      | ✓    | 対象サーバー ID                   |
-| `NOTION_TOKEN`          |      | 未設定なら Notion ツール無効      |
-| `PORT`                  |      | 既定 `3000`                       |
-| `DATABASE_PATH`         |      | 既定 `/data/app.db`（Docker）     |
-| `TRUSTED_PROXY_COUNT`   |      | 既定 `1`。Cloudflare 経由なら `2` |
+| 名前                    | 必須 | 内容                                             |
+| ----------------------- | ---- | ------------------------------------------------ |
+| `PUBLIC_URL`            | ✓    | `https://<domain>`                               |
+| `BETTER_AUTH_SECRET`    | ✓    | `openssl rand -base64 32`                        |
+| `DISCORD_CLIENT_ID`     | ✓    |                                                  |
+| `DISCORD_CLIENT_SECRET` | ✓    |                                                  |
+| `DISCORD_BOT_TOKEN`     | ✓    |                                                  |
+| `DISCORD_GUILD_ID`      | ✓    | 対象サーバー ID                                  |
+| `NOTION_TOKEN`          |      | 未設定なら Notion ツール無効                     |
+| `PORT`                  |      | 既定 `3000`                                      |
+| `DATABASE_PATH`         |      | 既定 `./data/app.db`（Docker は `/data/app.db`） |
+| `TRUSTED_PROXY_COUNT`   |      | 既定 `1`。Cloudflare 経由なら `2`                |
 
 ## 権限
 
