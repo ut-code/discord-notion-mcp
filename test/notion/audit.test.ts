@@ -580,6 +580,18 @@ describe("NotionWriteService", () => {
     expect(api.comments.at(-1)!.text).toContain("プロパティを更新しました");
   });
 
+  test("update_properties writes by the id as Notion returns it, whichever name or id form was given", async () => {
+    const row = addRow({ Count: { id: "%3Acnt", type: "number", number: 1 } as PagePropertyValue });
+    const outcome = await writes.updateProperties(ACTOR, { pageId: row.id, properties: { ":cnt": { number: 2 } }, request: {} });
+    expect(outcome.changed).toEqual(["Count"]);
+    expect(api.callsOf("updatePage").at(-1).properties).toEqual({ "%3Acnt": { number: 2 } });
+    expect((await api.retrievePage(row.id)).properties).toEqual({ Name: expect.anything(), Count: expect.objectContaining({ number: 2 }) });
+
+    await expect(
+      writes.updateProperties(ACTOR, { pageId: row.id, properties: { Count: { number: 3 }, "%3Acnt": { number: 4 } }, request: {} }),
+    ).rejects.toThrow('Property "Count" is given more than once.');
+  });
+
   test("update_properties refuses changes that could not be reverted", async () => {
     const row = addRow({
       Formula: { id: "f", type: "formula", formula: { type: "number", number: 1 } } as PagePropertyValue,
@@ -597,6 +609,11 @@ describe("NotionWriteService", () => {
     );
     await expect(writes.updateProperties(ACTOR, { pageId: row.id, properties: { Missing: { number: 1 } }, request: {} })).rejects.toThrow(
       'Unknown property "Missing"',
+    );
+    // A property id that is not valid escaping is compared as is, not decoded.
+    const encoded = addRow({ Broken: { id: "%E0", type: "number", number: 1 } as PagePropertyValue });
+    await expect(writes.updateProperties(ACTOR, { pageId: encoded.id, properties: { Other: { number: 2 } }, request: {} })).rejects.toThrow(
+      'Unknown property "Other"',
     );
     expect(api.callsOf("updatePage")).toEqual([]);
     expect((await store.list({ limit: 10, offset: 0 })).total).toBe(0);

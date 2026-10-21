@@ -90,6 +90,15 @@ const TEMPLATE_CHECK_INTERVAL_MS = 1_000;
  */
 const TRUNCATED_AFTER_CREATE: WriteWarning = { kind: "revert_blocked", blocker: "truncated_after_write" };
 
+/** A property id as Notion URL-encodes it (e.g. `%3AAbc`), decoded; an id that is not valid escaping stays as it is. */
+function decodedPropertyId(id: string): string {
+  try {
+    return decodeURIComponent(id);
+  } catch {
+    return id;
+  }
+}
+
 /** The size of `markdown` as the replace_content request carries it (JSON-escaped). */
 const restoreBytes = (markdown: string) => Buffer.byteLength(JSON.stringify(markdown));
 
@@ -442,14 +451,18 @@ export class NotionWriteService {
     if (keys.length === 0) throw new ToolError("No properties to update.");
     const page = await this.api.retrievePage(input.pageId);
     const entries: PropertySnapshotEntry[] = [];
+    // Sent keyed by the id as Notion returns it, as reverts do, whichever form of name or id was given.
+    const properties = new Map<string, unknown>();
     for (const key of keys) {
       const found = Object.entries(page.properties).find(
-        ([name, value]) => name === key || value.id === key || decodeURIComponent(value.id) === key,
+        ([name, value]) => name === key || value.id === key || decodedPropertyId(value.id) === key,
       );
       if (!found) {
         throw new ToolError(`Unknown property "${key}". Available: ${Object.keys(page.properties).join(", ")}.`);
       }
       const [name, value] = found;
+      if (properties.has(value.id)) throw new ToolError(`Property "${name}" is given more than once.`);
+      properties.set(value.id, input.properties[key]);
       if (!WRITABLE_PROPERTY_TYPES.has(value.type)) {
         throw new ToolError(`Property "${name}" (${value.type}) cannot be written through this server.`);
       }
@@ -473,7 +486,7 @@ export class NotionWriteService {
     });
     let updated: NotionPage;
     try {
-      updated = await this.api.updatePage({ pageId: page.id, properties: input.properties });
+      updated = await this.api.updatePage({ pageId: page.id, properties: Object.fromEntries(properties) });
     } catch (error) {
       return this.fail(row, error, CHECK_PAGE);
     }
