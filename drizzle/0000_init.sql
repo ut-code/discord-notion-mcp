@@ -36,6 +36,13 @@ CREATE TABLE `notion_audit` (
 CREATE INDEX `notion_audit_created_at_idx` ON `notion_audit` (`created_at`);--> statement-breakpoint
 CREATE INDEX `notion_audit_discord_user_idx` ON `notion_audit` (`discord_user_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `notion_audit_one_revert_idx` ON `notion_audit` (`revert_of_audit_id`) WHERE "notion_audit"."status" in ('pending', 'ok');--> statement-breakpoint
+CREATE TABLE `notion_audit_content` (
+	`audit_id` integer PRIMARY KEY NOT NULL,
+	`before` blob NOT NULL,
+	`after` blob,
+	FOREIGN KEY (`audit_id`) REFERENCES `notion_audit`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
 CREATE TABLE `token_revocation` (
 	`user_id` text PRIMARY KEY NOT NULL,
 	`revoked_at` integer NOT NULL
