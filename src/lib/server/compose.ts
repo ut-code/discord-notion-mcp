@@ -42,6 +42,8 @@ export interface ComposeOptions {
   toolRateLimit?: McpServerDeps["rateLimit"];
   /** Overrides usage recording (tests); defaults to the tool_call table. */
   recordToolCall?: McpServerDeps["record"];
+  /** Overrides the wait between reads of a page filling in from a template (the preview's fake needs none). */
+  notionWriteSleep?: (ms: number) => Promise<void>;
   /**
    * Other addresses of this same server whose pages may write, besides PUBLIC_URL (the preview
    * is opened both at localhost and through a proxy). Production serves one address and sets none.
@@ -109,7 +111,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     }),
     ...(notion
       ? [
-          ...createNotionTools({ api: notion, writes: new NotionWriteService(notion, auditStore, reportError) }),
+          ...createNotionTools({ api: notion, writes: new NotionWriteService(notion, auditStore, reportError, options.notionWriteSleep) }),
           ...createNotionChangeTools({ audit: notionAudit, publicUrl: config.publicUrl }),
         ]
       : []),

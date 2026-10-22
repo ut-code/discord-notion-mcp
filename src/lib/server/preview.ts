@@ -10,9 +10,6 @@ import { ADMINISTRATOR, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "./discord/per
 import type { MemberInfo } from "./discord/types";
 import { displayName } from "./lib/display-name";
 import type { Principal } from "./mcp/registry";
-import { NotionAuditStore } from "./notion/changes/audit-store";
-import { NotionWriteService } from "./notion/changes/write-service";
-import { createNotionTools } from "./notion/tools";
 import type { Runtime } from "./runtime";
 import type { ToolCallStore } from "./usage/tool-calls";
 
@@ -237,6 +234,8 @@ export async function startPreview(): Promise<Runtime> {
     logToolCall: () => {},
     logEvent: () => {},
     otherOrigins: [`http://localhost:${port}`],
+    // Templates are filled in by the fake a couple of reads after creation, so no real waiting.
+    notionWriteSleep: () => Promise.resolve(),
   });
   const authContext = await server.auth.$context;
 
@@ -267,13 +266,7 @@ export async function startPreview(): Promise<Runtime> {
     createdBy: OWNER_ID,
   });
 
-  const tools = new Map(
-    // Templates are filled in by the fake a couple of reads after creation, so no real waiting.
-    createNotionTools({
-      api: notion,
-      writes: new NotionWriteService(notion, new NotionAuditStore(database.db), undefined, () => Promise.resolve()),
-    }).map((tool) => [tool.name, tool]),
-  );
+  const tools = new Map(server.tools.map((tool) => [tool.name, tool]));
   const run = async (name: string, args: Record<string, unknown>, who: MemberInfo): Promise<string> => {
     const tool = tools.get(name);
     const userId = authUserIds.get(who.userId);

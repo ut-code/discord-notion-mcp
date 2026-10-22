@@ -722,10 +722,13 @@ describe("NotionWriteService", () => {
       if (reads > 1) throw new NotionRequestError("service unavailable", 503, "service_unavailable");
       return retrievePage(pageId);
     };
-    const outcome = await writes.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
+    const logged: unknown[] = [];
+    const logging = new NotionWriteService(api, store, (entry) => logged.push(entry));
+    const outcome = await logging.appendContent(ACTOR, { pageId: parent.id, content: "mine", request: {} });
     const row = (await store.get(outcome.auditId))!;
     expect(row.status).toBe("ok");
     expect(row.resultLastEditedTime).toBeNull();
+    expect(logged).toEqual([{ event: "notion_readback_failed", pageId: parent.id, error: "service unavailable" }]);
   });
 });
 

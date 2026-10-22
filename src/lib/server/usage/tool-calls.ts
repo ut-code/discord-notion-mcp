@@ -60,7 +60,7 @@ export class ToolCallStore {
       .run();
   }
 
-  /** A page of calls, newest first, and how many match. */
+  /** A page of calls, newest first, and how many match; the page and the total come from one snapshot. */
   list(query: ToolCallQuery): { rows: ToolCallRow[]; total: number } {
     if (query.tools.length === 0) return { rows: [], total: 0 };
     const where = and(
@@ -68,16 +68,18 @@ export class ToolCallStore {
       query.discordUserId ? eq(toolCall.discordUserId, query.discordUserId) : undefined,
       query.result ? resultCondition(query.result) : undefined,
     );
-    const rows = this.db
-      .select()
-      .from(toolCall)
-      .where(where)
-      .orderBy(desc(toolCall.createdAt), desc(toolCall.id))
-      .limit(query.limit)
-      .offset(query.offset)
-      .all();
-    const [row] = this.db.select({ total: count() }).from(toolCall).where(where).all();
-    return { rows, total: row?.total ?? 0 };
+    return this.db.transaction((tx) => {
+      const rows = tx
+        .select()
+        .from(toolCall)
+        .where(where)
+        .orderBy(desc(toolCall.createdAt), desc(toolCall.id))
+        .limit(query.limit)
+        .offset(query.offset)
+        .all();
+      const totals = tx.select({ total: count() }).from(toolCall).where(where).get();
+      return { rows, total: totals?.total ?? 0 };
+    });
   }
 
   /** Everyone with a kept call of these tools, for picking whose calls to show. */
