@@ -46,8 +46,13 @@ export class MemberLookup {
   private readonly cache = new Map<string, SubjectOption[]>();
   private timer: ReturnType<typeof setTimeout> | undefined;
   private controller: AbortController | null = null;
+  private memberController: AbortController | null = null;
+  /** Set by cancel(): the picker is gone, so nothing more is asked. */
+  private closed = false;
   /** The query on screen; null after a failure so typing the same query again retries it. */
   private latest: string | null = "";
+  /** The query on screen even after a failure, for refresh(). */
+  private onScreen = "";
 
   constructor(private readonly endpoint: string) {}
 
@@ -55,7 +60,8 @@ export class MemberLookup {
     const key = query.trim().toLowerCase();
     if (key === this.latest) return;
     this.latest = key;
-    this.cancel();
+    this.onScreen = key;
+    this.cancelSearch();
     this.error = null;
     if (!key) {
       this.members = [];
@@ -72,8 +78,51 @@ export class MemberLookup {
     this.timer = setTimeout(() => void this.load(key), DEBOUNCE_MS);
   }
 
-  /** Stops pending work, e.g. when the picker is destroyed. */
+  /** Forgets the cached results and repeats the query on screen, e.g. after grants changed. */
+  refresh(): void {
+    this.cache.clear();
+    const key = this.onScreen;
+    if (!key) return;
+    this.cancelSearch();
+    this.latest = key;
+    this.error = null;
+    this.loading = true;
+    void this.load(key);
+  }
+
+  /** One member's option as it stands now (an id finds that member); null when it cannot be had. */
+  async fetchMember(userId: string): Promise<SubjectOption | null> {
+    if (this.closed) return null;
+    this.memberController?.abort();
+    const controller = new AbortController();
+    this.memberController = controller;
+    try {
+      const response = await fetch(`${this.endpoint}?q=${encodeURIComponent(userId)}`, {
+        signal: controller.signal,
+        headers: { accept: "application/json" },
+      });
+      if (response.status === 401) {
+        // Session ended, as in load().
+        location.reload();
+        return null;
+      }
+      if (!response.ok) return null;
+      return parseBody(await response.json()).members?.find((member) => member.id === userId) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Stops pending work for good, when the picker is destroyed. */
   cancel(): void {
+    this.closed = true;
+    this.cancelSearch();
+    this.memberController?.abort();
+    this.memberController = null;
+  }
+
+  /** Stops the pending search only: refreshing a chosen member goes on while the user types. */
+  private cancelSearch(): void {
     clearTimeout(this.timer);
     this.controller?.abort();
     this.controller = null;

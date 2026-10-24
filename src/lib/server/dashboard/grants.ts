@@ -1,4 +1,5 @@
-import { grantSubmitLabel } from "../../grant-label";
+import { MAX_GRANTS_PER_SUBMIT } from "../../grant-label";
+import { formatNumber } from "../../locale";
 import { MAX_QUERY_LENGTH } from "../../name-match";
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
@@ -10,7 +11,7 @@ import { ADMIN_ONLY, type Viewer } from "./access";
 import type { BadgeView } from "./badges";
 import type { DashboardDeps } from "./deps";
 import { formatDateJst, PERMISSION_HINTS, PERMISSION_LABELS, roleColor, roleHandle, roleSummary } from "./format";
-import { formString, type ActionResult } from "./shared";
+import { formString, formStrings, type ActionResult } from "./shared";
 import { grantableRoles, heldRoles, type UserSubject } from "./subjects";
 import { buildGrantRows, redundancyOf, type GrantRowView, type Redundancy } from "./views";
 import type { GrantRow } from "../db/schema";
@@ -72,7 +73,8 @@ export interface SubjectOption extends GrantState {
 
 export interface GrantFormView {
   permissions: Array<{ value: Permission; label: string; hint: string }>;
-  permission: Permission;
+  /** Checked when the page opens: the URL's `permission`s, else the filter tab's, else Discord 閲覧. */
+  chosenPermissions: Permission[];
   /** Every grantable role, highest first. */
   roles: SubjectOption[];
   /** Members by name, the first MEMBER_LIST_LIMIT. */
@@ -83,10 +85,12 @@ export interface GrantFormView {
   query: string;
   /** Members matching `query`. */
   results: SubjectOption[];
-  selected: SubjectOption | null;
+  /** Chosen when the page opens: the URL's `subject`s (e.g. a link from the users page). */
+  selected: SubjectOption[];
+  /** The URL's valid `subject` keys (the first MAX_GRANTS_PER_SUBMIT), found or not: the form follows them only when they change. */
+  selectedKeys: string[];
   /** Why members are missing from the list or the results. */
   membersError: string | null;
-  submitLabel: string;
 }
 
 export interface GrantsPageData {
@@ -310,20 +314,19 @@ export async function memberSearchResult(deps: DashboardDeps, rawQuery: string |
   return { status: 200, body: { members: search.members.map((user) => memberOption(guild, grants, user)) } };
 }
 
-/** Admins only (the route checks). Query: `filter` (tab), and the grant form state `permission`, `subject`, `q`. */
+/** Admins only (the route checks). Query: `filter` (tab), and the grant form state `permission`s, `subject`s, `q`. */
 export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): Promise<GrantsPageData> {
   const [guild, grants] = await Promise.all([deps.directory.fetchGuild(), deps.grants.listGrants()]);
   const filterParam = params.get("filter") ?? "";
   const filter = isPermission(filterParam) ? filterParam : null;
   const query = params.get("q")?.trim().slice(0, MAX_QUERY_LENGTH) ?? "";
-  const subject = parseSubjectKey(params.get("subject") ?? "");
-  const selected = subject.ok ? { type: subject.type, id: subject.id } : null;
-  const selectedUserId = selected?.type === "user" ? selected.id : null;
+  const selected = uniqueSubjects(params.getAll("subject")).slice(0, MAX_GRANTS_PER_SUBMIT);
+  const selectedUserIds = selected.flatMap((subject) => (subject.type === "user" ? [subject.id] : []));
 
   const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
   // The owner is looked up with everyone else, so from the member list when it is available.
   const [users, roster, search] = await Promise.all([
-    deps.subjects.resolveUsers([guild.ownerId, ...userIds, ...(selectedUserId ? [selectedUserId] : [])]),
+    deps.subjects.resolveUsers([guild.ownerId, ...userIds, ...selectedUserIds]),
     listMembers(deps),
     query ? searchMembers(deps, query) : Promise.resolve({ members: [], error: null }),
   ]);
@@ -350,7 +353,7 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
 interface FormLookups {
   grants: readonly GrantRow[];
   query: string;
-  selected: { type: SubjectType; id: string } | null;
+  selected: Array<{ type: SubjectType; id: string }>;
   users: ReadonlyMap<string, UserSubject>;
   roster: MemberList;
   search: MemberList;
@@ -358,74 +361,120 @@ interface FormLookups {
 
 function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission | null, lookups: FormLookups): GrantFormView {
   const { grants, query, users, roster, search } = lookups;
-  const permissionParam = params.get("permission") ?? "";
-  const permission = isPermission(permissionParam) ? permissionParam : (filter ?? "discord:read");
+  const permissionParams = [...new Set(params.getAll("permission").filter(isPermission))];
+  const chosenPermissions = permissionParams.length > 0 ? permissionParams : [filter ?? "discord:read"];
   const roles = grantableRoles(guild).map((role) => roleOption(guild, grants, role));
   const members = roster.members.slice(0, MEMBER_LIST_LIMIT).map((user) => memberOption(guild, grants, user));
   const results = search.members.map((user) => memberOption(guild, grants, user));
 
-  let selected: SubjectOption | null = null;
-  if (lookups.selected?.type === "role") {
-    selected = roles.find((role) => role.id === lookups.selected?.id) ?? null;
-  } else if (lookups.selected) {
-    const user = users.get(lookups.selected.id);
-    selected = user?.displayName ? memberOption(guild, grants, user) : null;
-  }
+  const selected = lookups.selected.flatMap((subject) => {
+    if (subject.type === "role") return roles.filter((role) => role.id === subject.id);
+    const user = users.get(subject.id);
+    return user?.displayName ? [memberOption(guild, grants, user)] : [];
+  });
 
   return {
     permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
-    permission,
+    chosenPermissions,
     roles,
     members,
     moreMembers: roster.members.length - members.length,
     query,
     results,
     selected,
+    selectedKeys: lookups.selected.map((subject) => `${subject.type}:${subject.id}`),
     membersError: roster.error ?? search.error,
-    submitLabel: grantSubmitLabel(PERMISSION_LABELS[permission], selected?.label ?? null),
   };
 }
 
 type GrantForm = { permission: Permission; subjectType: SubjectType; subjectId: string; label: string; role?: RoleInfo };
 type ParsedGrantForm = { ok: true; form: GrantForm } | { ok: false; message: string };
 
-/** The grant form sends `subject` (`role:<id>` or `user:<id>`); delete buttons send `subjectType` and `subjectId`. */
+/** The valid subject keys among `keys`, each once. */
+function uniqueSubjects(keys: string[]): Array<{ type: SubjectType; id: string }> {
+  const parsed = [...new Set(keys)].map(parseSubjectKey);
+  return parsed.flatMap((subject) => (subject.ok ? [{ type: subject.type, id: subject.id }] : []));
+}
+
+/** How result messages name a subject: ユーザー「name」 or ロール「name」. */
+async function subjectLabel(deps: DashboardDeps, guild: GuildInfo, subject: { type: SubjectType; id: string }): Promise<string> {
+  if (subject.type === "user") {
+    const user = await deps.subjects.resolveUser(subject.id);
+    return user.displayName ? m.grants_subject_user_named({ name: user.displayName }) : m.grants_subject_user_id({ id: subject.id });
+  }
+  const role = guild.roles.find((candidate) => candidate.id === subject.id);
+  return role ? m.grants_subject_role_named({ name: role.name }) : m.grants_subject_role_id({ id: subject.id });
+}
+
 async function parseGrantForm(deps: DashboardDeps, body: FormData): Promise<ParsedGrantForm> {
   const permission = formString(body, "permission");
   if (!isPermission(permission)) return { ok: false, message: m.grants_unknown_permission() };
-  const key = formString(body, "subject");
-  const subject = key ? parseSubjectKey(key) : parseSubject(formString(body, "subjectType"), formString(body, "subjectId"));
+  // Delete buttons send `subjectType` and `subjectId`.
+  const subject = parseSubject(formString(body, "subjectType"), formString(body, "subjectId"));
   if (!subject.ok) return { ok: false, message: subject.message };
   const { type: subjectType, id: subjectId } = subject;
-  if (subjectType === "user") {
-    const user = await deps.subjects.resolveUser(subjectId);
-    const label = user.displayName ? m.grants_subject_user_named({ name: user.displayName }) : m.grants_subject_user_id({ id: subjectId });
-    return { ok: true, form: { permission, subjectType, subjectId, label } };
-  }
-  const role = (await deps.directory.fetchGuild()).roles.find((candidate) => candidate.id === subjectId);
-  const label = role ? m.grants_subject_role_named({ name: role.name }) : m.grants_subject_role_id({ id: subjectId });
+  const guild = await deps.directory.fetchGuild();
+  const label = await subjectLabel(deps, guild, subject);
+  const role = subjectType === "role" ? guild.roles.find((candidate) => candidate.id === subjectId) : undefined;
   return { ok: true, form: { permission, subjectType, subjectId, role, label } };
 }
 
-export async function createGrant(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
+/**
+ * The grant form: every checked `permission` for every chosen `subject` (`role:<id>` or
+ * `user:<id>`), up to MAX_GRANTS_PER_SUBMIT pairs; pairs already granted are counted, not repeated.
+ */
+export async function createGrants(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
   if (!actor.isAdmin) return ADMIN_ONLY;
-  const parsed = await parseGrantForm(deps, body);
-  if (!parsed.ok) return { kind: "error", message: parsed.message };
-  const { form } = parsed;
-  if (form.subjectType === "role" && (!form.role || form.role.managed)) {
-    return { kind: "error", message: m.grants_role_unavailable() };
+  const permissionValues = [...new Set(formStrings(body, "permission"))];
+  if (permissionValues.length === 0) return { kind: "error", message: m.grants_choose_permission() };
+  const permissions = permissionValues.filter(isPermission);
+  if (permissions.length < permissionValues.length) return { kind: "error", message: m.grants_unknown_permission() };
+  const subjects: Array<{ type: SubjectType; id: string }> = [];
+  for (const key of new Set(formStrings(body, "subject"))) {
+    const subject = parseSubjectKey(key);
+    if (!subject.ok) return { kind: "error", message: subject.message };
+    subjects.push({ type: subject.type, id: subject.id });
   }
+  if (subjects.length === 0) return { kind: "error", message: m.grants_choose_subject() };
+  if (subjects.length * permissions.length > MAX_GRANTS_PER_SUBMIT) {
+    return { kind: "error", message: m.grants_too_many({ max: formatNumber(MAX_GRANTS_PER_SUBMIT) }) };
+  }
+  const guild = await deps.directory.fetchGuild();
+  const unavailable = subjects.filter(
+    (subject) => subject.type === "role" && !guild.roles.some((role) => role.id === subject.id && !role.managed),
+  );
+  if (unavailable.length > 0) {
+    const names = unavailable.map(({ id }) => {
+      const role = guild.roles.find((candidate) => candidate.id === id);
+      return role ? roleHandle(role.name) : id;
+    });
+    return { kind: "error", message: m.grants_roles_unavailable({ roles: names.join("、") }) };
+  }
+
   const by = actor.discordUserId;
-  const { created } = await deps.grants.createGrant({
-    permission: form.permission,
-    subjectType: form.subjectType,
-    subjectId: form.subjectId,
-    createdBy: by,
-  });
-  const permission = PERMISSION_LABELS[form.permission];
-  if (!created) return { kind: "warn", message: m.grants_already_granted({ subject: form.label, permission }) };
-  deps.log({ event: "grant_added", permission: form.permission, subjectType: form.subjectType, subjectId: form.subjectId, by });
-  return { kind: "ok", message: m.grants_granted({ subject: form.label, permission }) };
+  const inputs = subjects.flatMap((subject) =>
+    permissions.map((permission) => ({ permission, subjectType: subject.type, subjectId: subject.id, createdBy: by })),
+  );
+  const added = await deps.grants.createGrants(inputs);
+  for (const grant of added) deps.log({ event: "grant_added", ...grant, by });
+  const created = added.length;
+  const [onlySubject] = subjects;
+  const [onlyPermission] = permissions;
+  if (onlySubject && onlyPermission && subjects.length === 1 && permissions.length === 1) {
+    const label = await subjectLabel(deps, guild, onlySubject);
+    const permission = PERMISSION_LABELS[onlyPermission];
+    return created
+      ? { kind: "ok", message: m.grants_granted({ subject: label, permission }) }
+      : { kind: "warn", message: m.grants_already_granted({ subject: label, permission }) };
+  }
+  const skipped = subjects.length * permissions.length - created;
+  if (created === 0) return { kind: "warn", message: m.grants_all_already_granted() };
+  return {
+    kind: "ok",
+    message: skipped
+      ? m.grants_granted_count_skipped({ count: formatNumber(created), skipped: formatNumber(skipped) })
+      : m.grants_granted_count({ count: formatNumber(created) }),
+  };
 }
 
 export async function deleteGrant(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {

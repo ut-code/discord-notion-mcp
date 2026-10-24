@@ -52,6 +52,27 @@ export class GrantStore implements GrantLookup {
     return { grant: existing[0], created: false };
   }
 
+  /** All or nothing, in one transaction; grants that already exist are left as stored. Returns those created. */
+  createGrants(inputs: readonly GrantInput[]): Promise<GrantKey[]> {
+    const created = this.db.transaction((tx) =>
+      inputs.flatMap((input) => {
+        const row = tx
+          .insert(grants)
+          .values({
+            permission: input.permission,
+            subjectType: input.subjectType,
+            subjectId: input.subjectId,
+            createdBy: input.createdBy ?? null,
+          })
+          .onConflictDoNothing()
+          .returning({ permission: grants.permission, subjectType: grants.subjectType, subjectId: grants.subjectId })
+          .get();
+        return row ? [row] : [];
+      }),
+    );
+    return Promise.resolve(created);
+  }
+
   async removeGrant(input: GrantKey): Promise<boolean> {
     const deleted = await this.db
       .delete(grants)

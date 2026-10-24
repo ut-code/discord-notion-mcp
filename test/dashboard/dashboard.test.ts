@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { ADMIN_ONLY, checkViewer, signInRedirect, type Viewer } from "../../src/lib/server/dashboard/access";
 import { auditDetail, auditList, revertAudit } from "../../src/lib/server/dashboard/audit";
 import type { DashboardDeps } from "../../src/lib/server/dashboard/deps";
-import { createGrant, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
+import { createGrants, deleteGrant, grantsPage, memberSearchResult } from "../../src/lib/server/dashboard/grants";
 import { requireAdminViewer } from "../../src/lib/server/dashboard/guard";
 import { MemberRoster } from "../../src/lib/server/dashboard/member-roster";
 import { SubjectResolver } from "../../src/lib/server/dashboard/subjects";
@@ -232,7 +232,8 @@ describe("grants", () => {
 
   test("adds a role grant, reports duplicates, and deletes it", async () => {
     const fields = { permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD };
-    expect(await createGrant(deps, form(fields), owner)).toEqual({
+    const grant = { permission: "discord:read", subject: `role:${ROLE_MOD}` };
+    expect(await createGrants(deps, form(grant), owner)).toEqual({
       kind: "ok",
       message: "ロール「Moderator」に「Discord 閲覧」を付与しました。",
     });
@@ -253,7 +254,7 @@ describe("grants", () => {
       confirm: "@Moderator の Discord 閲覧を削除しますか？",
     });
 
-    expect(await createGrant(deps, form(fields), owner)).toMatchObject({
+    expect(await createGrants(deps, form(grant), owner)).toMatchObject({
       kind: "warn",
       message: "ロール「Moderator」には既に「Discord 閲覧」が付与されています。",
     });
@@ -268,48 +269,83 @@ describe("grants", () => {
   });
 
   test("the grant form sends the subject as role:<id> or user:<id>", async () => {
-    const byRole = await createGrant(deps, form({ permission: "notion:read", subject: `role:${ROLE_MOD}` }), owner);
+    const byRole = await createGrants(deps, form({ permission: "notion:read", subject: `role:${ROLE_MOD}` }), owner);
     expect(byRole.message).toBe("ロール「Moderator」に「Notion 閲覧」を付与しました。");
-    const byUser = await createGrant(deps, form({ permission: "notion:read", subject: `user:${READER}` }), owner);
+    const byUser = await createGrants(deps, form({ permission: "notion:read", subject: `user:${READER}` }), owner);
     expect(byUser.message).toBe("ユーザー「Reader」に「Notion 閲覧」を付与しました。");
     for (const subject of [undefined, "user:"]) {
-      expect(await createGrant(deps, form({ permission: "notion:read", ...(subject ? { subject } : {}) }), owner)).toEqual({
+      expect(await createGrants(deps, form({ permission: "notion:read", ...(subject ? { subject } : {}) }), owner)).toEqual({
         kind: "error",
         message: "対象を選んでください。",
       });
     }
-    expect((await createGrant(deps, form({ permission: "notion:read", subject: `team:${MEMBER}` }), owner)).message).toBe(
+    expect((await createGrants(deps, form({ permission: "notion:read", subject: `team:${MEMBER}` }), owner)).message).toBe(
       "対象の種類が不正です。",
     );
-    expect((await createGrant(deps, form({ permission: "notion:read", subject: `user:${READER}:x` }), owner)).message).toContain(
+    expect((await createGrants(deps, form({ permission: "notion:read", subject: `user:${READER}:x` }), owner)).message).toContain(
       "Discord の ID（15〜22 桁の数字）ではありません",
     );
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD });
     await h.server.grants.removeGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
   });
 
+  test("grants every chosen permission to every chosen subject at once, counting the pairs already granted", async () => {
+    await h.server.grants.createGrant({ permission: "notion:read", subjectType: "user", subjectId: READER });
+    const body = new FormData();
+    for (const permission of ["notion:read", "discord:read"]) body.append("permission", permission);
+    for (const subject of [`user:${READER}`, `role:${ROLE_MOD}`, `user:${READER}`]) body.append("subject", subject);
+    expect(await createGrants(deps, body, owner)).toEqual({ kind: "ok", message: "3 件を付与しました（1 件は付与済みでした）。" });
+    const stored = (await h.server.grants.listGrants()).filter((grant) => grant.subjectId === READER || grant.subjectId === ROLE_MOD);
+    expect(stored.map((grant) => `${grant.subjectId}:${grant.permission}`).sort()).toEqual(
+      [`${READER}:discord:read`, `${READER}:notion:read`, `${ROLE_MOD}:discord:read`, `${ROLE_MOD}:notion:read`].sort(),
+    );
+    expect(await createGrants(deps, body, owner)).toEqual({ kind: "warn", message: "選んだ組み合わせはすべて付与済みです。" });
+    for (const grant of stored) await h.server.grants.removeGrant(grant);
+
+    expect(await createGrants(deps, form({ subject: `user:${READER}` }), owner)).toEqual({
+      kind: "error",
+      message: "権限を選んでください。",
+    });
+    const tooMany = new FormData();
+    for (const permission of ["notion:read", "discord:read"]) tooMany.append("permission", permission);
+    for (let index = 0; index < 51; index++) tooMany.append("subject", `user:${String(400000000000000000n + BigInt(index))}`);
+    expect(await createGrants(deps, tooMany, owner)).toEqual({ kind: "error", message: "一度に付与できるのは 100 件までです。" });
+    tooMany.delete("subject");
+    for (let index = 0; index < 50; index++) tooMany.append("subject", `user:${String(400000000000000000n + BigInt(index))}`);
+    expect(await createGrants(deps, tooMany, owner)).toEqual({ kind: "ok", message: "100 件を付与しました。" });
+    for (const grant of await h.server.grants.listGrants()) {
+      if (grant.subjectId.startsWith("4000000000000000")) await h.server.grants.removeGrant(grant);
+    }
+    const mixed = form({ subject: `user:${READER}` });
+    for (const permission of ["notion:read", "root"]) mixed.append("permission", permission);
+    expect(await createGrants(deps, mixed, owner)).toEqual({ kind: "error", message: "不明な権限です。" });
+    const withBot = new FormData();
+    withBot.append("permission", "notion:read");
+    for (const subject of [`user:${READER}`, `role:${ROLE_BOT}`]) withBot.append("subject", subject);
+    expect((await createGrants(deps, withBot, owner)).message).toBe(
+      "@SomeBot は付与できないロールです（削除済みか連携用）。外してから付与してください。",
+    );
+    expect((await h.server.grants.listGrants()).some((grant) => grant.subjectId === READER)).toBe(false);
+  });
+
   test("rejects invalid snowflakes, unknown permissions and integration roles", async () => {
     const before = (await h.server.grants.listGrants()).length;
-    expect((await createGrant(deps, form({ permission: "notion:read", subjectType: "user", subjectId: "12ab" }), owner)).message).toContain(
+    expect((await createGrants(deps, form({ permission: "notion:read", subject: "user:12ab" }), owner)).message).toContain(
       "Discord の ID（15〜22 桁の数字）ではありません",
     );
-    expect(await createGrant(deps, form({ permission: "root", subjectType: "user", subjectId: MEMBER }), owner)).toEqual({
+    expect(await createGrants(deps, form({ permission: "root", subject: `user:${MEMBER}` }), owner)).toEqual({
       kind: "error",
       message: "不明な権限です。",
     });
-    expect(await createGrant(deps, form({ permission: "notion:read", subjectType: "team", subjectId: MEMBER }), owner)).toEqual({
-      kind: "error",
-      message: "対象の種類が不正です。",
-    });
-    expect(
-      (await createGrant(deps, form({ permission: "notion:read", subjectType: "role", subjectId: ROLE_BOT }), owner)).message,
-    ).toContain("ロールを選んでください");
+    expect((await createGrants(deps, form({ permission: "notion:read", subject: `role:${ROLE_BOT}` }), owner)).message).toBe(
+      "@SomeBot は付与できないロールです（削除済みか連携用）。外してから付与してください。",
+    );
     expect((await h.server.grants.listGrants()).length).toBe(before);
   });
 
   test("user grants show resolved names and roles; the role picker excludes integration roles", async () => {
     for (const subjectId of [MEMBER, STRANGER, "399999999999999999"]) {
-      await createGrant(deps, form({ permission: "notion:read", subjectType: "user", subjectId }), owner);
+      await createGrants(deps, form({ permission: "notion:read", subject: `user:${subjectId}` }), owner);
     }
     const data = await grantsPage(deps, params());
     const subjects = data.rows.map((row) => row.subject);
@@ -359,7 +395,7 @@ describe("grants", () => {
     const readers = await grantsPage(deps, params("filter=notion%3Aread"));
     expect(readers.rows.some((row) => row.key.startsWith("owner:"))).toBe(false);
     expect(readers.rows.some((row) => row.subject.secondary === "@mina · Moderator")).toBe(true);
-    expect(readers.form?.permission).toBe("notion:read");
+    expect(readers.form?.chosenPermissions).toEqual(["notion:read"]);
     // Each tab counts the rows it shows, so the counts match the filtered lists.
     expect(all.tabs.find((tab) => tab.label === "管理者")?.count).toBe(admins.rows.length);
     expect(all.tabs.find((tab) => tab.label === "Notion 閲覧")?.count).toBe(readers.rows.length);
@@ -405,7 +441,7 @@ describe("grants", () => {
 
   test("the form lists every role and the members by name; a search and a chosen subject come from the URL", async () => {
     const plain = await grantsPage(deps, params());
-    expect(plain.form).toMatchObject({ query: "", results: [], selected: null, moreMembers: 0, submitLabel: "付与する" });
+    expect(plain.form).toMatchObject({ query: "", results: [], selected: [], chosenPermissions: ["discord:read"], moreMembers: 0 });
     expect(plain.form.roles.find((role) => role.id === ROLE_MOD)).toEqual({
       key: `role:${ROLE_MOD}`,
       type: "role",
@@ -422,7 +458,7 @@ describe("grants", () => {
     expect(labels).toContain("Mina");
 
     const search = await grantsPage(deps, params("q=ina&permission=notion%3Awrite"));
-    expect(search.form).toMatchObject({ permission: "notion:write", query: "ina" });
+    expect(search.form).toMatchObject({ chosenPermissions: ["notion:write"], query: "ina" });
     expect(search.form.results.map((member) => member.id)).toEqual([MEMBER]);
     expect(search.form.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
       "ページの閲覧に加えて、作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
@@ -430,11 +466,16 @@ describe("grants", () => {
     expect((await grantsPage(deps, params(`q=${STRANGER}`))).form.results.map((member) => member.id)).toEqual([STRANGER]);
     expect((await grantsPage(deps, params("q=zzz"))).form.results).toEqual([]);
 
-    const chosenUser = await grantsPage(deps, params(`subject=user%3A${MEMBER}&permission=notion%3Awrite`));
-    expect(chosenUser.form.selected).toMatchObject({ key: `user:${MEMBER}`, label: "Mina" });
-    expect(chosenUser.form.submitLabel).toBe("Mina に Notion 編集を付与");
-    expect((await grantsPage(deps, params(`subject=role%3A${ROLE_MOD}`))).form.submitLabel).toBe("@Moderator に Discord 閲覧を付与");
-    expect((await grantsPage(deps, params("subject=role%3A12ab"))).form.selected).toBeNull();
+    const chosen = await grantsPage(
+      deps,
+      params(`subject=user%3A${MEMBER}&subject=role%3A${ROLE_MOD}&subject=role%3A12ab&permission=notion%3Awrite&permission=admin`),
+    );
+    expect(chosen.form.selected).toMatchObject([
+      { key: `user:${MEMBER}`, label: "Mina" },
+      { key: `role:${ROLE_MOD}`, label: "@Moderator" },
+    ]);
+    expect(chosen.form.chosenPermissions).toEqual(["notion:write", "admin"]);
+    expect((await grantsPage(deps, params("filter=notion%3Aread"))).form.chosenPermissions).toEqual(["notion:read"]);
   });
 
   test("the member search matches any part of a name and validates the query; admins only", async () => {
@@ -648,7 +689,7 @@ describe("read-only members", () => {
     const before = await h.server.grants.listGrants();
     expect(ADMIN_ONLY).toEqual({ kind: "error", message: "この操作は管理者だけが行えます。", status: 403 });
 
-    expect(await createGrant(deps, form({ permission: "admin", subjectType: "user", subjectId: MEMBER }), member)).toEqual(ADMIN_ONLY);
+    expect(await createGrants(deps, form({ permission: "admin", subject: `user:${MEMBER}` }), member)).toEqual(ADMIN_ONLY);
     await h.server.grants.createGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD });
     const withGrant = await h.server.grants.listGrants();
     expect(await deleteGrant(deps, form({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD }), member)).toEqual(

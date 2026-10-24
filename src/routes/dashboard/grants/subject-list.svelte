@@ -2,9 +2,11 @@
   import CheckIcon from "@lucide/svelte/icons/check";
   import LoaderCircleIcon from "@lucide/svelte/icons/loader-circle";
   import SearchIcon from "@lucide/svelte/icons/search";
-  import { onDestroy } from "svelte";
+  import XIcon from "@lucide/svelte/icons/x";
+  import { onDestroy, untrack } from "svelte";
   import AppAvatar from "#lib/components/app/app-avatar.svelte";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { useHydrated } from "#lib/hydrated.svelte.js";
   import { MAX_QUERY_LENGTH, namesMatch, searchNeedle } from "#lib/name-match.js";
   import { m } from "#lib/paraglide/messages.js";
   import { formatNumber } from "#lib/locale.js";
@@ -14,10 +16,15 @@
 
   // One markup with and without JavaScript: the tabs switch in CSS, and the search box
   // filters as you type, or without JavaScript submits a GET search (Enter or the icon).
-  let { id, form, chosen = $bindable() }: { id: string; form: GrantFormView; chosen: SubjectOption | null } = $props();
+  let { id, form, chosen = $bindable() }: { id: string; form: GrantFormView; chosen: SubjectOption[] } = $props();
 
-  let query = $derived(form.query);
-  let tab = $derived<"role" | "user">(form.selected?.type ?? "role");
+  const hydrated = useHydrated();
+  // Like the choices in grant-form.svelte: derived from strings, so the reload after a grant keeps
+  // what the user typed and the list they switched to.
+  const urlQuery = $derived(form.query);
+  let query = $derived(urlQuery);
+  const urlTab = $derived<"role" | "user">(form.selected[0]?.type ?? "role");
+  let tab = $derived(urlTab);
   let input = $state<HTMLInputElement | null>(null);
   const lookup = new MemberLookup(`${DASHBOARD_PATH}/grants/members`);
   onDestroy(() => lookup.cancel());
@@ -29,9 +36,41 @@
   const memberMatches = $derived(rendered ? form.results : lookup.members);
   const memberError = $derived(rendered ? form.membersError : lookup.error);
   const loading = $derived(!rendered && lookup.loading);
-  const listed = $derived(needle ? [...roleMatches, ...memberMatches] : [...form.roles, ...form.members]);
-  // A choice the list no longer shows is still sent.
-  const unlisted = $derived(chosen && !listed.some((option) => option.key === chosen?.key) ? chosen : null);
+  const chosenKeys = $derived(new Set(chosen.map((subject) => subject.key)));
+  // Without JavaScript the checked boxes are the choices: the URL's ones that no list shows are sent as hidden fields.
+  const shown = $derived(
+    new Set((needle ? [...roleMatches, ...memberMatches] : [...form.roles, ...form.members]).map((option) => option.key)),
+  );
+  const unlisted = $derived(form.selected.filter((subject) => !shown.has(subject.key)));
+
+  // The page data is reloaded after every grant or removal: the chosen subjects and the live search
+  // take their new state from it, and a chosen member it does not list is asked about by id (only the
+  // answers to the latest reload count).
+  let reloads = 0;
+  $effect(() => {
+    const fresh = new Map([...form.selected, ...form.roles, ...form.members, ...form.results].map((option) => [option.key, option]));
+    untrack(() => {
+      const reload = ++reloads;
+      lookup.refresh();
+      // Every grantable role is listed: a chosen role missing from the list was deleted (or became an integration's).
+      chosen = chosen.flatMap((subject) => fresh.get(subject.key) ?? (subject.type === "role" ? [] : subject));
+      const missing = chosen.filter((subject) => subject.type === "user" && !fresh.has(subject.key));
+      // One request at a time: each asks Discord.
+      void (async () => {
+        for (const subject of missing) {
+          const now = await lookup.fetchMember(subject.id);
+          if (reload !== reloads) return;
+          if (now) chosen = chosen.map((current) => (current.key === now.key ? now : current));
+        }
+      })();
+    });
+  });
+
+  function toggle(subject: SubjectOption, on: boolean) {
+    chosen = on
+      ? [...chosen.filter((current) => current.key !== subject.key), subject]
+      : chosen.filter((current) => current.key !== subject.key);
+  }
 
   function onkeydown(event: KeyboardEvent) {
     // Searching is live; Enter would submit the grant.
@@ -47,15 +86,17 @@
   <p class={["px-2 py-1.5 text-note", tone === "bad" ? "text-bad-fg" : "text-muted-foreground"]}>{text}</p>
 {/snippet}
 
-<!-- `named: false` takes the radio out of the form, so a hidden copy of an option cannot uncheck the shown one. -->
+<!-- Once hydrated the choices are sent as hidden fields beside the chips, so the boxes carry no
+     name. Without JavaScript the checked boxes are the choices, those of the list on screen only:
+     the hidden list's copies (`named: false`) would send a subject unchecked on screen. -->
 {#snippet option(subject: SubjectOption, named = true)}
   <label class="pick">
     <input
-      type="radio"
-      name={named ? "subject" : undefined}
+      type="checkbox"
+      name={hydrated.current || !named ? undefined : "subject"}
       value={subject.key}
-      checked={chosen?.key === subject.key}
-      onchange={() => (chosen = subject)}
+      checked={chosenKeys.has(subject.key)}
+      onchange={(event) => toggle(subject, event.currentTarget.checked)}
     />
     {#if subject.type === "role"}
       <span class="inline-flex size-7 shrink-0 items-center justify-center"
@@ -74,7 +115,31 @@
 {/snippet}
 
 <fieldset class="subject-field m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
-  <legend class="mb-2 p-0 text-sm leading-none font-medium">{m.grants_subject()}</legend>
+  <legend class="mb-2 p-0 text-sm leading-none font-medium">
+    {m.grants_subject()}
+  </legend>
+  {#if hydrated.current && chosen.length > 0}
+    <ul class="flex flex-wrap gap-1.5" aria-label={m.grants_chosen_label()}>
+      {#each chosen as subject (subject.key)}
+        <li class="inline-flex max-w-full items-center gap-0.5 rounded-full border bg-muted py-0.5 pr-0.5 pl-2.5 text-xs">
+          <span class="truncate">{subject.label}</span>
+          <button
+            type="button"
+            class="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground"
+            aria-label={m.grants_unchoose({ name: subject.label })}
+            onclick={() => {
+              toggle(subject, false);
+              // The button goes with its chip: keep the focus in the picker.
+              input?.focus();
+            }}
+          >
+            <XIcon class="size-3.5" />
+          </button>
+          <input type="hidden" name="subject" value={subject.key} />
+        </li>
+      {/each}
+    </ul>
+  {/if}
   <div class="search">
     <button
       class="search-icon"
@@ -154,5 +219,7 @@
       </div>
     </div>
   </div>
-  {#if unlisted}<input type="hidden" name="subject" value={unlisted.key} />{/if}
+  {#if !hydrated.current}
+    {#each unlisted as subject (subject.key)}<input type="hidden" name="subject" value={subject.key} />{/each}
+  {/if}
 </fieldset>

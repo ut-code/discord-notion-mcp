@@ -54,3 +54,8 @@ export function formString(form: FormData, key: string): string {
   const value = form.get(key);
   return typeof value === "string" ? value.trim() : "";
 }
+
+/** Every non-empty string sent under `key` (checkboxes of one name). */
+export function formStrings(form: FormData, key: string): string[] {
+  return form.getAll(key).flatMap((value) => (typeof value === "string" && value.trim() ? [value.trim()] : []));
+}

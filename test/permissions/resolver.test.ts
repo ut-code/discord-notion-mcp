@@ -144,4 +144,25 @@ describe("GrantStore", () => {
     expect(await grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD })).toBe(true);
     expect(await grants.removeGrant({ permission: "discord:read", subjectType: "role", subjectId: ROLE_MOD })).toBe(false);
   });
+
+  test("createGrants creates all in one transaction, leaves existing grants as stored and returns those it created", async () => {
+    await grants.createGrant({ permission: "discord:read", subjectType: "user", subjectId: USER });
+    const created = await grants.createGrants([
+      { permission: "discord:read", subjectType: "user", subjectId: USER, createdBy: OWNER_ID },
+      { permission: "notion:read", subjectType: "user", subjectId: USER, createdBy: OWNER_ID },
+      { permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD, createdBy: OWNER_ID },
+    ]);
+    expect(created).toEqual([
+      { permission: "notion:read", subjectType: "user", subjectId: USER },
+      { permission: "notion:read", subjectType: "role", subjectId: ROLE_MOD },
+    ]);
+    const stored = await grants.listGrants();
+    expect(stored.find((grant) => grant.permission === "discord:read")?.createdBy).toBeNull();
+    expect(stored.find((grant) => grant.subjectId === ROLE_MOD)?.createdBy).toBe(OWNER_ID);
+
+    // A failing insert takes the whole batch back.
+    const broken = { permission: "admin", subjectType: "user", subjectId: null as unknown as string } as const;
+    expect(() => grants.createGrants([{ permission: "admin", subjectType: "role", subjectId: ROLE_MOD }, broken])).toThrow();
+    expect(await grants.listGrants()).toHaveLength(3);
+  });
 });

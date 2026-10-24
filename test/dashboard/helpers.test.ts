@@ -124,8 +124,12 @@ describe("admin formatting", () => {
   });
 
   test("grant submit label", () => {
-    expect(grantSubmitLabel("Notion 書き込み", "Mina")).toBe("Mina に Notion 書き込みを付与");
-    expect(grantSubmitLabel("Notion 書き込み", null)).toBe("付与する");
+    expect(grantSubmitLabel(["Mina"], ["Notion 編集"], 1)).toBe("Mina に Notion 編集を付与");
+    expect(grantSubmitLabel(["Mina"], ["Notion 編集"], 0)).toBe("Mina に Notion 編集を付与");
+    expect(grantSubmitLabel(["Mina", "@staff"], ["Notion 編集"], 2)).toBe("2 件を付与");
+    expect(grantSubmitLabel(["Mina"], ["Notion 閲覧", "Notion 編集"], 2)).toBe("2 件を付与");
+    expect(grantSubmitLabel(["Mina", "@staff"], ["Notion 編集"], 0)).toBe("付与する");
+    expect(grantSubmitLabel([], ["Notion 編集"], 0)).toBe("付与する");
   });
 });
 
