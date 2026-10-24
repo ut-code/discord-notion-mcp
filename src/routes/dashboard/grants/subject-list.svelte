@@ -55,7 +55,8 @@
       // Every grantable role is listed: a chosen role missing from the list was deleted (or became an integration's).
       chosen = chosen.flatMap((subject) => fresh.get(subject.key) ?? (subject.type === "role" ? [] : subject));
       const missing = chosen.filter((subject) => subject.type === "user" && !fresh.has(subject.key));
-      // One request at a time: each asks Discord.
+      // One request at a time: each asks Discord. A member that cannot be had keeps the state it was
+      // chosen with, so the notices may be out of date; the server checks every grant again anyway.
       void (async () => {
         for (const subject of missing) {
           const now = await lookup.fetchMember(subject.id);

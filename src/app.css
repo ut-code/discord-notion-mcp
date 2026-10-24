@@ -910,6 +910,31 @@
 			position-try-fallbacks: flip-block;
 		}
 	}
+	/* Native stand-in for the grant form's hint popover (grant-form.svelte). */
+	.native-hint {
+		width: 16rem;
+		padding: 12px;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--popover);
+		color: var(--popover-foreground);
+		font-size: 12px;
+		line-height: 1.6;
+		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+	}
+	.native-hint:popover-open {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	@supports (position-area: top) {
+		.native-hint {
+			margin: 0 0 4px;
+			inset: auto;
+			position-area: top;
+			position-try-fallbacks: flip-block;
+		}
+	}
 	.native-menu-item {
 		display: flex;
 		align-items: center;

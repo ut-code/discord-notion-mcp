@@ -76,19 +76,32 @@
   );
 </script>
 
+<!-- Before hydration (and without JavaScript) a native popover stands in, as in row-menu.svelte. -->
 {#snippet hint(name: string, id: string, lines: string[])}
-  <Popover.Root>
-    <Popover.Trigger
+  {@const triggerClass = "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"}
+  {#if hydrated.current}
+    <Popover.Root>
+      <Popover.Trigger type="button" class={triggerClass} aria-label={m.grants_permission_hint({ permission: name })}>
+        <InfoIcon class="size-3.5" />
+      </Popover.Trigger>
+      <Popover.Content side="top" class="flex w-64 flex-col gap-1.5 p-3 text-xs leading-relaxed">
+        {#each lines as line (line)}<p>{line}</p>{/each}
+      </Popover.Content>
+    </Popover.Root>
+  {:else}
+    <button
       type="button"
-      class="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-foreground"
+      class={triggerClass}
+      popovertarget={`${id}-popover`}
       aria-label={m.grants_permission_hint({ permission: name })}
+      style={`anchor-name:--${id}`}
     >
       <InfoIcon class="size-3.5" />
-    </Popover.Trigger>
-    <Popover.Content side="top" class="flex w-64 flex-col gap-1.5 p-3 text-xs leading-relaxed">
+    </button>
+    <div class="native-hint" id={`${id}-popover`} popover="auto" style={`position-anchor:--${id}`}>
       {#each lines as line (line)}<p>{line}</p>{/each}
-    </Popover.Content>
-  </Popover.Root>
+    </div>
+  {/if}
   <span {id} class="sr-only">{lines.join(" ")}</span>
 {/snippet}
 
