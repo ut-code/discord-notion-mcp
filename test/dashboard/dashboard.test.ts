@@ -328,6 +328,34 @@ describe("grants", () => {
     expect((await h.server.grants.listGrants()).some((grant) => grant.subjectId === READER)).toBe(false);
   });
 
+  test("the form sends each service's level apart; a permission another chosen one includes is not granted", async () => {
+    const levels = form({ discord: "discord:read", notion: "notion:write", subject: `user:${READER}` });
+    expect(await createGrants(deps, levels, owner)).toEqual({ kind: "ok", message: "2 件を付与しました。" });
+    const overlapping = form({ subject: `role:${ROLE_MOD}` });
+    for (const permission of ["notion:read", "notion:write", "admin"]) overlapping.append("permission", permission);
+    expect(await createGrants(deps, overlapping, owner)).toEqual({
+      kind: "ok",
+      message: "ロール「Moderator」に「管理者」を付与しました。",
+    });
+    const stored = (await h.server.grants.listGrants()).filter((grant) => grant.subjectId === READER || grant.subjectId === ROLE_MOD);
+    expect(stored.map((grant) => `${grant.subjectId}:${grant.permission}`).sort()).toEqual(
+      [`${READER}:discord:read`, `${READER}:notion:write`, `${ROLE_MOD}:admin`].sort(),
+    );
+    for (const grant of stored) await h.server.grants.removeGrant(grant);
+    expect(await createGrants(deps, form({ discord: "", notion: "", subject: `user:${READER}` }), owner)).toEqual({
+      kind: "error",
+      message: "権限を選んでください。",
+    });
+    expect(await createGrants(deps, form({ discord: "bogus", subject: `user:${READER}` }), owner)).toEqual({
+      kind: "error",
+      message: "不明な権限です。",
+    });
+    expect((await grantsPage(deps, params("discord=discord%3Aread&notion=notion%3Aread"))).form.chosenPermissions).toEqual([
+      "discord:read",
+      "notion:read",
+    ]);
+  });
+
   test("rejects invalid snowflakes, unknown permissions and integration roles", async () => {
     const before = (await h.server.grants.listGrants()).length;
     expect((await createGrants(deps, form({ permission: "notion:read", subject: "user:12ab" }), owner)).message).toContain(
@@ -460,12 +488,6 @@ describe("grants", () => {
     const search = await grantsPage(deps, params("q=ina&permission=notion%3Awrite"));
     expect(search.form).toMatchObject({ chosenPermissions: ["notion:write"], query: "ina" });
     expect(search.form.results.map((member) => member.id)).toEqual([MEMBER]);
-    expect(Object.fromEntries(search.form.permissions.map((option) => [option.value, option.gives]))).toEqual({
-      "discord:read": [],
-      "notion:read": [],
-      "notion:write": ["notion:read"],
-      admin: ["discord:read", "notion:read", "notion:write"],
-    });
     expect(search.form.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
       "ページの閲覧に加えて、作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
     );

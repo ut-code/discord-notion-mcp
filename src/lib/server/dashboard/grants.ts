@@ -72,8 +72,7 @@ export interface SubjectOption extends GrantState {
 }
 
 export interface GrantFormView {
-  /** `gives`: the other permissions it includes, so checking them together adds nothing. */
-  permissions: Array<{ value: Permission; label: string; hint: string; gives: Permission[] }>;
+  permissions: Array<{ value: Permission; label: string; hint: string }>;
   /** Checked when the page opens: the URL's `permission`s, else the filter tab's, else Discord 閲覧. */
   chosenPermissions: Permission[];
   /** Every grantable role, highest first. */
@@ -362,7 +361,9 @@ interface FormLookups {
 
 function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission | null, lookups: FormLookups): GrantFormView {
   const { grants, query, users, roster, search } = lookups;
-  const permissionParams = [...new Set(params.getAll("permission").filter(isPermission))];
+  const permissionParams = [...new Set(permissionValues(params.getAll("permission"), params.get("discord"), params.get("notion")))].filter(
+    isPermission,
+  );
   const chosenPermissions = permissionParams.length > 0 ? permissionParams : [filter ?? "discord:read"];
   const roles = grantableRoles(guild).map((role) => roleOption(guild, grants, role));
   const members = roster.members.slice(0, MEMBER_LIST_LIMIT).map((user) => memberOption(guild, grants, user));
@@ -375,12 +376,7 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
   });
 
   return {
-    permissions: PERMISSIONS.map((value) => ({
-      value,
-      label: PERMISSION_LABELS[value],
-      hint: PERMISSION_HINTS[value],
-      gives: PERMISSIONS.filter((other) => other !== value && givesPermission(value, other)),
-    })),
+    permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
     chosenPermissions,
     roles,
     members,
@@ -395,6 +391,14 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
 
 type GrantForm = { permission: Permission; subjectType: SubjectType; subjectId: string; label: string; role?: RoleInfo };
 type ParsedGrantForm = { ok: true; form: GrantForm } | { ok: false; message: string };
+
+/**
+ * The permissions a grant form sends: the 管理者 checkbox as `permission` (several when posted
+ * by other means), and each service's level as `discord` and `notion` ("" for none).
+ */
+function permissionValues(permission: string[], discord: string | null, notion: string | null): string[] {
+  return [...permission, discord ?? "", notion ?? ""].map((value) => value.trim()).filter((value) => value !== "");
+}
 
 /** The valid subject keys among `keys`, each once. */
 function uniqueSubjects(keys: string[]): Array<{ type: SubjectType; id: string }> {
@@ -431,10 +435,12 @@ async function parseGrantForm(deps: DashboardDeps, body: FormData): Promise<Pars
  */
 export async function createGrants(deps: DashboardDeps, body: FormData, actor: Viewer): Promise<ActionResult> {
   if (!actor.isAdmin) return ADMIN_ONLY;
-  const permissionValues = [...new Set(formStrings(body, "permission"))];
-  if (permissionValues.length === 0) return { kind: "error", message: m.grants_choose_permission() };
-  const permissions = permissionValues.filter(isPermission);
-  if (permissions.length < permissionValues.length) return { kind: "error", message: m.grants_unknown_permission() };
+  const values = [...new Set(permissionValues(formStrings(body, "permission"), formString(body, "discord"), formString(body, "notion")))];
+  if (values.length === 0) return { kind: "error", message: m.grants_choose_permission() };
+  const chosen = values.filter(isPermission);
+  if (chosen.length < values.length) return { kind: "error", message: m.grants_unknown_permission() };
+  // A permission another chosen one includes adds nothing (Notion 閲覧 with Notion 編集, anything with 管理者).
+  const permissions = chosen.filter((permission) => !chosen.some((other) => other !== permission && givesPermission(other, permission)));
   const subjects: Array<{ type: SubjectType; id: string }> = [];
   for (const key of new Set(formStrings(body, "subject"))) {
     const subject = parseSubjectKey(key);
