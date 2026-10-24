@@ -112,7 +112,6 @@
   "stats_last_used": "最終利用",
   "stats_tools": "ツール",
   "tools_title": "ツール",
-  "tools_lead": "MCP クライアントの AI に渡しているツールです。説明と引数は、AI が受け取る文面そのままです。",
   "tools_unavailable": "権限なし",
   "tools_unavailable_note": "この権限がないため、あなたの AI には渡されません。",
   "tools_parameters": "引数",
