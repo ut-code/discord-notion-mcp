@@ -42,10 +42,23 @@
   // reason it adds nothing.
   const fresh = $derived(pairs.filter(({ subject, permission }) => !subject.granted.includes(permission)).length);
   const tooMany = $derived(pairs.length > MAX_GRANTS_PER_SUBMIT);
+  // A checked permission another checked one includes (Notion 閲覧 with Notion 編集, anything with
+  // 管理者), named by the broadest; such a permission gets this line instead of one per subject.
+  const included = $derived(
+    form.permissions.flatMap(({ value, label }) => {
+      const by = form.permissions
+        .filter((other) => other.value !== value && permissions.includes(other.value) && other.gives.includes(value))
+        .sort((a, b) => b.gives.length - a.gives.length)[0];
+      if (!by || !permissions.includes(value)) return [];
+      const notice = m.grants_notice_redundant({ because: m.grants_redundant_included_because({ permission: by.label }) });
+      return [{ key: `included ${value}`, permission: value, text: m.grants_notice_permission({ permission: label, notice }) }];
+    }),
+  );
   // One line per subject and reason, naming its permissions: "Mina の Discord 閲覧・Notion 閲覧：…".
   const notices = $derived.by(() => {
     const lines: Array<{ key: string; subject: string; permissions: string[]; notice: string }> = [];
     for (const { subject, permission } of pairs) {
+      if (included.some((line) => line.permission === permission)) continue;
       const notice = subject.granted.includes(permission) ? m.grants_notice_granted() : subject.notices[permission];
       if (!notice) continue;
       const key = `${subject.key} ${notice}`;
@@ -124,9 +137,9 @@
       {/if}
     </div>
     <div role="status" class="empty:hidden">
-      {#if notices.length > 0 && !tooMany}
+      {#if included.length + notices.length > 0 && !tooMany}
         <ul class="flex flex-col gap-1">
-          {#each notices as notice (notice.key)}
+          {#each [...included, ...notices] as notice (notice.key)}
             <li class="flex items-start gap-1.5 text-note text-warn-text">
               <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />{notice.text}
             </li>

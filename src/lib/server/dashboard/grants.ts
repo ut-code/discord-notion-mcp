@@ -3,7 +3,7 @@ import { formatNumber } from "../../locale";
 import { MAX_QUERY_LENGTH } from "../../name-match";
 import { m } from "../../paraglide/messages.js";
 import { DASHBOARD_PATH } from "../../paths";
-import { isPermission, PERMISSIONS, type Permission, type SubjectType } from "../permissions/permissions";
+import { givesPermission, isPermission, PERMISSIONS, type Permission, type SubjectType } from "../permissions/permissions";
 import type { GuildInfo, RoleInfo } from "../discord/types";
 import { errorMessage } from "../lib/errors";
 import { isSnowflake } from "../lib/snowflake";
@@ -72,7 +72,8 @@ export interface SubjectOption extends GrantState {
 }
 
 export interface GrantFormView {
-  permissions: Array<{ value: Permission; label: string; hint: string }>;
+  /** `gives`: the other permissions it includes, so checking them together adds nothing. */
+  permissions: Array<{ value: Permission; label: string; hint: string; gives: Permission[] }>;
   /** Checked when the page opens: the URL's `permission`s, else the filter tab's, else Discord 閲覧. */
   chosenPermissions: Permission[];
   /** Every grantable role, highest first. */
@@ -374,7 +375,12 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
   });
 
   return {
-    permissions: PERMISSIONS.map((value) => ({ value, label: PERMISSION_LABELS[value], hint: PERMISSION_HINTS[value] })),
+    permissions: PERMISSIONS.map((value) => ({
+      value,
+      label: PERMISSION_LABELS[value],
+      hint: PERMISSION_HINTS[value],
+      gives: PERMISSIONS.filter((other) => other !== value && givesPermission(value, other)),
+    })),
     chosenPermissions,
     roles,
     members,

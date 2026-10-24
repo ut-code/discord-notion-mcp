@@ -203,6 +203,7 @@
   "grants_notice_granted": "既に付与されています。",
   "grants_notice_redundant": "{because}、付与しても効果がありません。",
   "grants_notice_pair": "{subject} の {permission}：{notice}",
+  "grants_notice_permission": "{permission}：{notice}",
   "grants_already_removed": "この付与は既に削除されています。",
   "grants_removed": "{subject} から「{permission}」を削除しました。",
   "history_title": "履歴",

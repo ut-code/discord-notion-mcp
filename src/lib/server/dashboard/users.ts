@@ -124,7 +124,9 @@ function userTableRow(
     permissions: permissionBadges(row),
     lastUsed: formatShortJst(lastUsed),
     revoked: wasRevokedSinceLogin(row.user) ? m.users_revoked_at({ time: formatShortJst(row.user.revokedAt) }) : null,
-    grantHref: discordUserId && viewer.isAdmin ? `${GRANTS_PATH}?subject=${encodeURIComponent(`user:${discordUserId}`)}` : null,
+    // Admins hold every permission already, so the form is not offered for them.
+    grantHref:
+      discordUserId && viewer.isAdmin && !row.isAdmin ? `${GRANTS_PATH}?subject=${encodeURIComponent(`user:${discordUserId}`)}` : null,
     historyHref: !discordUserId
       ? null
       : viewer.isAdmin

@@ -460,6 +460,12 @@ describe("grants", () => {
     const search = await grantsPage(deps, params("q=ina&permission=notion%3Awrite"));
     expect(search.form).toMatchObject({ chosenPermissions: ["notion:write"], query: "ina" });
     expect(search.form.results.map((member) => member.id)).toEqual([MEMBER]);
+    expect(Object.fromEntries(search.form.permissions.map((option) => [option.value, option.gives]))).toEqual({
+      "discord:read": [],
+      "notion:read": [],
+      "notion:write": ["notion:read"],
+      admin: ["discord:read", "notion:read", "notion:write"],
+    });
     expect(search.form.permissions.find((option) => option.value === "notion:write")?.hint).toBe(
       "ページの閲覧に加えて、作成・編集・アーカイブができます。すべての操作は記録され、あとから取り消せます。",
     );
@@ -910,6 +916,10 @@ describe("users", () => {
     const row = await userRow(member.userId);
     expect(row.grantHref).toBe(`/dashboard/grants?subject=user%3A${MEMBER}`);
     expect(row.historyHref).toBe(`/dashboard/calls?permission=discord%3Aread&user=${MEMBER}`);
+    // Admins hold every permission already.
+    const ownerRow = await userRow(ownerUserId);
+    expect(ownerRow.grantHref).toBeNull();
+    expect(ownerRow.historyHref).not.toBeNull();
   });
 
   test("search filters by name, @username and id", async () => {
