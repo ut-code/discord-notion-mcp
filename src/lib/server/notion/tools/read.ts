@@ -5,9 +5,11 @@ import {
   isNotionMiss,
   notionFailure,
   NotionRequestError,
+  type NotionComment,
   type NotionDataSource,
   type NotionPage,
   type NotionUser,
+  type PageMarkdown,
   type SearchResult,
 } from "../client/api";
 import { ToolError } from "../../lib/errors";
@@ -26,6 +28,33 @@ const MAX_USERS = 20;
 const COMMENT_PAGE_SIZE = 100;
 /** Comments listed per call at most, in pages of COMMENT_PAGE_SIZE. */
 const MAX_COMMENTS = 300;
+/**
+ * Blocks whose comments one call lists at most. Each takes a request of its own, one after another,
+ * and Notion allows about three requests a second, so this keeps a call within several seconds.
+ */
+const MAX_COMMENTED_BLOCKS = 20;
+/** Notion's markdown marks commented text and blocks with `discussion://<page>/<block>/<discussion>` URLs. */
+const DISCUSSION_URL = /discussion:\/\/[^/",\s]+\/([0-9a-f-]+)\//gi;
+/** Inline comments wrap the commented text: `<span discussion-urls="…">text</span>` (other attributes may come along). */
+const COMMENTED_SPAN = /<span [^>]*?discussion-urls="([^"]*)"[^>]*>([^<]*)<\/span>/g;
+/** Longest commented text quoted next to a block id. */
+const MAX_QUOTE = 40;
+
+/** Blocks with comments, in page order, with the first text commented on in each (when inline). */
+function commentedBlocks(markdown: string): Array<{ id: string; text: string | null }> {
+  // Ids in the dashed lowercase form of requireNotionId, so the page's own id is recognized.
+  const blockIds = (text: string) => [...text.matchAll(DISCUSSION_URL)].flatMap(([, id = ""]) => parseBareNotionId(id) ?? []);
+  const quotes = new Map<string, string>();
+  for (const [, urls = "", text = ""] of markdown.matchAll(COMMENTED_SPAN)) {
+    // By code point, so an emoji is never cut in half.
+    const chars = [...text.trim()];
+    const quote = chars.length > MAX_QUOTE ? `${chars.slice(0, MAX_QUOTE).join("")}…` : chars.join("");
+    for (const id of blockIds(urls)) {
+      if (quote && !quotes.has(id)) quotes.set(id, quote);
+    }
+  }
+  return [...new Set(blockIds(markdown))].map((id) => ({ id, text: quotes.get(id) ?? null }));
+}
 
 function parentLabel(parent: SearchResult["parent"]): string {
   switch (parent.type) {
@@ -282,34 +311,100 @@ export function createReadTools(deps: NotionToolDeps): {
     }),
   });
 
+  /** Up to `budget` comments of one page or block, and whether more exist. */
+  async function listComments(blockId: string, budget: number): Promise<{ comments: NotionComment[]; more: boolean }> {
+    const comments: NotionComment[] = [];
+    let cursor: string | undefined;
+    while (comments.length < budget) {
+      const result = await api.listComments(blockId, {
+        startCursor: cursor,
+        pageSize: Math.min(COMMENT_PAGE_SIZE, budget - comments.length),
+      });
+      comments.push(...result.results);
+      cursor = result.nextCursor ?? undefined;
+      if (cursor === undefined) return { comments, more: false };
+    }
+    return { comments, more: true };
+  }
+
+  const commentLine = (comment: NotionComment) => {
+    const author = comment.display_name?.resolved_name ?? comment.created_by.id;
+    const kind = comment.display_name?.type ?? "user";
+    return `- [${comment.created_time}] ${author} (${kind}): ${plainText(comment.rich_text)}`;
+  };
+
   const getComments = defineTool({
     name: "notion_get_comments",
     title: "Get Notion comments",
-    description: "List the unresolved comments on a page or block (author type, time, text).",
+    description:
+      "List the unresolved comments on a page or block (author type, time, text). Comments on the page's text and blocks (inline comments) are left out unless include_all_blocks is set.",
     permission: "notion:read",
-    inputSchema: z.object({ target: idOrUrl("Page or block") }),
+    inputSchema: z.object({
+      target: idOrUrl("Page or block"),
+      include_all_blocks: z
+        .boolean()
+        .default(false)
+        .describe(
+          `Also list the comments on the page's blocks, such as inline comments on its text (target must be a page; one more request per commented block, up to ${MAX_COMMENTED_BLOCKS} blocks)`,
+        ),
+    }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withNotionErrors(async (args) => {
       const blockId = requireNotionId(args.target, "target", { allowBlockAnchor: true });
-      const comments = [];
-      let cursor: string | undefined;
-      let more = false;
-      while (comments.length < MAX_COMMENTS) {
-        const pageSize = Math.min(COMMENT_PAGE_SIZE, MAX_COMMENTS - comments.length);
-        const result = await api.listComments(blockId, { startCursor: cursor, pageSize });
-        comments.push(...result.results);
-        cursor = result.nextCursor ?? undefined;
-        more = cursor !== undefined;
-        if (!more) break;
+      const own = await listComments(blockId, MAX_COMMENTS);
+      if (!args.include_all_blocks) {
+        if (own.comments.length === 0) return "No comments.";
+        const lines = own.comments.map(commentLine);
+        if (own.more) lines.push(`(More comments exist; only the first ${own.comments.length} are shown.)`);
+        return [`${own.comments.length} comment(s):`, ...lines].join("\n");
       }
-      if (comments.length === 0) return "No comments.";
-      const lines = comments.map((comment) => {
-        const author = comment.display_name?.resolved_name ?? comment.created_by.id;
-        const kind = comment.display_name?.type ?? "user";
-        return `- [${comment.created_time}] ${author} (${kind}): ${plainText(comment.rich_text)}`;
-      });
-      if (more) lines.push(`(More comments exist; only the first ${comments.length} are shown.)`);
-      return [`${comments.length} comment(s):`, ...lines].join("\n");
+
+      let page: PageMarkdown;
+      try {
+        page = await api.retrievePageMarkdown(blockId);
+      } catch (error) {
+        if (isNotionMiss(error)) {
+          throw new ToolError(
+            "include_all_blocks needs a page whose content the integration can read; this target's content could not be read.",
+          );
+        }
+        throw error;
+      }
+      const sections: Array<{ heading: string; comments: NotionComment[] }> = [{ heading: "On the page:", comments: own.comments }];
+      let total = own.comments.length;
+      let more = own.more;
+      let asked = 0;
+      let unreadable = 0;
+      const blocks = commentedBlocks(page.markdown).filter((block) => block.id !== blockId);
+      for (const block of blocks.slice(0, MAX_COMMENTED_BLOCKS)) {
+        if (total >= MAX_COMMENTS) break;
+        asked++;
+        let listed: { comments: NotionComment[]; more: boolean };
+        try {
+          listed = await listComments(block.id, MAX_COMMENTS - total);
+        } catch (error) {
+          // One block out of reach (e.g. synced from a page the integration cannot see) does not hide the rest.
+          if (!isNotionMiss(error)) throw error;
+          unreadable++;
+          continue;
+        }
+        total += listed.comments.length;
+        more ||= listed.more;
+        if (listed.comments.length === 0) continue;
+        sections.push({
+          heading: `On block ${block.id}${block.text ? ` (${JSON.stringify(block.text)})` : ""}:`,
+          comments: listed.comments,
+        });
+      }
+      const lines = total === 0 ? ["No comments."] : [`${total} comment(s):`];
+      for (const section of sections) {
+        if (section.comments.length > 0) lines.push(section.heading, ...section.comments.map(commentLine));
+      }
+      if (more) lines.push(`(More comments exist; only the first ${total} are shown.)`);
+      if (blocks.length > asked) lines.push(`(Comments on ${blocks.length - asked} more commented blocks are not listed.)`);
+      if (unreadable > 0) lines.push(`(${unreadable} commented blocks could not be read.)`);
+      if (page.truncated) lines.push("(The page is too long to read whole: comments further down are not listed.)");
+      return lines.join("\n");
     }),
   });
 

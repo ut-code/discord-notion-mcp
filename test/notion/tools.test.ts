@@ -138,6 +138,132 @@ describe("Notion tools", () => {
     expect(await call("notion_get_comments", { target: PAGE_ID })).not.toContain("More comments exist");
   });
 
+  test("notion_get_comments lists the comments on the page's blocks only with include_all_blocks", async () => {
+    const BLOCK_1 = "00000000-0000-4000-8000-0000000000e1";
+    const BLOCK_2 = "00000000-0000-4000-8000-0000000000e2";
+    const PAGE = "00000000-0000-4000-8000-0000000000e0";
+    const page = api.addPage({
+      id: PAGE,
+      title: "Spec",
+      markdown: [
+        `Intro <span discussion-urls="discussion://${PAGE}/${BLOCK_1}/d1">commented text</span>`,
+        `Second{discussion-urls="discussion://${PAGE}/${BLOCK_2}/d2,discussion://${PAGE}/${BLOCK_2}/d3"}`,
+      ].join("\n"),
+    });
+    const comment = (text: string) =>
+      ({
+        id: text,
+        created_time: "2026-10-24T00:00:00.000Z",
+        created_by: { id: "notion-user", object: "user" },
+        rich_text: [{ type: "text", plain_text: text, text: { content: text } }],
+      }) as unknown as NotionComment;
+    api.listedComments.set(page.id, [comment("on the page")]);
+    api.listedComments.set(BLOCK_1, [comment("inline")]);
+    api.listedComments.set(BLOCK_2, [comment("on a block")]);
+
+    expect(await call("notion_get_comments", { target: page.id })).toBe(
+      "1 comment(s):\n- [2026-10-24T00:00:00.000Z] notion-user (user): on the page",
+    );
+    expect(await call("notion_get_comments", { target: page.id, include_all_blocks: true })).toBe(
+      [
+        "3 comment(s):",
+        "On the page:",
+        "- [2026-10-24T00:00:00.000Z] notion-user (user): on the page",
+        `On block ${BLOCK_1} ("commented text"):`,
+        "- [2026-10-24T00:00:00.000Z] notion-user (user): inline",
+        `On block ${BLOCK_2}:`,
+        "- [2026-10-24T00:00:00.000Z] notion-user (user): on a block",
+      ].join("\n"),
+    );
+    // One request per commented block, however many discussions it has.
+    expect(api.callsOf("listComments")).toHaveLength(4);
+    await expect(call("notion_get_comments", { target: BLOCK_1, include_all_blocks: true })).rejects.toThrow(
+      "include_all_blocks needs a page whose content the integration can read",
+    );
+  });
+
+  test("notion_get_comments with include_all_blocks shares the comment limit and lists up to 20 blocks", async () => {
+    const PAGE = "00000000-0000-4000-8000-0000000000f0";
+    const blockId = (index: number) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+    const compact = (id: string) => id.replace(/-/g, "").toUpperCase();
+    const page = api.addPage({
+      id: PAGE,
+      title: "Busy",
+      // The page's own discussion and a repeated block, written compact: neither is listed twice.
+      markdown: [
+        `{discussion-urls="discussion://${compact(PAGE)}/${compact(PAGE)}/d0"}`,
+        ...Array.from({ length: 25 }, (_, index) => `Line{discussion-urls="discussion://${PAGE}/${blockId(index)}/d${index}"}`),
+        `Again{discussion-urls="discussion://${PAGE}/${compact(blockId(0))}/dx"}`,
+      ].join("\n"),
+    });
+    const comments = (prefix: string, count: number) =>
+      Array.from(
+        { length: count },
+        (_, index) =>
+          ({
+            id: `${prefix}-${index}`,
+            created_time: "2026-10-24T00:00:00.000Z",
+            created_by: { id: "notion-user", object: "user" },
+            rich_text: [{ type: "text", plain_text: `${prefix} ${index}`, text: { content: `${prefix} ${index}` } }],
+          }) as unknown as NotionComment,
+      );
+    api.listedComments.set(page.id, comments("page", 1));
+    for (let index = 0; index < 25; index++) api.listedComments.set(blockId(index), comments(`block${index}`, 1));
+
+    const text = await call("notion_get_comments", { target: page.id, include_all_blocks: true });
+    expect(text.split("\n")[0]).toBe("21 comment(s):");
+    expect(text).toContain("block19 0");
+    expect(text).not.toContain("block20 0");
+    expect(text).toContain("(Comments on 5 more commented blocks are not listed.)");
+    expect(text).not.toContain("More comments exist");
+    expect(api.callsOf("listComments")).toHaveLength(21);
+
+    // The page's own comments use up the limit: no block is asked about.
+    api.listedComments.set(page.id, comments("page", 300));
+    const full = await call("notion_get_comments", { target: page.id, include_all_blocks: true });
+    expect(full.split("\n")[0]).toBe("300 comment(s):");
+    expect(full).toContain("(Comments on 25 more commented blocks are not listed.)");
+    expect(api.callsOf("listComments")).toHaveLength(21 + 3);
+  });
+
+  test("notion_get_comments with include_all_blocks skips blocks it cannot read and says what it left out", async () => {
+    const PAGE = "00000000-0000-4000-8000-0000000000d0";
+    const HIDDEN = "00000000-0000-4000-8000-0000000000d1";
+    const SHOWN = "00000000-0000-4000-8000-0000000000d2";
+    const quote = "a long sentence that someone commented on, longer than forty characters";
+    const page = api.addPage({
+      id: PAGE,
+      title: "Synced",
+      markdown: [
+        `{discussion-urls="discussion://${PAGE}/${HIDDEN}/d1"}`,
+        `<span color="red" discussion-urls="discussion://${PAGE}/${SHOWN}/d2">${quote}</span>`,
+      ].join("\n"),
+    });
+    api.truncated.set(page.id, ["b9"]);
+    api.listedComments.set(SHOWN, [
+      {
+        id: "c1",
+        created_time: "2026-10-24T00:00:00.000Z",
+        created_by: { id: "notion-user", object: "user" },
+        rich_text: [{ type: "text", plain_text: "inline", text: { content: "inline" } }],
+      } as unknown as NotionComment,
+    ]);
+    const list = api.listComments.bind(api);
+    api.listComments = async (blockId, query) => {
+      if (blockId === HIDDEN) throw new NotionRequestError("Could not find block", 404, "object_not_found");
+      return list(blockId, query);
+    };
+    expect(await call("notion_get_comments", { target: page.id, include_all_blocks: true })).toBe(
+      [
+        "1 comment(s):",
+        `On block ${SHOWN} ("${quote.slice(0, 40)}…"):`,
+        "- [2026-10-24T00:00:00.000Z] notion-user (user): inline",
+        "(1 commented blocks could not be read.)",
+        "(The page is too long to read whole: comments further down are not listed.)",
+      ].join("\n"),
+    );
+  });
+
   test("notion_get_database and notion_query_database", async () => {
     const ds = api.addDataSource({
       title: "Tasks",
