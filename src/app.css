@@ -725,7 +725,13 @@
 		background: var(--subtle);
 	}
 
-	/* Link tabs and the segmented control of the grant form (work without JavaScript). */
+	/* Link tabs and the segmented control of the grant form (work without JavaScript). Their
+	   labels and counts sit on the muted ground, where the muted text color falls short of a 4.5:1
+	   contrast in the light theme, so they take a shade closer to the foreground. */
+	.link-tabs,
+	.segmented {
+		--tab-foreground: color-mix(in oklch, var(--muted-foreground) 75%, var(--foreground));
+	}
 	.link-tabs {
 		display: inline-flex;
 		flex-wrap: wrap;
@@ -746,7 +752,7 @@
 		font-size: var(--text-note);
 		font-weight: 500;
 		line-height: 1;
-		color: var(--muted-foreground);
+		color: var(--tab-foreground, var(--muted-foreground));
 		text-decoration: none;
 		cursor: pointer;
 	}
@@ -760,7 +766,7 @@
 			padding: 0 8px;
 		}
 	}
-	/* Count beside a tab label: a light pill that stays quiet on the active tab too. */
+	/* Count beside a tab label: a light pill, in the same color on the active tab too. */
 	.tab-count {
 		min-width: 18px;
 		padding: 2px 5px;
@@ -769,7 +775,7 @@
 		font-size: 11px;
 		font-variant-numeric: tabular-nums;
 		text-align: center;
-		color: var(--muted-foreground);
+		color: var(--tab-foreground, var(--muted-foreground));
 	}
 	.link-tab[aria-current="page"],
 	.segmented input:checked + .link-tab {

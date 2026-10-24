@@ -33,11 +33,12 @@ const notFound = () => Response.json({ error: "not_found" }, { status: 404 });
  * Applied to every response, UI included: no framing, no referrer leaving this origin
  * (same-origin requests keep a real Origin header, which "no-referrer" would turn into
  * `Origin: null` and break CSRF checks), no MIME sniffing, no caching unless the handler chose
- * a policy, and, served over HTTPS, HTTPS only from then on (not for subdomains, which other
- * services may share). Pages carry SvelteKit's full policy (`csp` of sveltekit() in
- * vite.config.ts, which includes frame-ancestors); every other response gets the
- * frame-ancestors policy here. Static files (`_app/*`) are served by adapter-node before
- * any hook and go without these headers.
+ * a policy, kept out of search engines (the header also covers the JSON endpoints, which no
+ * `<meta name="robots">` can; robots.txt must not block them, or crawlers never see it), and,
+ * served over HTTPS, HTTPS only from then on (not for subdomains, which other services may
+ * share). Pages carry SvelteKit's full policy (`csp` of sveltekit() in vite.config.ts, which
+ * includes frame-ancestors); every other response gets the frame-ancestors policy here. Static
+ * files (`_app/*`) are served by adapter-node before any hook and go without these headers.
  */
 export function withSecurityHeaders(response: Response, https: boolean): Response {
   let target = response;
@@ -53,6 +54,7 @@ export function withSecurityHeaders(response: Response, https: boolean): Respons
   if (!headers.has("Content-Security-Policy")) headers.set("Content-Security-Policy", "frame-ancestors 'none'");
   headers.set("Referrer-Policy", "same-origin");
   headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("X-Robots-Tag", "noindex");
   if (!headers.has("Cache-Control")) headers.set("Cache-Control", "no-store");
   if (https) headers.set("Strict-Transport-Security", "max-age=31536000");
   return target;

@@ -109,9 +109,10 @@ describe("http handler", () => {
 });
 
 describe("security headers", () => {
-  test("no MIME sniffing; HTTPS only from then on when served over HTTPS, its subdomains left alone", () => {
+  test("no MIME sniffing, no search indexing; HTTPS only from then on when served over HTTPS, its subdomains left alone", () => {
     const plain = withSecurityHeaders(new Response("ok"), false);
     expect(plain.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(plain.headers.get("x-robots-tag")).toBe("noindex");
     expect(plain.headers.has("strict-transport-security")).toBe(false);
     expect(withSecurityHeaders(new Response("ok"), true).headers.get("strict-transport-security")).toBe("max-age=31536000");
   });
