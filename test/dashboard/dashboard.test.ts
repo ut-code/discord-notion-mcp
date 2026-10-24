@@ -322,6 +322,26 @@ describe("grants", () => {
     expect(data.form?.roles.map((role) => role.label)).toEqual(["@Staff", "@Moderator", "@everyone"]);
   });
 
+  test("the owner row comes from the member list, without a member request of its own", async () => {
+    const asked: string[] = [];
+    const fetchMember = h.discord.fetchMember.bind(h.discord);
+    h.discord.fetchMember = async (userId) => {
+      asked.push(userId);
+      return fetchMember(userId);
+    };
+    try {
+      // Fresh caches, wired as composeServer does: one roster for the page and the subject lookups.
+      const directory = new CachedGuildDirectory(h.discord);
+      const members = new MemberRoster(h.discord);
+      const subjects = new SubjectResolver(directory, h.discord, members, () => {});
+      const page = await grantsPage({ ...deps, directory, members, subjects }, params());
+      expect(page.rows[1]).toMatchObject({ subject: { name: "The Owner" }, locked: "サーバーオーナーは常に管理者です" });
+      expect(asked).not.toContain(OWNER_ID);
+    } finally {
+      h.discord.fetchMember = fetchMember;
+    }
+  });
+
   test("implicit admins are listed as locked rows under すべて and 管理者", async () => {
     const all = await grantsPage(deps, params());
     expect(all.rows[0]).toMatchObject({

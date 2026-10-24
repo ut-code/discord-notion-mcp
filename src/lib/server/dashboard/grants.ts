@@ -321,12 +321,14 @@ export async function grantsPage(deps: DashboardDeps, params: URLSearchParams): 
   const selectedUserId = selected?.type === "user" ? selected.id : null;
 
   const userIds = grants.flatMap((grant) => (grant.subjectType === "user" ? [grant.subjectId] : []));
-  const [users, owner, roster, search] = await Promise.all([
-    deps.subjects.resolveUsers([...userIds, ...(selectedUserId ? [selectedUserId] : [])]),
-    deps.subjects.resolveUser(guild.ownerId),
+  // The owner is looked up with everyone else, so from the member list when it is available.
+  const [users, roster, search] = await Promise.all([
+    deps.subjects.resolveUsers([guild.ownerId, ...userIds, ...(selectedUserId ? [selectedUserId] : [])]),
     listMembers(deps),
     query ? searchMembers(deps, query) : Promise.resolve({ members: [], error: null }),
   ]);
+  // resolveUsers answers every id it is given; the fallback only satisfies the type.
+  const owner = users.get(guild.ownerId) ?? (await deps.subjects.resolveUser(guild.ownerId));
 
   const allRows = buildGrantRows(guild, grants, users, owner);
   const visible = filter ? allRows.filter((row) => row.permission === filter) : allRows;
