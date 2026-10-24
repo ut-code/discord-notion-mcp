@@ -53,10 +53,19 @@ describe("initialOf", () => {
 describe("Discord avatars", () => {
   const hash = "0123456789abcdef0123456789abcdef";
 
+  const user = (avatar: string | null, discriminator = "0") => ({ id: "80351110224678912", avatar, discriminator });
+
   test("prefers the server avatar and falls back to the user avatar", () => {
-    expect(memberAvatarUrl("1", "2", `a_${hash}`, hash)).toBe(`https://cdn.discordapp.com/guilds/1/users/2/avatars/a_${hash}.png?size=64`);
-    expect(memberAvatarUrl("1", "2", null, hash)).toBe(`https://cdn.discordapp.com/avatars/2/${hash}.png?size=64`);
-    expect(memberAvatarUrl("1", "2", null, null)).toBeNull();
+    expect(memberAvatarUrl("1", user(hash), `a_${hash}`)).toBe(
+      `https://cdn.discordapp.com/guilds/1/users/80351110224678912/avatars/a_${hash}.png?size=64`,
+    );
+    expect(memberAvatarUrl("1", user(hash), null)).toBe(`https://cdn.discordapp.com/avatars/80351110224678912/${hash}.png?size=64`);
+  });
+
+  test("without an avatar it is Discord's default one, picked by id (or by a legacy discriminator)", () => {
+    // (80351110224678912 >> 22) % 6 = 5
+    expect(memberAvatarUrl("1", user(null), null)).toBe("https://cdn.discordapp.com/embed/avatars/5.png");
+    expect(userAvatarUrl(user(null, "1337"))).toBe("https://cdn.discordapp.com/embed/avatars/2.png");
   });
 
   test("server icons are static PNGs at 128px", () => {
@@ -66,8 +75,8 @@ describe("Discord avatars", () => {
 
   test("ignores malformed hashes", () => {
     expect(guildIconUrl("1", "../../evil")).toBeNull();
-    expect(userAvatarUrl("2", "../../evil")).toBeNull();
-    expect(userAvatarUrl("2", "")).toBeNull();
+    expect(userAvatarUrl(user("../../evil"))).toBe("https://cdn.discordapp.com/embed/avatars/5.png");
+    expect(userAvatarUrl(user(""))).toBe("https://cdn.discordapp.com/embed/avatars/5.png");
   });
 });
 

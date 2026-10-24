@@ -86,7 +86,7 @@ function toMemberInfo(member: APIGuildMember, guildId: string, userId = member.u
     nick: member.nick ?? null,
     username: member.user.username,
     globalName: member.user.global_name ?? null,
-    avatarUrl: memberAvatarUrl(guildId, userId, member.avatar, member.user.avatar),
+    avatarUrl: memberAvatarUrl(guildId, { ...member.user, id: userId }, member.avatar),
   };
 }
 
@@ -234,7 +234,7 @@ export class RestDiscordApi implements DiscordApi {
   async fetchUser(userId: string): Promise<UserInfo | null> {
     try {
       const user = await this.get<APIUser>(Routes.user(userId));
-      return { id: user.id, username: user.username, globalName: user.global_name ?? null, avatarUrl: userAvatarUrl(user.id, user.avatar) };
+      return { id: user.id, username: user.username, globalName: user.global_name ?? null, avatarUrl: userAvatarUrl(user) };
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
