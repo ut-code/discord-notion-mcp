@@ -6,6 +6,7 @@ import { FakeNotionApi } from "./fakes/notion";
 import { composeServer } from "./compose";
 import { loadConfig } from "./config";
 import { openDatabase } from "./db/client";
+import { userAvatarUrl } from "./discord/avatar";
 import { ADMINISTRATOR, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "./discord/permissions";
 import type { MemberInfo } from "./discord/types";
 import { displayName } from "./lib/display-name";
@@ -54,6 +55,11 @@ const CROWDED_ID = "300000000000000005";
 
 /** Discord's built-in default avatars (public images, no account behind them), so rows show real CDN avatars. */
 const defaultAvatar = (index: number) => `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+/** As the Discord client gives them: members without an avatar get the default one for their id. */
+const asListed = (member: MemberInfo): MemberInfo => ({
+  ...member,
+  avatarUrl: member.avatarUrl ?? userAvatarUrl({ id: member.userId, avatar: null }),
+});
 
 const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...rest: MemberInfo[]] = [
   { userId: OWNER_ID, roles: [ROLE_ADMIN], nick: null, username: "kinako", globalName: "きなこもち", avatarUrl: defaultAvatar(0) },
@@ -76,7 +82,18 @@ const people: [owner: MemberInfo, tanaka: MemberInfo, suzuki: MemberInfo, ...res
     globalName: null,
     avatarUrl: null,
   },
+  { userId: "300000000000000006", roles: [], nick: null, username: "no_grants", globalName: "権限なし", avatarUrl: null },
 ];
+
+/** Signed in once but no longer on the server: the dashboard and consent page turn them away. */
+const formerMember: MemberInfo = {
+  userId: "300000000000000007",
+  roles: [],
+  nick: null,
+  username: "left_the_server",
+  globalName: "退会済み",
+  avatarUrl: null,
+};
 
 const EXTRA_MEMBERS = [
   "青木",
@@ -197,17 +214,13 @@ export async function startPreview(): Promise<Runtime> {
     // A server icon (Discord's CDN is out of reach here; the page CSP allows data: images).
     iconUrl: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#5865f2"/><circle cx="32" cy="32" r="16" fill="#fff"/></svg>')}`,
   };
-  for (const person of people) discord.members.set(person.userId, person);
+  for (const person of people) discord.members.set(person.userId, asListed(person));
   EXTRA_MEMBERS.forEach((name, index) => {
     const userId = String(310000000000000000n + BigInt(index));
-    discord.members.set(userId, {
+    discord.members.set(
       userId,
-      roles: [ROLE_MEMBER],
-      nick: null,
-      username: `user${index + 1}`,
-      globalName: name,
-      avatarUrl: null,
-    });
+      asListed({ userId, roles: [ROLE_MEMBER], nick: null, username: `user${index + 1}`, globalName: name, avatarUrl: null }),
+    );
   });
   discord.channels = [textChannel("400000000000000001", "general"), textChannel("400000000000000002", "staff-only")];
 
@@ -240,7 +253,7 @@ export async function startPreview(): Promise<Runtime> {
   const authContext = await server.auth.$context;
 
   const authUserIds = new Map<string, string>();
-  for (const person of people) {
+  for (const person of [...people, formerMember]) {
     const user = await authContext.internalAdapter.createUser(
       { name: displayName(person), email: `${person.userId}@users.discord.invalid`, emailVerified: false },
       { method: "oauth", oauth: { providerId: "discord" } },
@@ -337,7 +350,7 @@ export async function startPreview(): Promise<Runtime> {
   return {
     server,
     preview: {
-      users: people.map((person) => ({ id: person.userId, name: displayName(person), username: person.username })),
+      users: [...people, formerMember].map((person) => ({ id: person.userId, name: displayName(person), username: person.username })),
       sessionCookie,
     },
   };
