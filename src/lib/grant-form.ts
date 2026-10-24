@@ -1,6 +1,8 @@
 import { formatNumber } from "./locale";
 import { m } from "./paraglide/messages.js";
 
+// What the grant form shares between the page and the server.
+
 /** Grants (permission × subject pairs) one submit of the grant form may make at most. */
 export const MAX_GRANTS_PER_SUBMIT = 100;
 

@@ -350,6 +350,12 @@ describe("grants", () => {
       kind: "error",
       message: "不明な権限です。",
     });
+    // Sent without JavaScript: an explicit none on both services stays none.
+    expect((await grantsPage(deps, params("discord=&notion="))).form.chosenPermissions).toEqual([]);
+    const many = new URLSearchParams(
+      Array.from({ length: 101 }, (_, index) => ["subject", `user:${String(400000000000000000n + BigInt(index))}`]),
+    );
+    expect((await grantsPage(deps, many)).form.selectedKeys).toHaveLength(100);
     expect((await grantsPage(deps, params("discord=discord%3Aread&notion=notion%3Aread"))).form.chosenPermissions).toEqual([
       "discord:read",
       "notion:read",

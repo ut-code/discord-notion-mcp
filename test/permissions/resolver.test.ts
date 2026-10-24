@@ -162,7 +162,7 @@ describe("GrantStore", () => {
 
     // A failing insert takes the whole batch back.
     const broken = { permission: "admin", subjectType: "user", subjectId: null as unknown as string } as const;
-    expect(() => grants.createGrants([{ permission: "admin", subjectType: "role", subjectId: ROLE_MOD }, broken])).toThrow();
+    await expect(grants.createGrants([{ permission: "admin", subjectType: "role", subjectId: ROLE_MOD }, broken])).rejects.toThrow();
     expect(await grants.listGrants()).toHaveLength(3);
   });
 });

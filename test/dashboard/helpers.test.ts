@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { actionUrl } from "../../src/lib/action-url";
-import { grantSubmitLabel } from "../../src/lib/grant-label";
+import { grantSubmitLabel } from "../../src/lib/grant-form";
 import { diffLines } from "../../src/lib/server/dashboard/audit";
 import { formatDateJst, formatJst, formatShortJst, renderRequestedPropertyValue, roleSummary } from "../../src/lib/server/dashboard/format";
 import { safeNextPath } from "../../src/lib/server/dashboard/next-path";

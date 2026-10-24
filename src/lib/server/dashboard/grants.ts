@@ -1,4 +1,4 @@
-import { MAX_GRANTS_PER_SUBMIT } from "../../grant-label";
+import { MAX_GRANTS_PER_SUBMIT } from "../../grant-form";
 import { formatNumber } from "../../locale";
 import { MAX_QUERY_LENGTH } from "../../name-match";
 import { m } from "../../paraglide/messages.js";
@@ -364,7 +364,10 @@ function grantForm(guild: GuildInfo, params: URLSearchParams, filter: Permission
   const permissionParams = [...new Set(permissionValues(params.getAll("permission"), params.get("discord"), params.get("notion")))].filter(
     isPermission,
   );
-  const chosenPermissions = permissionParams.length > 0 ? permissionParams : [filter ?? "discord:read"];
+  // A form sent without JavaScript (a search) carries its service levels, "" for none: an explicit
+  // none on both stays none. Otherwise the filter tab's permission, else Discord 閲覧.
+  const sentLevels = params.has("discord") || params.has("notion");
+  const chosenPermissions = permissionParams.length > 0 || sentLevels ? permissionParams : [filter ?? "discord:read"];
   const roles = grantableRoles(guild).map((role) => roleOption(guild, grants, role));
   const members = roster.members.slice(0, MEMBER_LIST_LIMIT).map((user) => memberOption(guild, grants, user));
   const results = search.members.map((user) => memberOption(guild, grants, user));

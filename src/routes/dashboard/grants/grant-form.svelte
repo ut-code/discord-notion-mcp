@@ -7,7 +7,7 @@
   import { actionUrl } from "#lib/action-url.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { grantSubmitLabel, MAX_GRANTS_PER_SUBMIT } from "#lib/grant-label.js";
+  import { grantSubmitLabel, MAX_GRANTS_PER_SUBMIT } from "#lib/grant-form.js";
   import { formatNumber } from "#lib/locale.js";
   import { useHydrated } from "#lib/hydrated.svelte.js";
   import { m } from "#lib/paraglide/messages.js";

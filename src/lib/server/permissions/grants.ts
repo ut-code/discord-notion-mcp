@@ -53,8 +53,9 @@ export class GrantStore implements GrantLookup {
   }
 
   /** All or nothing, in one transaction; grants that already exist are left as stored. Returns those created. */
-  createGrants(inputs: readonly GrantInput[]): Promise<GrantKey[]> {
-    const created = this.db.transaction((tx) =>
+  // eslint-disable-next-line @typescript-eslint/require-await -- async so that a failed insert rejects like the other methods
+  async createGrants(inputs: readonly GrantInput[]): Promise<GrantKey[]> {
+    return this.db.transaction((tx) =>
       inputs.flatMap((input) => {
         const row = tx
           .insert(grants)
@@ -70,7 +71,6 @@ export class GrantStore implements GrantLookup {
         return row ? [row] : [];
       }),
     );
-    return Promise.resolve(created);
   }
 
   async removeGrant(input: GrantKey): Promise<boolean> {
