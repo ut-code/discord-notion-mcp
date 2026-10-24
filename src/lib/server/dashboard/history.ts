@@ -121,7 +121,8 @@ export interface CallsPageData {
   canFilterUsers: boolean;
   userOptions: Option[];
   statusOptions: Option[];
-  retention: string;
+  /** The page range and how long calls are kept. */
+  summary: string;
   /** Shown when the user filter is not a Discord id. */
   error: string | null;
 }
@@ -162,6 +163,9 @@ export async function callsPage(
   const people = await deps.subjects.resolveUsers(new Set([...rows.map((row) => row.discordUserId), ...callers, ...(user ? [user] : [])]));
   const nameOf = (id: string) => people.get(id)?.displayName ?? id;
 
+  const links = pageLinks(page, CALLS_PAGE_SIZE, total, rows.length, (target) => callsHref({ permission, user, status }, target));
+  const days = formatNumber(TOOL_CALL_RETENTION_DAYS);
+
   const userOptions = [...new Set([...callers, ...(user ? [user] : [])])]
     .map((id) => ({ value: id, label: nameOf(id) }))
     .sort((a, b) => compareNames(a.label, b.label));
@@ -185,13 +189,13 @@ export async function callsPage(
         meta: [name, createdAt, duration].join(" · "),
       };
     }),
-    ...pageLinks(page, CALLS_PAGE_SIZE, total, rows.length, (target) => callsHref({ permission, user, status }, target)),
+    ...links,
     filters: { user: user ?? "", status: status ?? "" },
     permission,
     canFilterUsers: viewer.isAdmin,
     userOptions,
     statusOptions: CALL_RESULTS.map((value) => ({ value, label: RESULT_BADGES[value].label })),
-    retention: m.calls_retention({ days: formatNumber(TOOL_CALL_RETENTION_DAYS) }),
+    summary: links.range ? m.calls_summary({ range: links.range, days }) : m.calls_retention({ days }),
     error,
   };
 }

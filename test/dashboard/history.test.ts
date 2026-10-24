@@ -96,7 +96,13 @@ describe("call history", () => {
       ["discord_read_messages", "成功", null, null, "120 ms"],
     ]);
     expect(data.rows[0]).toMatchObject({ user: { id: U1, name: "Mina" }, toolHref: "/dashboard/tools#discord_read_messages" });
-    expect(data.retention).toBe("呼び出しは直近 90 日分を保存しています。");
+    expect(data.summary).toBe("3 件中 1–3 件・直近 90 日分を保存");
+  });
+
+  test("without rows the summary still says how long calls are kept", async () => {
+    const data = (await callsPage(deps, new URLSearchParams("page=9"), member(["discord:read"])))!;
+    expect(data.rows).toEqual([]);
+    expect(data.summary).toBe("直近 90 日分を保存");
   });
 
   test("a tab the viewer lacks falls back to one they have; none at all lists nothing", async () => {

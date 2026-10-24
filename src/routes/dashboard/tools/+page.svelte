@@ -21,8 +21,7 @@
   });
 </script>
 
-<PageHeader title={m.tools_title()} />
-<p class="text-note text-muted-foreground">{m.tools_lead()}</p>
+<PageHeader title={m.tools_title()} description={m.tools_lead()} />
 
 {#each data.groups as group (group.permission)}
   <section class="stack gap-3" aria-labelledby={`tools-${group.permission}`}>

@@ -76,7 +76,7 @@
             <Table.Cell>
               <div class="cell-user">
                 <AppAvatar name={row.user.name} url={row.user.avatarUrl} size="sm" />
-                {row.user.name}
+                <span class="scroll-x">{row.user.name}</span>
               </div>
             </Table.Cell>
           {/if}
@@ -98,10 +98,7 @@
   </Table.Root>
 </div>
 
-{#if data.range || data.prevHref}
-  <div class="footer-row">
-    <span class="text-note text-muted-foreground">{data.range ?? ""}</span>
-    <Pager prev={data.prevHref} next={data.nextHref} />
-  </div>
-{/if}
-<p class="text-note text-muted-foreground">{data.retention}</p>
+<div class="footer-row">
+  <span class="text-note text-muted-foreground">{data.summary}</span>
+  {#if data.range || data.prevHref}<Pager prev={data.prevHref} next={data.nextHref} />{/if}
+</div>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
 
-  let { title, action }: { title: string; action?: Snippet } = $props();
+  let { title, description, action }: { title: string; description?: string; action?: Snippet } = $props();
 </script>
 
 <svelte:head>
@@ -9,6 +9,9 @@
 </svelte:head>
 
 <header class="page-head">
-  <h1>{title}</h1>
+  <div class="stack gap-1.5">
+    <h1>{title}</h1>
+    {#if description}<p class="text-note text-muted-foreground">{description}</p>{/if}
+  </div>
   {@render action?.()}
 </header>

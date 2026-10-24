@@ -71,7 +71,7 @@
           <Table.Cell>
             <div class="cell-user">
               <AppAvatar name={row.user.name} url={row.user.avatarUrl} size="sm" />
-              {row.user.name}
+              <span class="scroll-x">{row.user.name}</span>
             </div>
           </Table.Cell>
           <Table.Cell>

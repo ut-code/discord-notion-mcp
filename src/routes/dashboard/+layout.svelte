@@ -73,9 +73,10 @@
       <AppAvatar name={data.viewer.displayName} url={data.viewer.avatarUrl} />
       <div class="stack">
         <span class="truncate text-sm font-medium">{data.viewer.displayName}</span>
-        <span class="sub">
-          <span class="inline-block max-w-full truncate align-bottom">@{data.viewer.username}</span> ·
-          <span class="whitespace-nowrap">{data.viewer.roleLabel}</span>
+        <!-- One line: a long username is cut, the role always shows. -->
+        <span class="sub flex min-w-0 gap-1 whitespace-nowrap">
+          <span class="truncate">@{data.viewer.username}</span>
+          <span class="shrink-0">· {data.viewer.roleLabel}</span>
         </span>
       </div>
       <form method="post" action={SIGN_OUT_PATH}>
