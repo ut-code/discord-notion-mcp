@@ -87,8 +87,11 @@
 }
 
 @theme inline {
-	--font-sans: "Geist", "Noto Sans JP", system-ui, -apple-system, "Segoe UI", sans-serif;
-	--font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	/* The device's own fonts: nothing to download before the first paint. Japanese text falls back to
+	   Hiragino (Apple), Yu Gothic Medium or Meiryo (Windows; Yu Gothic's regular weight is too thin)
+	   and Noto Sans (Linux, under either family name). */
+	--font-sans: system-ui, "Segoe UI", "Hiragino Sans", "Yu Gothic Medium", Meiryo, "Noto Sans JP", "Noto Sans CJK JP", sans-serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
 	--color-sidebar-accent: var(--sidebar-accent);

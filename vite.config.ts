@@ -29,8 +29,7 @@ export default defineConfig({
           // to replay a load/error that fires before hydration: sha256 of "this.__e=event".
           // https://github.com/sveltejs/svelte/issues/14014
           "script-src-attr": ["unsafe-hashes", "sha256-7dQwUgLau1NFCCGjfn9FsYptB6ZtWxJin6VohGIu20I="],
-          "style-src": ["self", "unsafe-inline", "https://fonts.googleapis.com"],
-          "font-src": ["https://fonts.gstatic.com"],
+          "style-src": ["self", "unsafe-inline"],
           // data: for icons drawn in CSS (app.css) and the preview's server icon; the CDN for Discord avatars.
           "img-src": ["self", "data:", "https://cdn.discordapp.com"],
           "connect-src": ["self"],
