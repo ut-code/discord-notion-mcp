@@ -52,7 +52,12 @@
         <TriangleAlertIcon class="mt-0.5 size-4 shrink-0" />{notice}
       </p>
     {/if}
-    <!-- Without JavaScript the choice is not tracked here, so the server checks it instead. -->
-    <Button type="submit" class="w-full" disabled={hydrated.current && (!chosen || alreadyGranted)}>{submitLabel}</Button>
+    <!-- Without JavaScript the choice is not tracked here, so the server checks it instead. The label
+         names who is chosen, so a long name wraps instead of running out of the button. -->
+    <Button
+      type="submit"
+      class="h-auto min-h-9 w-full py-1.5 text-balance whitespace-normal"
+      disabled={hydrated.current && (!chosen || alreadyGranted)}>{submitLabel}</Button
+    >
   </form>
 </section>
