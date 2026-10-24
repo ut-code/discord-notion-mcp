@@ -123,7 +123,7 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     startToolCallRetention({ store: toolCalls, log: reportEvent, logError: reportError }),
     startClientCleanup({ db: database.db, log: reportEvent, logError: reportError }),
   );
-  const members = new MemberRoster(discord);
+  const members = new MemberRoster(discord, { logError: reportError });
   const subjects = new SubjectResolver(directory, discord, members, reportError);
   const dashboard: DashboardDeps = {
     auth,

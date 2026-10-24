@@ -47,9 +47,16 @@
   <p class={["px-2 py-1.5 text-note", tone === "bad" ? "text-bad-fg" : "text-muted-foreground"]}>{text}</p>
 {/snippet}
 
-{#snippet option(subject: SubjectOption)}
+<!-- `named: false` takes the radio out of the form, so a hidden copy of an option cannot uncheck the shown one. -->
+{#snippet option(subject: SubjectOption, named = true)}
   <label class="pick">
-    <input type="radio" name="subject" value={subject.key} checked={chosen?.key === subject.key} onchange={() => (chosen = subject)} />
+    <input
+      type="radio"
+      name={named ? "subject" : undefined}
+      value={subject.key}
+      checked={chosen?.key === subject.key}
+      onchange={() => (chosen = subject)}
+    />
     {#if subject.type === "role"}
       <span class="inline-flex size-7 shrink-0 items-center justify-center"
         ><span class="dot" style:background={subject.color ?? undefined}></span></span
@@ -120,7 +127,9 @@
         {@render note(m.grants_picker_no_match())}
       {/if}
     </div>
-  {:else}
+  {/if}
+  <!-- Stays mounted while searching: rebuilding every member's row when the query is cleared is slow. -->
+  <div class="flex flex-col gap-2" hidden={!!needle}>
     <div class="segmented" role="radiogroup" aria-label={m.grants_list_switch_label()}>
       <label>
         <input type="radio" name="list" value="role" bind:group={tab} />
@@ -133,10 +142,10 @@
     </div>
     <div class="picker subject-list">
       <div class="tab-roles">
-        {#each form.roles as role (role.key)}{@render option(role)}{/each}
+        {#each form.roles as role (role.key)}{@render option(role, !needle)}{/each}
       </div>
       <div class="tab-members">
-        {#each form.members as member (member.key)}{@render option(member)}{/each}
+        {#each form.members as member (member.key)}{@render option(member, !needle)}{/each}
         {#if form.membersError}
           {@render note(form.membersError, "bad")}
         {:else if form.moreMembers > 0}
@@ -144,6 +153,6 @@
         {/if}
       </div>
     </div>
-  {/if}
+  </div>
   {#if unlisted}<input type="hidden" name="subject" value={unlisted.key} />{/if}
 </fieldset>

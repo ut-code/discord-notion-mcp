@@ -464,34 +464,79 @@ describe("grants", () => {
       return { ...makeMember(id), username: `member${String(index).padStart(5, "0")}` };
     });
 
-  test("the member roster is listed page by page without bots and cached for a minute; failures are not cached", async () => {
+  /** A guild of `count` members (and a bot) whose member listing can be made to fail. */
+  function listedGuild(count: number) {
     const discord = new FakeDiscordApi();
-    for (const member of listedMembers(1001)) discord.members.set(member.userId, member);
+    for (const member of listedMembers(count)) discord.members.set(member.userId, member);
     discord.members.set("499999999999999999", { ...makeMember("499999999999999999"), username: "a-bot" });
     discord.bots.add("499999999999999999");
-    const pages: Array<string | undefined> = [];
-    let failing = false;
+    const state = { pages: [] as Array<string | undefined>, failing: false };
     const listMembers = discord.listMembers.bind(discord);
     discord.listMembers = async (limit, after) => {
-      pages.push(after);
-      if (failing) throw new Error("discord down");
+      state.pages.push(after);
+      if (state.failing) throw new Error("discord down");
       return listMembers(limit, after);
     };
-    let now = 0;
-    const roster = new MemberRoster(discord, () => now);
+    return { discord, state };
+  }
+
+  test("the member roster is listed page by page without bots and used as it is for a minute", async () => {
+    const { discord, state } = listedGuild(1001);
+    const roster = new MemberRoster(discord, { clock: () => 0 });
     const subjects = new SubjectResolver(new CachedGuildDirectory(discord), discord, roster, () => {});
 
     const [first] = await Promise.all([roster.roster(), roster.roster()]);
     expect(first).toMatchObject({ complete: true });
     expect(first.members).toHaveLength(1001);
     expect(first.members.some((member) => member.username === "a-bot")).toBe(false);
-    expect(pages).toEqual([undefined, "400000000000000999"]);
+    expect(state.pages).toEqual([undefined, "400000000000000999"]);
     await subjects.search("member0", 5);
     await subjects.resolveUsers(["400000000000000001", "400000000000000002"]);
-    expect(pages).toHaveLength(2);
+    expect(state.pages).toHaveLength(2);
+  });
+
+  test("an older roster is returned at once while a new one loads, and for ten minutes after failed loads", async () => {
+    const { discord, state } = listedGuild(3);
+    let now = 0;
+    const failures: unknown[] = [];
+    const roster = new MemberRoster(discord, { clock: () => now, logError: (entry) => failures.push(entry) });
+    await roster.roster();
 
     now = 60_000;
-    failing = true;
+    const JOINED = "400000000000000003";
+    discord.members.set(JOINED, { ...makeMember(JOINED), username: "member00003" });
+    const [stale, again] = await Promise.all([roster.roster(), roster.roster()]);
+    // Someone may have joined since, so searches also ask Discord.
+    expect(stale.complete).toBe(false);
+    expect(stale.members).toHaveLength(3);
+    expect(again.members).toHaveLength(3);
+    const subjects = new SubjectResolver(new CachedGuildDirectory(discord), discord, roster, () => {});
+    expect((await subjects.search("member00003", 5)).map((member) => member.id)).toEqual([JOINED]);
+    // Both calls shared one load, which has finished by now.
+    await Bun.sleep(0);
+    expect(state.pages).toHaveLength(2);
+    expect(await roster.roster()).toMatchObject({ complete: true });
+    expect((await roster.roster()).members).toHaveLength(4);
+
+    now = 120_000;
+    state.failing = true;
+    expect((await roster.roster()).members).toHaveLength(4);
+    await Bun.sleep(0);
+    expect(failures).toEqual([{ event: "admin_lookup_failed", lookup: "member_list", error: "discord down" }]);
+    // A passing failure goes unseen...
+    expect((await roster.roster()).members).toHaveLength(4);
+    // ...but a list ten minutes old while Discord is still down is an error, not an ever older list.
+    now = 60_000 + 10 * 60_000;
+    await expect(roster.roster()).rejects.toThrow("discord down");
+    state.failing = false;
+    expect(await roster.roster()).toMatchObject({ complete: true });
+  });
+
+  test("without any roster yet a failed listing fails the member list and search", async () => {
+    const { discord, state } = listedGuild(1001);
+    state.failing = true;
+    const roster = new MemberRoster(discord);
+    const subjects = new SubjectResolver(new CachedGuildDirectory(discord), discord, roster, () => {});
     const failingDeps = { ...deps, members: roster, subjects, logError: () => {} };
     expect(await memberSearchResult(failingDeps, "member", owner)).toEqual({
       status: 502,
@@ -501,7 +546,7 @@ describe("grants", () => {
       members: [],
       membersError: "メンバーを取得できませんでした。しばらくしてから再読み込みしてください。",
     });
-    failing = false;
+    state.failing = false;
     expect((await memberSearchResult(failingDeps, "member01000", owner)).body).toMatchObject({ members: [{ id: "400000000000001000" }] });
   });
 

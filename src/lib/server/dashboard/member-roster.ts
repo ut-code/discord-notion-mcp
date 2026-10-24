@@ -1,39 +1,84 @@
 import { compareNames } from "../../locale";
 import type { DiscordApi } from "../discord/api";
-import { systemClock, TtlCache, type Clock } from "../lib/ttl-cache";
+import { errorMessage } from "../lib/errors";
+import { logError, type ErrorSink } from "../lib/log";
+import { systemClock, type Clock } from "../lib/ttl-cache";
 import { subjectFromMember, type UserSubject } from "./subjects";
 
 const PAGE_SIZE = 1000;
 /** Larger guilds are listed in part; their lookups and searches also ask Discord about the rest. */
 const MAX_PAGES = 10;
-const CACHE_TTL_MS = 60_000;
+/** How long a list is used as it is; an older one is still shown while a new one loads. */
+const FRESH_MS = 60_000;
+/** Once a load has failed, how old a list may still be shown; past it callers wait for Discord (and see its error). */
+const STALE_AFTER_FAILURE_MS = 10 * 60_000;
 
 export interface Roster {
   /** Members other than bots, by display name. */
   members: UserSubject[];
   /** Every listed member by user id, bots included. */
   byId: ReadonlyMap<string, UserSubject>;
-  /** False when the guild has more members than were listed. */
+  /**
+   * False when members may be missing: the guild has more than were listed, or the list is
+   * older than a minute (someone may have joined since).
+   */
   complete: boolean;
 }
 
 /**
- * The guild's members, listed once a minute at most (concurrent loads share one): one request per
- * thousand members gives the pages every name, avatar and role they show, instead of one per member.
+ * The guild's members for the dashboard's names, avatars, searches and role badges (access
+ * decisions ask Discord separately). One request per thousand members gives every name, avatar
+ * and role, instead of one per member. Listing takes a second or more, so once a list is older
+ * than a minute the old one is returned at once while a new one loads (concurrent loads share one).
+ * After a failed load the old list is shown for a few minutes more (a passing failure goes unseen);
+ * then callers wait for the next load, so a Discord outage shows as an error instead of an ever older list.
  */
 export class MemberRoster {
-  private readonly cache: TtlCache<"roster", Roster>;
+  private current: { roster: Roster; loadedAt: number } | null = null;
+  private inflight: Promise<Roster> | null = null;
+  private lastLoadFailed = false;
+  private readonly clock: Clock;
+  private readonly logFailure: ErrorSink;
 
   constructor(
     private readonly discord: Pick<DiscordApi, "listMembers">,
-    clock: Clock = systemClock,
+    options: { clock?: Clock; logError?: ErrorSink } = {},
   ) {
-    this.cache = new TtlCache(CACHE_TTL_MS, clock);
+    this.clock = options.clock ?? systemClock;
+    this.logFailure = options.logError ?? logError;
   }
 
-  /** Failures are thrown and not cached. */
+  /** Throws when listing fails while there is no list yet, or while loads keep failing past STALE_AFTER_FAILURE_MS. */
   roster(): Promise<Roster> {
-    return this.cache.getOrLoad("roster", () => this.load());
+    const current = this.current;
+    const age = current ? this.clock() - current.loadedAt : Number.POSITIVE_INFINITY;
+    if (current && age < FRESH_MS) return Promise.resolve(current.roster);
+    if (!current || (this.lastLoadFailed && age >= STALE_AFTER_FAILURE_MS)) return this.refresh();
+    if (!this.inflight) {
+      this.refresh().catch((error: unknown) => {
+        this.logFailure({ event: "admin_lookup_failed", lookup: "member_list", error: errorMessage(error) });
+      });
+    }
+    return Promise.resolve({ ...current.roster, complete: false });
+  }
+
+  private refresh(): Promise<Roster> {
+    this.inflight ??= this.load()
+      .then(
+        (roster) => {
+          this.current = { roster, loadedAt: this.clock() };
+          this.lastLoadFailed = false;
+          return roster;
+        },
+        (error: unknown) => {
+          this.lastLoadFailed = true;
+          throw error;
+        },
+      )
+      .finally(() => {
+        this.inflight = null;
+      });
+    return this.inflight;
   }
 
   private async load(): Promise<Roster> {
