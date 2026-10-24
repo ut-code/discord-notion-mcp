@@ -1,6 +1,6 @@
 # discord-notion-mcp
 
-Discord ログインで使う、Discord / Notion 用のリモート MCP サーバー。
+Discord と Notion を使うコミュニティ向けの、セルフホスト型 MCP サーバー。メンバーは Discord でログインし、ロールに付与した権限の範囲で AI から Discord を読み、Notion を読み書きする。
 
 ## ツール
 
@@ -82,20 +82,9 @@ codex mcp login discord-notion
 
 ## 開発
 
-Bun + SvelteKit（adapter-node）+ shadcn-svelte / Tailwind CSS、Better Auth、MCP TypeScript SDK、Drizzle（bun:sqlite）。
-
-画面の文言は `messages/ja.json`（Paraglide）。コードからは `m.<key>()` で参照する。
-
 ```sh
 bun install
 cp .env.example .env
-bun run dev        # PUBLIC_URL のポート（.env の PORT）で起動
-bun run preview    # 偽データで UI 確認: http://localhost:3920/dev
-# 他端末から: tailscale serve --bg --https=8443 http://localhost:3920 && PREVIEW_PUBLIC_URL=https://<host>.ts.net:8443 bun run preview
-bun test
-bun run typecheck
-bun run lint       # 型情報を使う。エディタの ESLint 拡張にも SVELTE_ESLINT_PARSER_EXPERIMENTAL_TS_SYS_HOOK=1 を渡す
-bun run format
-bun run knip       # 使われていないファイル・export・依存
-bun run build && bun run start
+bun run dev        # .env の PORT で起動（PUBLIC_URL も同じポートにする）
+bun run preview    # サンプルデータで UI 確認: http://localhost:3920/dev
 ```
