@@ -5,8 +5,6 @@ import { DASHBOARD_PATH, toolPath } from "../../paths";
 import type { Permission } from "../permissions/permissions";
 import { TOOL_CALL_RETENTION_DAYS } from "../usage/tool-calls";
 import { jstDay, jstDayStart } from "../lib/jst-day";
-import type { Viewer } from "./access";
-import { auditListHref } from "./history";
 import type { DashboardDeps } from "./deps";
 import { formatDuration, formatMonthDayJst, formatShortJst, PERMISSION_LABELS } from "./format";
 
@@ -69,8 +67,6 @@ export interface StatsPageData {
   daily: { series: ChartSeries[]; rows: ChartRow[] };
   users: StatsUserRow[];
   tools: StatsToolRow[];
-  /** `auditHref` only for viewers who may open the write history. */
-  notion: { writes: number; reverts: number; failures: number; auditHref: string | null };
 }
 
 export function rangeParam(value: string | null): StatsRange {
@@ -96,7 +92,6 @@ function categoryOf(permission: Permission | undefined): CategoryKey {
 export async function statsPage(
   deps: Pick<DashboardDeps, "usage" | "subjects" | "tools">,
   params: URLSearchParams,
-  viewer: Pick<Viewer, "canViewAudit">,
   now = Date.now(),
 ): Promise<StatsPageData> {
   const range = rangeParam(params.get("range"));
@@ -109,7 +104,6 @@ export async function statsPage(
   const byUser = usage.byUser(since);
   const byTool = usage.byTool(since);
   const rateLimited = usage.rateLimited(since);
-  const notion = usage.notionTotals(since);
   const users = await deps.subjects.resolveUsers(byUser.map((row) => row.discordUserId));
 
   const permissions = new Map(deps.tools.map((tool) => [tool.name, tool.permission]));
@@ -136,7 +130,7 @@ export async function statsPage(
       active: value === range,
     })),
     // Rate-limited calls are not calls, but a range of nothing else is still worth showing.
-    empty: calls === 0 && rateLimited === 0 && notion.writes + notion.reverts + notion.failures === 0,
+    empty: calls === 0 && rateLimited === 0,
     summary: { calls, activeUsers: byUser.length, failureRate: formatRate(failures, calls), rateLimited },
     daily: {
       series,
@@ -166,6 +160,5 @@ export async function statsPage(
       failureRate: formatRate(row.failures, row.calls),
       avgDuration: formatDuration(row.avgDurationMs),
     })),
-    notion: { ...notion, auditHref: viewer.canViewAudit ? auditListHref({}) : null },
   };
 }

@@ -1,7 +1,6 @@
 <script lang="ts">
   import AppAvatar from "#lib/components/app/app-avatar.svelte";
   import PageHeader from "#lib/components/app/page-header.svelte";
-  import { Button } from "#lib/components/ui/button/index.js";
   import * as Table from "#lib/components/ui/table/index.js";
   import { formatNumber } from "#lib/locale.js";
   import { m } from "#lib/paraglide/messages.js";
@@ -15,11 +14,6 @@
     { label: m.stats_active_users(), value: formatNumber(data.summary.activeUsers) },
     { label: m.stats_failure_rate(), value: data.summary.failureRate },
     { label: m.stats_rate_limited(), value: formatNumber(data.summary.rateLimited) },
-  ]);
-  const notionTotals = $derived([
-    { label: m.stats_notion_writes(), value: data.notion.writes },
-    { label: m.stats_notion_reverts(), value: data.notion.reverts },
-    { label: m.stats_notion_failures(), value: data.notion.failures },
   ]);
 </script>
 
@@ -122,19 +116,4 @@
       </div>
     </section>
   </div>
-
-  <section class="panel panel-pad flex flex-row flex-wrap items-center gap-x-6 gap-y-3" aria-labelledby="notion-heading">
-    <h2 id="notion-heading">{m.stats_notion_heading()}</h2>
-    <dl class="cluster grow gap-x-4 text-note">
-      {#each notionTotals as total (total.label)}
-        <div class="flex items-baseline gap-1.5">
-          <dt class="text-muted-foreground">{total.label}</dt>
-          <dd class="font-medium tabular-nums">{formatNumber(total.value)}</dd>
-        </div>
-      {/each}
-    </dl>
-    {#if data.notion.auditHref}
-      <Button variant="outline" size="sm" href={data.notion.auditHref}>{m.stats_view_audit()}</Button>
-    {/if}
-  </section>
 {/if}

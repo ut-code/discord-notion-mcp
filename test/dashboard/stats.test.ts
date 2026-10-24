@@ -8,7 +8,6 @@ import { CachedGuildDirectory } from "../../src/lib/server/discord/directory";
 import { ToolCallStore } from "../../src/lib/server/usage/tool-calls";
 import { jstDay } from "../../src/lib/server/lib/jst-day";
 import { UsageStats } from "../../src/lib/server/usage/usage-stats";
-import { insertAuditRow } from "../support/audit-rows";
 import { FakeDiscordApi, makeMember } from "../../src/lib/server/fakes/discord";
 
 const U1 = "300000000000000001";
@@ -42,7 +41,6 @@ function depsFor(database: DatabaseHandle) {
 }
 
 let deps: ReturnType<typeof depsFor>;
-const reader = { canViewAudit: true };
 
 beforeAll(async () => {
   const database = freshDatabase();
@@ -61,11 +59,6 @@ beforeAll(async () => {
   for (const [discordUserId, tool, ok, durationMs, errorKind, createdAt] of rows) {
     calls.record({ discordUserId, tool, ok, durationMs, errorKind, error: errorKind ? "boom" : undefined, createdAt });
   }
-  const base = { discordUserId: U1, discordDisplayName: "Mina", targetTitle: "Notes", request: {} };
-  await insertAuditRow(database.db, { ...base, operation: "create_page", status: "ok", createdAt: jst(12, 8) });
-  await insertAuditRow(database.db, { ...base, operation: "edit_content", status: "failed", createdAt: jst(12, 8, 30) });
-  await insertAuditRow(database.db, { ...base, operation: "revert", status: "ok", createdAt: jst(11, 18) });
-  await insertAuditRow(database.db, { ...base, operation: "create_page", status: "ok", createdAt: jst(1, 18) });
   deps = depsFor(database);
 });
 
@@ -83,7 +76,7 @@ describe("usage statistics", () => {
   });
 
   test("daily calls are stacked by the permission each tool needs", async () => {
-    const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
+    const data = await statsPage(deps, new URLSearchParams("range=7"), NOW);
     expect(data.range).toBe(7);
     expect(data.ranges).toEqual([
       { label: "7日", href: "/dashboard?range=7", active: true },
@@ -103,7 +96,7 @@ describe("usage statistics", () => {
   });
 
   test("summary, per-user and per-tool tables cover the range only", async () => {
-    const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
+    const data = await statsPage(deps, new URLSearchParams("range=7"), NOW);
     expect(data.empty).toBe(false);
     // Rate-limited calls are left out of calls, failure rates and durations (they never ran).
     expect(data.summary).toEqual({ calls: 7, activeUsers: 2, failureRate: "14.3%", rateLimited: 1 });
@@ -124,22 +117,15 @@ describe("usage statistics", () => {
     // A tool no longer served has no entry on the tools page to link to.
     expect(data.tools.find((row) => row.tool === "tool_a")?.href).toBeNull();
 
-    const month = await statsPage(deps, new URLSearchParams(), reader, NOW);
+    const month = await statsPage(deps, new URLSearchParams(), NOW);
     expect(month.range).toBe(30);
     expect(month.daily.rows.length).toBe(30);
     expect(month.summary.calls).toBe(8);
     expect(month.tools[0]).toMatchObject({ tool: "notion_search", calls: 3 });
   });
 
-  test("Notion writes, reverts and failures come from the audit log", async () => {
-    const data = await statsPage(deps, new URLSearchParams("range=7"), reader, NOW);
-    expect(data.notion).toEqual({ writes: 1, reverts: 1, failures: 1, auditHref: "/dashboard/audit" });
-    expect((await statsPage(deps, new URLSearchParams("range=90"), reader, NOW)).notion.writes).toBe(2);
-    expect((await statsPage(deps, new URLSearchParams("range=7"), { canViewAudit: false }, NOW)).notion.auditHref).toBeNull();
-  });
-
   test("an empty log is reported as empty with zero-filled days", async () => {
-    const data = await statsPage(depsFor(freshDatabase()), new URLSearchParams(), reader, NOW);
+    const data = await statsPage(depsFor(freshDatabase()), new URLSearchParams(), NOW);
     expect(data.empty).toBe(true);
     expect(data.summary).toEqual({ calls: 0, activeUsers: 0, failureRate: "—", rateLimited: 0 });
     expect(data.daily.series).toEqual([]);
@@ -157,7 +143,7 @@ describe("usage statistics", () => {
       errorKind: "rate_limited",
       createdAt: jst(12, 9),
     });
-    const data = await statsPage(depsFor(database), new URLSearchParams(), reader, NOW);
+    const data = await statsPage(depsFor(database), new URLSearchParams(), NOW);
     expect(data.empty).toBe(false);
     expect(data.summary).toMatchObject({ calls: 0, rateLimited: 1 });
   });

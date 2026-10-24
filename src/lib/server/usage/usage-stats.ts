@@ -1,6 +1,6 @@
 import { and, count, desc, eq, gte, inArray, isNull, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AppDatabase } from "../db/client";
-import { notionAudit, toolCall } from "../db/schema";
+import { toolCall } from "../db/schema";
 import { jstDaySql } from "../lib/jst-day";
 
 /** How many rows of the group meet all the conditions. */
@@ -12,7 +12,7 @@ const failures = countWhere(eq(toolCall.ok, false));
  */
 const ran = or(isNull(toolCall.errorKind), ne(toolCall.errorKind, "rate_limited"));
 
-/** Aggregates over the tool call log and the Notion audit log since a point in time; days are JST day numbers. */
+/** Aggregates over the tool call log since a point in time; days are JST day numbers. */
 export class UsageStats {
   constructor(private readonly db: AppDatabase) {}
 
@@ -71,19 +71,5 @@ export class UsageStats {
       .where(and(gte(toolCall.createdAt, since), eq(toolCall.errorKind, "rate_limited")))
       .all();
     return row?.total ?? 0;
-  }
-
-  notionTotals(since: Date): { writes: number; reverts: number; failures: number } {
-    const [row] = this.db
-      .select({
-        writes: countWhere(eq(notionAudit.status, "ok"), ne(notionAudit.operation, "revert")),
-        reverts: countWhere(eq(notionAudit.status, "ok"), eq(notionAudit.operation, "revert")),
-        // Interrupted writes may or may not have been applied: they need a look like failures do.
-        failures: countWhere(inArray(notionAudit.status, ["failed", "interrupted"])),
-      })
-      .from(notionAudit)
-      .where(gte(notionAudit.createdAt, since))
-      .all();
-    return row ?? { writes: 0, reverts: 0, failures: 0 };
   }
 }
