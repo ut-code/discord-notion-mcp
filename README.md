@@ -68,7 +68,7 @@ Discord と Notion を使うコミュニティ向けの、セルフホスト型 
 Claude Code:
 
 ```sh
-claude mcp add --transport http --scope user discord-notion https://<domain>/mcp
+claude mcp add --transport http --scope user ndmcp https://<domain>/mcp
 ```
 
 Claude Code 内で `/mcp` を開いてログイン。
@@ -76,8 +76,8 @@ Claude Code 内で `/mcp` を開いてログイン。
 Codex:
 
 ```sh
-codex mcp add discord-notion --url https://<domain>/mcp
-codex mcp login discord-notion
+codex mcp add ndmcp --url https://<domain>/mcp
+codex mcp login ndmcp
 ```
 
 ## 開発

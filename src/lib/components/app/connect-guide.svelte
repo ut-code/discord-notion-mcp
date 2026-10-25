@@ -7,8 +7,8 @@
 
   let { mcpUrl, heading = "h2" }: { mcpUrl: string; heading?: "h2" | "h3" } = $props();
 
-  const claude = $derived([`claude mcp add --transport http --scope user discord-notion ${mcpUrl}`]);
-  const codex = $derived([`codex mcp add discord-notion --url ${mcpUrl}`, "codex mcp login discord-notion"]);
+  const claude = $derived([`claude mcp add --transport http --scope user ndmcp ${mcpUrl}`]);
+  const codex = $derived([`codex mcp add ndmcp --url ${mcpUrl}`, "codex mcp login ndmcp"]);
 </script>
 
 {#snippet command(text: string, label: string)}
