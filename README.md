@@ -1,4 +1,4 @@
-# discord-notion-mcp
+# ndmcp
 
 Discord と Notion を使うコミュニティ向けの、セルフホスト型 MCP サーバー。メンバーは Discord でログインし、ロールに付与した権限の範囲で AI から Discord を読み、Notion を読み書きする。
 
