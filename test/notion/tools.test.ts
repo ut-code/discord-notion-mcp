@@ -312,6 +312,14 @@ describe("Notion tools", () => {
     expect(schema).toContain("- Status (status, id st): options: Todo, Done | groups: Complete [Done]");
     expect(schema).toContain("- Created (created_time, id ct): read-only");
 
+    expect(await call("notion_get_page", { page: db.id })).toBe(schema);
+    const single = await call("notion_get_page", { page: ds.id });
+    expect(single).toContain('## Data source "Tasks"');
+    expect(single).not.toContain('Database "Tasks DB"');
+    await expect(call("notion_get_page", { page: "99999999-9999-4999-8999-999999999999" })).rejects.toThrow(
+      "not shared with the Notion integration",
+    );
+
     const rows = await call("notion_query_database", { database: db.id.replace(/-/g, "") });
     expect(rows).toContain('Data source "Tasks"');
     expect(rows).toContain("- Write docs (id");

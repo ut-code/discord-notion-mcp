@@ -160,13 +160,20 @@ export function createReadTools(deps: NotionToolDeps): {
   const getPage = defineTool({
     name: "notion_get_page",
     title: "Get a Notion page",
-    description: `Get a page's properties and its full content. ${MARKDOWN_SYNTAX} Child pages and databases appear as <page>/<database> tags. Look up mentioned users with notion_get_users. Use the content as the source of old_str for notion_edit_content.`,
+    description: `Get a page's properties and its full content (a database or data source gets its schema, as with notion_get_database). ${MARKDOWN_SYNTAX} Child pages and databases appear as <page>/<database> tags. Look up mentioned users with notion_get_users. Use the content as the source of old_str for notion_edit_content.`,
     permission: "notion:read",
     inputSchema: z.object({ page: idOrUrl("Page") }),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withNotionErrors(async (args) => {
       const pageId = requireNotionId(args.page, "page");
-      const page = await api.retrievePage(pageId);
+      let page: NotionPage;
+      try {
+        page = await api.retrievePage(pageId);
+      } catch (error) {
+        if (!isNotionMiss(error)) throw error;
+        // Notion's own fetch tool takes any of the three, and a database link looks like a page's.
+        return describeDatabase(pageId);
+      }
       const body = await api.retrievePageMarkdown(page.id);
       const lines = [
         `# ${pageTitle(page)}`,
@@ -278,6 +285,31 @@ export function createReadTools(deps: NotionToolDeps): {
     ];
   };
 
+  /** A database (with all its data sources) or a single data source: schema and templates. */
+  async function describeDatabase(id: string): Promise<string> {
+    const view = await resolveDatabaseView(api, id);
+    const lines: string[] = [];
+    if (view.database) {
+      lines.push(
+        `Database "${plainText(view.database.title) || "Untitled"}" (id ${view.database.id})`,
+        `url: ${view.database.url}`,
+        `Data sources (${view.dataSources.length}):`,
+      );
+    }
+    const templates = await Promise.all(view.dataSources.map((dataSource) => templateLines(dataSource.id)));
+    view.dataSources.forEach((dataSource, index) => {
+      lines.push(
+        "",
+        `## Data source "${dataSourceTitle(dataSource)}" (id ${dataSource.id})`,
+        `parent: ${parentLabel(dataSource.parent)}`,
+        "Properties:",
+        ...schemaLines(dataSource),
+        ...(templates[index] ?? []),
+      );
+    });
+    return lines.join("\n").trim();
+  }
+
   const getDatabase = defineTool({
     name: "notion_get_database",
     title: "Get a Notion database schema",
@@ -286,29 +318,7 @@ export function createReadTools(deps: NotionToolDeps): {
     permission: "notion:read",
     inputSchema: z.object({ database: idOrUrl("Database or data source") }),
     annotations: READ_ONLY_ANNOTATIONS,
-    handler: withNotionErrors(async (args) => {
-      const view = await resolveDatabaseView(api, requireNotionId(args.database, "database"));
-      const lines: string[] = [];
-      if (view.database) {
-        lines.push(
-          `Database "${plainText(view.database.title) || "Untitled"}" (id ${view.database.id})`,
-          `url: ${view.database.url}`,
-          `Data sources (${view.dataSources.length}):`,
-        );
-      }
-      const templates = await Promise.all(view.dataSources.map((dataSource) => templateLines(dataSource.id)));
-      view.dataSources.forEach((dataSource, index) => {
-        lines.push(
-          "",
-          `## Data source "${dataSourceTitle(dataSource)}" (id ${dataSource.id})`,
-          `parent: ${parentLabel(dataSource.parent)}`,
-          "Properties:",
-          ...schemaLines(dataSource),
-          ...(templates[index] ?? []),
-        );
-      });
-      return lines.join("\n").trim();
-    }),
+    handler: withNotionErrors((args) => describeDatabase(requireNotionId(args.database, "database"))),
   });
 
   /** Up to `budget` comments of one page or block, and whether more exist. */
