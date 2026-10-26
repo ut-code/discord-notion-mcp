@@ -1,10 +1,11 @@
 import { HTTPError } from "@discordjs/rest";
 import { beforeEach, describe, expect, test } from "bun:test";
+import { ChannelType } from "discord-api-types/v10";
 import { ChannelAccess, ChannelDirectory } from "../../src/lib/server/discord/access";
 import { READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
 import { createDiscordTools } from "../../src/lib/server/discord/tools";
 import type { AnyToolDefinition, Principal } from "../../src/lib/server/mcp/registry";
-import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel } from "../../src/lib/server/fakes/discord";
+import { BOT_ID, FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const CHANNEL = "400000000000000001";
@@ -94,6 +95,58 @@ describe("channel mentions", () => {
     const text = await call("discord_read_messages", { channel_id: CHANNEL });
     expect(text).toContain(`see #general and <#${HIDDEN}>`);
     expect(text).not.toContain("secret-plans");
+  });
+});
+
+describe("channels the bot cannot read", () => {
+  const STAFF_ROLE = "200000000000000001";
+  const STAFF_ONLY = "400000000000000003";
+
+  beforeEach(() => {
+    // Read by a role the user holds and the bot does not: Discord would refuse the bot.
+    api.channels.push(
+      textChannel(STAFF_ONLY, "staff", [
+        { id: GUILD_ID, type: 0, deny: VIEW_CHANNEL },
+        { id: STAFF_ROLE, type: 0, allow: VIEW_CHANNEL },
+      ]),
+    );
+    api.members.set(BOT_ID, makeMember(BOT_ID));
+    api.messages.set(STAFF_ONLY, [message(id(500), STAFF_ONLY, "staff only")]);
+  });
+
+  const staffCall = async (name: string, args: Record<string, unknown>) => {
+    const tool = tools.get(name)!;
+    const staff = principal();
+    staff.access.member = makeMember(USER, [STAFF_ROLE]);
+    const result = await tool.handler(tool.inputSchema.parse(args), { principal: staff });
+    return typeof result === "string" ? result : JSON.stringify(result);
+  };
+
+  test("are listed as such, and reading one says the bot has no access", async () => {
+    const list = await staffCall("discord_list_channels", {});
+    expect(list).toContain(`#staff (id ${STAFF_ONLY}, text, not readable here: the MCP bot cannot read it)`);
+    expect(list).toContain(`#general (id ${CHANNEL}, text)`);
+    await expect(staffCall("discord_read_messages", { channel_id: STAFF_ONLY })).rejects.toThrow("MCP bot has not been given access");
+    expect(api.calls.messages).toBe(0);
+  });
+
+  test("give a member who cannot read them the usual not-accessible error", async () => {
+    await expect(call("discord_read_messages", { channel_id: STAFF_ONLY })).rejects.toThrow("Channel not found or not accessible.");
+  });
+
+  test("are readable once the bot holds the role", async () => {
+    api.members.set(BOT_ID, makeMember(BOT_ID, [STAFF_ROLE]));
+    expect(await staffCall("discord_read_messages", { channel_id: STAFF_ONLY })).toContain("staff only");
+  });
+});
+
+describe("discord_read_messages on a forum", () => {
+  test("points to its threads instead of an empty list", async () => {
+    const FORUM = "400000000000000004";
+    api.channels.push(textChannel(FORUM, "ideas", [], { type: ChannelType.GuildForum }));
+    await expect(call("discord_read_messages", { channel_id: FORUM })).rejects.toThrow(
+      `#ideas is a forum: each post is a thread. List them with discord_list_threads (channel_id "${FORUM}")`,
+    );
   });
 });
 

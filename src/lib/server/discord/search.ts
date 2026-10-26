@@ -1,3 +1,4 @@
+import { makeURLSearchParams } from "@discordjs/rest";
 import {
   ChannelType,
   type APIMessage,
@@ -5,14 +6,18 @@ import {
   type APIThreadChannel,
   type RESTGetAPIGuildMessagesSearchQuery,
 } from "discord-api-types/v10";
+import { ToolError } from "../lib/errors";
 import { createLimiter } from "../lib/limiter";
 import type { ChannelAccess, ChannelDirectory, Viewer } from "./access";
 import { isThread, THREAD_CHECK_CONCURRENCY } from "./access";
 import type { DiscordApi } from "./api";
 import { canReadMessages } from "./permissions";
 
-/** Discord rejects more channel_id filters than this. */
-const MAX_SEARCH_CHANNELS = 500;
+/**
+ * Longest search query string sent. Discord's edge answers a request line of more than about 4 KB
+ * with an HTML 400 ("Request Line is too large"); measured 2026-10-26, a margin below it.
+ */
+const MAX_SEARCH_QUERY_LENGTH = 3800;
 /** Discord rejects a larger offset. */
 export const MAX_SEARCH_OFFSET = 9975;
 const MAX_INDEX_ATTEMPTS = 3;
@@ -28,6 +33,8 @@ export interface SearchScope {
    * of one named age-restricted channel includes them; a search across channels never does.
    */
   includeNsfw: boolean;
+  /** The channels are those the viewer can read, not ones they asked for: a list that may be dropped. */
+  narrowsOnly: boolean;
 }
 
 export type SearchOutcome =
@@ -54,25 +61,44 @@ export interface SearchDeps {
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
- * Restricts the search to what the viewer can read (channels and visible threads are
- * listed explicitly). When the viewer can read every channel, or the list is too long,
- * the guild-wide search is used: results are still filtered and no total is reported.
+ * Restricts the search to what the viewer can read (channels and visible threads are listed
+ * explicitly). Discord searches only what the bot can read, so when the viewer can read all of
+ * that the guild-wide search is used, and also when the list would make the request too long:
+ * results are still filtered then, and no total is reported.
  */
 export async function buildSearchScope(deps: SearchDeps, viewer: Viewer, channelId?: string): Promise<SearchScope> {
   if (channelId) {
     const { channel } = await deps.access.resolveReadable(channelId, viewer);
-    return { channelIds: [channel.id], includeNsfw: "nsfw" in channel && channel.nsfw === true };
+    return { channelIds: [channel.id], includeNsfw: "nsfw" in channel && channel.nsfw === true, narrowsOnly: false };
   }
 
+  const botPermissions = await deps.access.botPermissions(viewer.guild);
   const messageChannels = (await deps.channels.list()).filter((channel) => channel.type !== ChannelType.GuildCategory);
-  const readable = messageChannels.filter((channel) => canReadMessages(deps.access.permissionsFor(channel, viewer)));
-  if (readable.length === messageChannels.length) return { includeNsfw: false };
+  const botReadable = messageChannels.filter((channel) => canReadMessages(botPermissions(channel)));
+  const readable = botReadable.filter((channel) => canReadMessages(deps.access.permissionsFor(channel, viewer)));
+  if (readable.length === botReadable.length) return { includeNsfw: false, narrowsOnly: true };
 
   // Archived threads are left out: Discord lists them per channel and per page only.
-  const visibleThreads = await deps.access.filterVisibleThreads(await deps.api.fetchActiveThreads(), viewer, true);
+  const botReadableIds = new Set(botReadable.map((channel) => channel.id));
+  const threads = (await deps.api.fetchActiveThreads()).filter((thread) => thread.parent_id && botReadableIds.has(thread.parent_id));
+  const visibleThreads = await deps.access.filterVisibleThreads(threads, viewer, true);
   const channelIds = [...readable.map((channel) => channel.id), ...visibleThreads.map((thread) => thread.id)];
-  if (channelIds.length > MAX_SEARCH_CHANNELS) return { includeNsfw: false };
-  return { channelIds, includeNsfw: false };
+  return { channelIds, includeNsfw: false, narrowsOnly: true };
+}
+
+/**
+ * The query with the scope's channels. A list that only narrows the search to what the viewer can
+ * read is dropped when it would make the request too long: the results are filtered anyway.
+ */
+export function scopedSearchQuery(scope: SearchScope, query: RESTGetAPIGuildMessagesSearchQuery): RESTGetAPIGuildMessagesSearchQuery {
+  const scoped = { ...query, channel_id: scope.channelIds, include_nsfw: scope.includeNsfw || undefined };
+  if (fitsRequest(scoped)) return scoped;
+  if (scope.narrowsOnly && fitsRequest(query)) return query;
+  throw new ToolError("The search words are too long for Discord; shorten `query`.");
+}
+
+function fitsRequest(query: RESTGetAPIGuildMessagesSearchQuery): boolean {
+  return makeURLSearchParams(query).toString().length <= MAX_SEARCH_QUERY_LENGTH;
 }
 
 /** Drops results from channels or threads the viewer cannot read, and the threads of dropped results. */

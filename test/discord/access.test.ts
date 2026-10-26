@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { ChannelAccess, ChannelDirectory, DISCORD_NOT_ACCESSIBLE_MESSAGE } from "../../src/lib/server/discord/access";
 import { MANAGE_THREADS, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "../../src/lib/server/discord/permissions";
-import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, textChannel, thread } from "../../src/lib/server/fakes/discord";
+import { BOT_ID, FakeDiscordApi, GUILD_ID, makeGuild, makeMember, textChannel, thread } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const ROLE_STAFF = "200000000000000001";
@@ -62,6 +62,15 @@ describe("ChannelAccess", () => {
     now = 60_000;
     expect((await access.filterVisibleThreads(api.threads, viewer())).map((t) => t.id)).toContain(PRIVATE_THREAD);
     expect(api.calls.threadMember).toBe(2);
+  });
+
+  test("a private thread the viewer is in but the bot is not cannot be read here", async () => {
+    api.members.set(BOT_ID, makeMember(BOT_ID));
+    api.threadMembers.add(`${PRIVATE_THREAD}:${USER}`);
+    await expect(access.resolveReadable(PRIVATE_THREAD, viewer())).rejects.toThrow("MCP bot has not been given access");
+    api.threadMembers.add(`${PRIVATE_THREAD}:${BOT_ID}`);
+    now = 60_000;
+    expect((await access.resolveReadable(PRIVATE_THREAD, viewer())).channel.id).toBe(PRIVATE_THREAD);
   });
 
   test("MANAGE_THREADS sees private threads without membership", async () => {

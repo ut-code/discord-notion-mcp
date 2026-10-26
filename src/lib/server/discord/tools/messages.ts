@@ -1,5 +1,5 @@
 // Discord tools for reading messages and pins.
-import type { APIMessage } from "discord-api-types/v10";
+import { ChannelType, type APIMessage } from "discord-api-types/v10";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
 import { compareSnowflakes, snowflakeSchema } from "../../lib/snowflake";
@@ -39,6 +39,13 @@ export function createMessageTools(deps: DiscordToolDeps): {
         throw new ToolError('"before" must be later than "after".');
       }
       const { channel } = await deps.access.resolveReadable(args.channel_id, viewerOf(principal));
+      // Discord answers a forum's own messages with an empty list: its posts are threads.
+      if (channel.type === ChannelType.GuildForum || channel.type === ChannelType.GuildMedia) {
+        const kind = channel.type === ChannelType.GuildForum ? "forum" : "media channel";
+        throw new ToolError(
+          `${channelLabel(channel)} is a ${kind}: each post is a thread. List them with discord_list_threads (channel_id "${channel.id}") and read one by its id.`,
+        );
+      }
       const messages = await fetchHistory((query) => deps.api.fetchMessages(channel.id, query), {
         limit: args.limit,
         before,

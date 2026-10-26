@@ -11,7 +11,7 @@ Discord と Notion を使うコミュニティ向けの、セルフホスト型 
 | `notion:write` | `notion_create_page` `notion_append_content` `notion_edit_content` `notion_update_properties` `notion_archive_page` `notion_list_recent_changes` `notion_revert_change`                |
 
 - `notion:write`（画面では「Notion 編集」）は `notion:read` を含む。
-- Discord は本人が閲覧できるチャンネルのみ。
+- Discord は本人と Bot の両方が閲覧できるチャンネルのみ。読ませたい非公開チャンネル（またはカテゴリ）には Bot を追加する（管理者にすると全チャンネルを読めてしまう）。
 - Notion の権限は Notion 連携に共有されたすべてのページ・データベースが対象。
 - Notion の本文は Notion 公式の Markdown API（拡張 Markdown: メンション・色・コールアウト・トグル・カラム）で読み書きする。
 - Notion への書き込みはページにコメントで記録され、`/dashboard/audit` または `notion_revert_change` で取り消せる。本文の追記・編集は書き込み前の本文に置き換えて取り消す。変更後にページが編集されていた場合は、その編集を消さないよう取り消さず、手作業で直す。取り消しで戻せないほど大きい（約 450 KB 超の）ページには書き込まない。子ページ・データベースを作るタグは本文に書けない。
@@ -24,7 +24,7 @@ Discord と Notion を使うコミュニティ向けの、セルフホスト型 
 1. [Developer Portal](https://discord.com/developers/applications) でアプリを作成
 2. OAuth2 → Redirects に `https://<domain>/api/auth/callback/discord`
 3. Bot → Message Content Intent と Server Members Intent を ON、トークンを発行
-4. `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&scope=bot&permissions=66560` で Bot をサーバーに招待
+4. `https://discord.com/oauth2/authorize?client_id=<CLIENT_ID>&scope=bot&permissions=66560` で Bot をサーバーに招待（チャンネルを見る・メッセージ履歴を読む のみ）
 
 ### Notion
 

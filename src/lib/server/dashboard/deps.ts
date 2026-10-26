@@ -2,6 +2,7 @@ import type { Auth } from "../auth/auth";
 import type { DiscordIdentityStore } from "../auth/identity";
 import type { TokenRevocationService } from "../auth/revocation";
 import type { LoginUserStore } from "../auth/users";
+import type { ChannelAccess, ChannelDirectory } from "../discord/access";
 import type { GuildDirectory } from "../discord/directory";
 import type { ErrorSink, EventSink } from "../lib/log";
 import type { ToolListing } from "../mcp/tool-listing";
@@ -22,6 +23,9 @@ export interface DashboardDeps {
   resolver: Pick<PermissionResolver, "resolve" | "accessOf">;
   /** Cached guild/member lookups. */
   directory: GuildDirectory;
+  /** The tools page's channels: what the viewer may read and the bot too. */
+  channelAccess: Pick<ChannelAccess, "readableChannels">;
+  channels: Pick<ChannelDirectory, "list">;
   subjects: SubjectResolver;
   /** The guild's members (briefly cached): the grant form, and the users page's names and roles. */
   members: Pick<MemberRoster, "roster">;

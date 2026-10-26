@@ -4,10 +4,10 @@ import { ChannelType, GuildScheduledEventStatus, MessageSearchHasType, type APIT
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
 import { INSTANT_EXAMPLE } from "../../lib/instant";
-import { compareSnowflakes, parseMessageCursor } from "../../lib/snowflake";
+import { parseMessageCursor } from "../../lib/snowflake";
 import type { Principal, ToolResult } from "../../mcp/registry";
 import { NotAccessibleError, type ChannelAccess, type ChannelDirectory, type ResolvedChannel, type Viewer } from "../access";
-import type { DiscordApi, GuildChannel } from "../api";
+import type { DiscordApi } from "../api";
 import { formatTimestamp, type FormatContext } from "../format";
 
 export interface DiscordToolDeps {
@@ -30,15 +30,6 @@ export const SEARCH_HAS_TYPES = [
   MessageSearchHasType.Poll,
   MessageSearchHasType.Snapshot,
 ] as const;
-
-export const LISTED_CHANNEL_TYPES = new Map<ChannelType, string>([
-  [ChannelType.GuildText, "text"],
-  [ChannelType.GuildAnnouncement, "announcement"],
-  [ChannelType.GuildForum, "forum"],
-  [ChannelType.GuildMedia, "media"],
-  [ChannelType.GuildVoice, "voice"],
-  [ChannelType.GuildStageVoice, "stage"],
-]);
 
 const THREAD_LABELS = new Map<ChannelType, string>([
   [ChannelType.AnnouncementThread, "announcement thread"],
@@ -72,8 +63,9 @@ export function withDiscordErrors<A>(handler: (args: A, principal: Principal) =>
         throw new NotAccessibleError("Not found or not accessible.");
       }
       if (error instanceof DiscordAPIError && error.status === 400) {
-        throw new ToolError(`Discord rejected the request: ${error.message}`, {
-          logMessage: `Discord rejected the request (400 ${String(error.code)})`,
+        // Without a JSON body (an HTML page from Discord's edge) there is no code or message.
+        throw new ToolError(error.code === undefined ? "Discord rejected the request." : `Discord rejected the request: ${error.message}`, {
+          logMessage: `Discord rejected the request (400 ${error.code === undefined ? "without a JSON body" : String(error.code)})`,
         });
       }
       if (error instanceof RateLimitError) {
@@ -133,8 +125,4 @@ export function describeThread(thread: APIThreadChannel, parentNames: ReadonlyMa
     meta?.archived && meta.archive_timestamp ? `archived ${formatTimestamp(meta.archive_timestamp)}` : undefined,
   ].filter(Boolean);
   return `- ${thread.name} (id ${thread.id}; ${parts.join(", ")})`;
-}
-
-export function byPosition(a: GuildChannel, b: GuildChannel): number {
-  return (a.position ?? 0) - (b.position ?? 0) || compareSnowflakes(a.id, b.id);
 }

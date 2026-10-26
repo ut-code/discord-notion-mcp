@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { RateLimitError } from "@discordjs/rest";
+import { DiscordAPIError, RateLimitError } from "@discordjs/rest";
 import { exceedsRateLimitWait } from "../../src/lib/server/discord/api";
+import { ToolError } from "../../src/lib/server/lib/errors";
 import { withDiscordErrors } from "../../src/lib/server/discord/tools/shared";
 import type { Principal } from "../../src/lib/server/mcp/registry";
 
@@ -27,5 +28,24 @@ describe("Discord errors", () => {
     const handler = withDiscordErrors(() => Promise.reject(new RateLimitError(limit)));
 
     await expect(handler({}, { principal: {} as Principal })).rejects.toThrow("Discord rate limit reached; retry in about 5 s.");
+  });
+
+  test("a 400 keeps Discord's code for the log, or says it had none (an HTML page from Discord's edge)", async () => {
+    const rejected = async (error: DiscordAPIError) => {
+      const caught = await withDiscordErrors(() => Promise.reject(error))({}, { principal: {} as Principal }).catch(
+        (thrown: unknown) => thrown,
+      );
+      return caught instanceof ToolError ? { message: caught.message, logMessage: caught.logMessage } : caught;
+    };
+    const json = new DiscordAPIError({ code: 50035, message: "Invalid Form Body" }, 50035, 400, "GET", "/search", {});
+    expect(await rejected(json)).toEqual({
+      message: "Discord rejected the request: Invalid Form Body",
+      logMessage: "Discord rejected the request (400 50035)",
+    });
+    const html = new DiscordAPIError(new ArrayBuffer(0) as never, undefined as never, 400, "GET", "/search", {});
+    expect(await rejected(html)).toEqual({
+      message: "Discord rejected the request.",
+      logMessage: "Discord rejected the request (400 without a JSON body)",
+    });
   });
 });

@@ -681,6 +681,76 @@
 		font-size: var(--text-note);
 		overflow-wrap: anywhere;
 	}
+	/* Tools page: the Discord channels the viewer may read, by category, each a link into Discord. */
+	.channel-disclosure {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.channel-summary {
+		display: flex;
+		width: fit-content;
+		align-items: center;
+		gap: 6px;
+		font-size: var(--text-note);
+		color: var(--muted-foreground);
+		cursor: pointer;
+		list-style: none;
+	}
+	.channel-summary::-webkit-details-marker {
+		display: none;
+	}
+	.channel-summary:hover {
+		color: var(--foreground);
+	}
+	.channel-disclosure[open] .tool-chevron {
+		transform: rotate(180deg);
+	}
+	.channel-legend {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: var(--text-note);
+		color: var(--muted-foreground);
+	}
+	.channel-group {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 14px 18px;
+	}
+	.channel-group + .channel-group {
+		border-top: 1px solid var(--border);
+	}
+	.channel-group h3 {
+		font-size: var(--text-note);
+		color: var(--muted-foreground);
+	}
+	.channel-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.channel-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		max-width: 100%;
+		padding: 2px 10px;
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		font-size: 13px;
+		overflow-wrap: anywhere;
+		color: var(--foreground);
+	}
+	.channel-chip:hover {
+		background: var(--muted);
+	}
+	/* The bot was not given it: listed for the viewer to ask an admin, not readable by their clients. */
+	.channel-chip.botless {
+		border-style: dashed;
+		color: var(--muted-foreground);
+	}
 	.tool-schema summary {
 		width: fit-content;
 		font-size: var(--text-note);

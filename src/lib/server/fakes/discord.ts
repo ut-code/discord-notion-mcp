@@ -11,6 +11,8 @@ import { compareSnowflakes } from "../lib/snowflake";
 
 export const GUILD_ID = "100000000000000000";
 export const OWNER_ID = "100000000000000001";
+/** The bot's user id; FakeDiscordApi has it as a member only when a test adds it. */
+export const BOT_ID = "100000000000000002";
 
 export class FakeClock {
   constructor(public now = 1_800_000_000_000) {}
@@ -125,6 +127,10 @@ export class FakeDiscordApi implements DiscordApi {
     this.calls.member++;
     if (this.failingMembers.has(userId)) throw new Error("Discord is unavailable");
     return this.members.get(userId) ?? null;
+  }
+
+  async fetchBotMember(): Promise<MemberInfo | null> {
+    return this.members.get(BOT_ID) ?? null;
   }
 
   async fetchChannels(): Promise<GuildChannel[]> {

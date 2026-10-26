@@ -1,11 +1,11 @@
 // Discord tool for searching messages.
-import { MessageSearchAuthorType, MessageSearchSortMode, type RESTGetAPIGuildMessagesSearchQuery } from "discord-api-types/v10";
+import { MessageSearchAuthorType, MessageSearchSortMode } from "discord-api-types/v10";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors";
 import { compareSnowflakes, snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
 import { formatMessage } from "../format";
-import { buildSearchScope, MAX_SEARCH_OFFSET, searchReadableMessages } from "../search";
+import { buildSearchScope, MAX_SEARCH_OFFSET, scopedSearchQuery, searchReadableMessages } from "../search";
 import { cursorSchema, formatContextFor, parseCursor, SEARCH_HAS_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
 export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyToolDefinition } {
@@ -39,9 +39,8 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
       const viewer = viewerOf(principal);
       const searchDeps = { api: deps.api, access: deps.access, channels: deps.channels, sleep: deps.sleep };
       const scope = await buildSearchScope(searchDeps, viewer, args.channel_id);
-      const query: RESTGetAPIGuildMessagesSearchQuery = {
+      const query = scopedSearchQuery(scope, {
         content: args.query,
-        channel_id: scope.channelIds,
         author_id: args.author_id ? [args.author_id] : undefined,
         mentions: args.mentions_user_id ? [args.mentions_user_id] : undefined,
         has: args.has,
@@ -51,10 +50,9 @@ export function createSearchTools(deps: DiscordToolDeps): { searchMessages: AnyT
         min_id: after,
         sort_by: args.sort === "relevance" ? MessageSearchSortMode.Relevance : MessageSearchSortMode.Timestamp,
         sort_order: args.sort === "oldest" ? "asc" : "desc",
-        include_nsfw: scope.includeNsfw || undefined,
         limit: args.limit,
         offset: args.offset,
-      };
+      });
 
       const outcome = await searchReadableMessages(searchDeps, viewer, query);
       if (outcome.status === "indexing") {

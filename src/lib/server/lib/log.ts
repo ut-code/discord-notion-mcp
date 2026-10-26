@@ -48,6 +48,7 @@ export type ErrorEntry =
   | { event: "admin_lookup_failed"; lookup: "user"; userId: string; error: string }
   | { event: "admin_lookup_failed"; lookup: "member_list" | "member_search"; error: string }
   | { event: "admin_lookup_failed"; lookup: "avatar"; userId: string; error: string }
+  | { event: "channel_list_failed"; error: string }
   | { event: "sign_out_failed"; error: string }
   | { event: "sign_in_lookup_failed"; lookup: "guild" | "client"; error: string }
   | BetterAuthLog<"error">;

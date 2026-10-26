@@ -1,11 +1,13 @@
 // Local UI preview backed by fake Discord/Notion APIs and an in-memory database.
 // Loaded only by the dev server with PREVIEW=1 (`bun run preview`); production builds never load it.
 import { makeSignature } from "better-auth/crypto";
-import { FakeDiscordApi, GUILD_ID, makeGuild, OWNER_ID, textChannel } from "./fakes/discord";
+import { ChannelType } from "discord-api-types/v10";
+import { BOT_ID, FakeDiscordApi, GUILD_ID, makeGuild, makeMember, OWNER_ID, textChannel } from "./fakes/discord";
 import { FakeNotionApi } from "./fakes/notion";
 import { composeServer } from "./compose";
 import { loadConfig } from "./config";
 import { openDatabase } from "./db/client";
+import type { GuildChannel } from "./discord/api";
 import { userAvatarUrl } from "./discord/avatar";
 import { ADMINISTRATOR, READ_MESSAGE_HISTORY, VIEW_CHANNEL } from "./discord/permissions";
 import type { MemberInfo } from "./discord/types";
@@ -202,6 +204,44 @@ function seedToolCalls(store: ToolCallStore, now = Date.now()): void {
   });
 }
 
+/** Channels by category: staff ones the bot was given and ones it was not, a forum and a long name. */
+function previewChannels(): GuildChannel[] {
+  let next = 400000000000000001n;
+  const id = () => String(next++);
+  const category = (name: string, position: number) => textChannel(id(), name, [], { type: ChannelType.GuildCategory, position });
+  const staffOnly = [
+    { id: GUILD_ID, type: 0 as const, deny: VIEW_CHANNEL },
+    { id: ROLE_STAFF, type: 0 as const, allow: VIEW_CHANNEL },
+  ];
+  const general = category("全体", 0);
+  const staff = category("運営", 1);
+  const projects = category("プロジェクト", 2);
+  const inside = (
+    parent: GuildChannel,
+    name: string,
+    position: number,
+    overwrites: Parameters<typeof textChannel>[2] = [],
+    type: ChannelType.GuildText | ChannelType.GuildForum = ChannelType.GuildText,
+  ) => textChannel(id(), name, overwrites, { parent_id: parent.id, position, type });
+  return [
+    textChannel(id(), "はじめに", [], { position: 0 }),
+    general,
+    inside(general, "お知らせ", 0),
+    inside(general, "相談", 1),
+    inside(general, "ひとこと", 2),
+    inside(general, "掲示板", 3, [], ChannelType.GuildForum),
+    staff,
+    inside(staff, "運営会議", 0, [...staffOnly, { id: ROLE_BOT, type: 0, allow: VIEW_CHANNEL }]),
+    inside(staff, "経理", 1, [...staffOnly, { id: ROLE_BOT, type: 0, allow: VIEW_CHANNEL }]),
+    inside(staff, "認証情報", 2, staffOnly),
+    inside(staff, "人事", 3, staffOnly),
+    projects,
+    ...["project-alpha", "project-beta", "web-app", "とても長い名前のチャンネル-プロジェクト-アルファ-推進-ワーキンググループ"].map(
+      (name, index) => inside(projects, name, index),
+    ),
+  ];
+}
+
 export async function startPreview(): Promise<Runtime> {
   const port = Number(process.env.PORT ?? 3920);
   const discord = new FakeDiscordApi();
@@ -211,7 +251,7 @@ export async function startPreview(): Promise<Runtime> {
       { id: ROLE_ADMIN, name: "管理者", permissions: ADMINISTRATOR, color: 0xe74c3c, position: 4 },
       { id: ROLE_STAFF, name: "staff", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x3498db, position: 3 },
       { id: ROLE_MEMBER, name: "member", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, color: 0x2ecc71, position: 2 },
-      { id: ROLE_BOT, name: "MCP Bot", permissions: VIEW_CHANNEL, managed: true, position: 1 },
+      { id: ROLE_BOT, name: "MCP Bot", permissions: VIEW_CHANNEL | READ_MESSAGE_HISTORY, managed: true, position: 1 },
       ...EXTRA_ROLES.map((name, index) => ({
         id: extraRoleId(index),
         name,
@@ -232,7 +272,8 @@ export async function startPreview(): Promise<Runtime> {
       asListed({ userId, roles: [ROLE_MEMBER], nick: null, username: `user${index + 1}`, globalName: name, avatarUrl: null }),
     );
   });
-  discord.channels = [textChannel("400000000000000001", "general"), textChannel("400000000000000002", "staff-only")];
+  discord.members.set(BOT_ID, { ...makeMember(BOT_ID, [ROLE_BOT]), username: "mcp-bot" });
+  discord.channels = previewChannels();
 
   const notion = new FakeNotionApi();
   const wiki = notion.addPage({ title: "チーム Wiki", markdown: "# 概要\nこのページはチームの Wiki です。\n- ルール\n- 手順" });

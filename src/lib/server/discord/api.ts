@@ -56,6 +56,8 @@ export type MessageSearchResponse = { status: "ok"; result: APIMessageSearchResu
 
 /** Bot-authenticated Discord REST operations used by the tools. */
 export interface DiscordApi extends GuildDirectory {
+  /** The bot's own guild member; null when the bot is not on the server. */
+  fetchBotMember(): Promise<MemberInfo | null>;
   fetchChannels(): Promise<GuildChannel[]>;
   /** Returns null when the channel does not exist or the bot cannot see it. */
   fetchChannel(channelId: string): Promise<APIChannel | null>;
@@ -92,6 +94,7 @@ function toMemberInfo(member: APIGuildMember, guildId: string, userId = member.u
 
 export class RestDiscordApi implements DiscordApi {
   private readonly rest: REST;
+  private botUserId: string | undefined;
 
   /**
    * `failFastOnRateLimit` is for tools. Sign-in, consent and the dashboard leave it off and
@@ -138,6 +141,12 @@ export class RestDiscordApi implements DiscordApi {
       if (error instanceof DiscordAPIError && error.status === 404) return null;
       throw error;
     }
+  }
+
+  async fetchBotMember(): Promise<MemberInfo | null> {
+    // An application's bot user may have an id of its own (older applications), so it is asked, once.
+    this.botUserId ??= (await this.get<APIUser>(Routes.user())).id;
+    return this.fetchMember(this.botUserId);
   }
 
   async fetchChannels(): Promise<GuildChannel[]> {

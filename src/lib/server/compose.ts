@@ -124,6 +124,8 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     startClientCleanup({ db: database.db, log: reportEvent, logError: reportError }),
   );
   const members = new MemberRoster(discord, { logError: reportError });
+  // The tools page's channels, on the client that waits out a rate limit like the rest of the dashboard.
+  const dashboardChannels = new ChannelDirectory(discord);
   const subjects = new SubjectResolver(directory, discord, members, reportError);
   const dashboard: DashboardDeps = {
     auth,
@@ -131,6 +133,8 @@ export async function composeServer(config: Config, options: ComposeOptions = {}
     identity,
     resolver,
     directory,
+    channelAccess: new ChannelAccess(discord, dashboardChannels, config.discord.guildId),
+    channels: dashboardChannels,
     subjects,
     members,
     grants,

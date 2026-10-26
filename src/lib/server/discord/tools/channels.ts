@@ -5,10 +5,10 @@ import { ToolError } from "../../lib/errors";
 import { INSTANT_EXAMPLE, parseInstant } from "../../lib/instant";
 import { snowflakeSchema } from "../../lib/snowflake";
 import { defineTool, READ_ONLY_ANNOTATIONS, type AnyToolDefinition } from "../../mcp/registry";
-import { NotAccessibleError } from "../access";
+import { BOT_NO_ACCESS_MESSAGE, byPosition, LISTED_CHANNEL_TYPES, NotAccessibleError } from "../access";
 import type { GuildChannel } from "../api";
 import { canReadMessages, canViewChannel } from "../permissions";
-import { byPosition, describeThread, LISTED_CHANNEL_TYPES, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
+import { describeThread, viewerOf, withDiscordErrors, type DiscordToolDeps } from "./shared";
 
 /** Also accepts the archive timestamps Discord returns, e.g. "2026-10-01T12:34:56.789000+00:00". */
 function parseArchiveTimestamp(value: string | undefined): string | undefined {
@@ -23,12 +23,13 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
     name: "discord_list_channels",
     title: "List Discord channels",
     description:
-      "List the Discord channels you can view (text, announcement, forum, media, voice and stage channels), grouped by category, with id, type and topic.",
+      "List the Discord channels you can view (text, announcement, forum, media, voice and stage channels), grouped by category, with id, type and topic. Channels the server's MCP bot cannot read are marked: they cannot be read or searched here.",
     permission: "discord:read",
     inputSchema: z.object({}),
     annotations: READ_ONLY_ANNOTATIONS,
     handler: withDiscordErrors(async (_args: Record<string, never>, principal) => {
       const viewer = viewerOf(principal);
+      const botPermissions = await deps.access.botPermissions(viewer.guild);
       const all = await deps.channels.list();
       const categories = new Map(
         all.filter((channel) => channel.type === ChannelType.GuildCategory).map((channel) => [channel.id, channel]),
@@ -56,7 +57,8 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
         lines.push(category === null ? "(no category)" : `Category: ${category.name ?? category.id}`);
         for (const channel of groups.get(category) ?? []) {
           const topic = channel.topic ? ` — ${channel.topic.replace(/\s+/g, " ")}` : "";
-          lines.push(`  #${channel.name} (id ${channel.id}, ${LISTED_CHANNEL_TYPES.get(channel.type)})${topic}`);
+          const unreadable = canReadMessages(botPermissions(channel)) ? "" : ", not readable here: the MCP bot cannot read it";
+          lines.push(`  #${channel.name} (id ${channel.id}, ${LISTED_CHANNEL_TYPES.get(channel.type)}${unreadable})${topic}`);
         }
         lines.push("");
       }
@@ -95,6 +97,8 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
       const parent = await deps.channels.find(args.channel_id);
       const permissions = parent ? deps.access.permissionsFor(parent, viewer) : 0n;
       if (!parent || !canViewChannel(permissions)) throw new NotAccessibleError();
+      const botPermissions = (await deps.access.botPermissions(viewer.guild))(parent);
+      if (!canViewChannel(botPermissions)) throw new ToolError(BOT_NO_ACCESS_MESSAGE);
 
       const before = parseArchiveTimestamp(args.before);
 
@@ -107,6 +111,10 @@ export function createChannelTools(deps: DiscordToolDeps): { listChannels: AnyTo
       // Discord lists archived threads only to those who can read the channel's history.
       if (!canReadMessages(permissions)) {
         lines.push("", "Archived public: not listed (you cannot read this channel's message history).");
+        return lines.join("\n");
+      }
+      if (!canReadMessages(botPermissions)) {
+        lines.push("", "Archived public: not listed (the server's MCP bot cannot read this channel's message history).");
         return lines.join("\n");
       }
       const archived = await deps.api.fetchArchivedPublicThreads(parent.id, { before, limit: args.limit });

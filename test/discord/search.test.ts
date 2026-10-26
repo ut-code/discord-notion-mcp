@@ -13,7 +13,7 @@ import { searchReadableMessages } from "../../src/lib/server/discord/search";
 import { createDiscordTools } from "../../src/lib/server/discord/tools";
 import { dateToSnowflake } from "../../src/lib/server/lib/snowflake";
 import type { AnyToolDefinition, Principal } from "../../src/lib/server/mcp/registry";
-import { FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel, thread } from "../../src/lib/server/fakes/discord";
+import { BOT_ID, FakeDiscordApi, GUILD_ID, makeGuild, makeMember, message, textChannel, thread } from "../../src/lib/server/fakes/discord";
 
 const USER = "300000000000000001";
 const ROLE_STAFF = "200000000000000001";
@@ -120,6 +120,18 @@ describe("discord_list_threads", () => {
     expect(text).toContain("Archived public: not listed (you cannot read this channel's message history).");
     expect(api.archivedQueries).toEqual([]);
   });
+
+  test("a parent the bot cannot view is refused; one whose history it cannot read lists active threads only", async () => {
+    api.members.set(BOT_ID, makeMember(BOT_ID));
+    const staff = (args: Record<string, unknown>) =>
+      listThreads.handler(listThreads.inputSchema.parse(args), { principal: principal([ROLE_STAFF]) });
+    await expect(staff({ channel_id: STAFF })).rejects.toThrow("MCP bot has not been given access");
+
+    api.channels.push(textChannel(NO_HISTORY, "announcements", [{ id: BOT_ID, type: 1, deny: READ_MESSAGE_HISTORY }]));
+    const text = await staff({ channel_id: NO_HISTORY });
+    expect(text).toContain("Archived public: not listed (the server's MCP bot cannot read this channel's message history).");
+    expect(api.archivedQueries).toEqual([]);
+  });
 });
 
 describe("discord_list_events", () => {
@@ -201,6 +213,23 @@ describe("discord_search_messages scope", () => {
     expect(api.searchQueries[0]!.channel_id).toBeUndefined();
     await search({ query: "hello" }, [ROLE_ADMIN]);
     expect(api.searchQueries[1]!.channel_id).toBeUndefined();
+  });
+
+  test("a viewer who can read all the bot can searches guild-wide", async () => {
+    // The bot, like the restricted viewer, cannot read the staff channel: Discord leaves it out anyway.
+    api.members.set(BOT_ID, makeMember(BOT_ID));
+    await search({ query: "hello" });
+    expect(api.searchQueries[0]!.channel_id).toBeUndefined();
+  });
+
+  test("a channel list too long for one request gives way to the guild-wide search", async () => {
+    // Discord's edge refuses a request line of about 4 KB: some 130 channel ids.
+    for (let index = 0; index < 150; index++) api.channels.push(textChannel(String(410000000000000000n + BigInt(index)), `c${index}`));
+    await search({ query: "hello" });
+    expect(api.searchQueries[0]!.channel_id).toBeUndefined();
+    await search({ query: "hello", channel_id: PUBLIC });
+    expect(api.searchQueries[1]!.channel_id).toEqual([PUBLIC]);
+    await expect(search({ query: "あ".repeat(500), channel_id: PUBLIC })).rejects.toThrow("The search words are too long");
   });
 
   test("channel_id must be readable and is passed alone", async () => {
