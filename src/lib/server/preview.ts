@@ -190,6 +190,16 @@ function seedToolCalls(store: ToolCallStore, now = Date.now()): void {
       error: "Rate limit exceeded; retry in 1 s.",
     });
   }
+  // A long error, for the layout.
+  store.record({
+    discordUserId: "300000000000000001",
+    tool: "notion_get_page",
+    createdAt: new Date(now - 60_000),
+    ok: false,
+    durationMs: 412,
+    errorKind: "error",
+    error: "Not found, or not shared with the Notion integration (an admin must connect the integration to the page or a parent page).",
+  });
 }
 
 export async function startPreview(): Promise<Runtime> {

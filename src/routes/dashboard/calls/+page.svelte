@@ -25,8 +25,8 @@
       options: data.statusOptions,
     },
   ]);
-  // Shares of the table width (see .history-table): the tool takes the most, not all of the rest.
-  const columns = $derived(data.canFilterUsers ? ["16%", "20%", "34%", "15%", "15%"] : ["20%", "46%", "17%", "17%"]);
+  // Shares of the table width (see .history-table): the status takes the most, for a failure's error.
+  const columns = $derived(data.canFilterUsers ? ["14%", "20%", "26%", "30%", "10%"] : ["18%", "34%", "36%", "12%"]);
   const resetHref = $derived(`${CALLS_PATH}?${new URLSearchParams({ permission: data.permission })}`);
 </script>
 
@@ -81,12 +81,14 @@
             </Table.Cell>
           {/if}
           <Table.Cell class="primary">
+            <a class="mono scroll-x text-foreground hover:underline" href={row.toolHref}>{row.tool}</a>
+          </Table.Cell>
+          <Table.Cell>
             <div class="stack">
-              <a class="mono scroll-x text-foreground hover:underline" href={row.toolHref}>{row.tool}</a>
-              {#if row.error}<span class="call-error">{row.error}</span>{/if}
+              <ToneBadge badge={row.status} />
+              {#if row.error}<span class="call-error scroll-x" title={row.error}>{row.error}</span>{/if}
             </div>
           </Table.Cell>
-          <Table.Cell><ToneBadge badge={row.status} /></Table.Cell>
           <Table.Cell class="num secondary">{row.duration}</Table.Cell>
         </Table.Row>
       {:else}

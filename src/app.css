@@ -557,12 +557,21 @@
 		font-size: 12px;
 		color: var(--muted-foreground);
 	}
-	/* Why a call failed, under its tool. */
+	/* Why a call failed: wrapped in the list, one sliding line (.scroll-x) under the status in the table. */
 	.call-error {
 		font-size: 12px;
 		color: var(--muted-foreground);
 		white-space: normal;
 		overflow-wrap: anywhere;
+	}
+	/* A set width, so the automatic layout (see .history-table) neither shrinks the status column to
+	   its badge nor widens it to the whole line; the line fills the column when it is wider. The
+	   nowrap restores .scroll-x's, which .call-error above overrides. */
+	.history-table .call-error {
+		white-space: nowrap;
+		width: 14rem;
+		min-width: 100%;
+		max-width: 100%;
 	}
 	.history-list-empty {
 		padding: 24px 16px;
